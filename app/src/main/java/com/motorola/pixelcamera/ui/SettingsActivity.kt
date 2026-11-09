@@ -90,5 +90,6 @@ class SettingsActivity : AppCompatActivity() {
         const val KEY_EIS_ENABLED = "eis_enabled"
         const val KEY_HEVC_ENABLED = "hevc_enabled"
         const val KEY_HDR_FRAMES = "hdr_frames"
+        const val KEY_FLASH_MODE = "flash_mode"
     }
 }

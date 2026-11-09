@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item>
+        <shape android:shape="oval">
+            <size android:width="84dp" android:height="84dp" />
+            <stroke android:width="4dp" android:color="@color/pixel_shutter_outer" />
+            <solid android:color="@color/transparent" />
+        </shape>
+    </item>
+    <item android:top="8dp" android:bottom="8dp" android:left="8dp" android:right="8dp">
+        <shape android:shape="oval">
+            <solid android:color="@color/pixel_shutter_video" />
+        </shape>
+    </item>
+</layer-list>

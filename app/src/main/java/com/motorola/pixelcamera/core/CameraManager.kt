@@ -57,6 +57,12 @@ class CameraManager(private val context: Context) {
     var isRawEnabled: Boolean = false
     var is108MpEnabled: Boolean = false
 
+    var flashMode: Int = ImageCapture.FLASH_MODE_OFF
+        set(value) {
+            field = value
+            imageCapture?.flashMode = value
+        }
+
     suspend fun initialize(lifecycleOwner: LifecycleOwner, previewView: PreviewView) {
         val provider = getCameraProvider()
         cameraProvider = provider
@@ -114,6 +120,7 @@ class CameraManager(private val context: Context) {
         val captureBuilder = ImageCapture.Builder()
             .setCaptureMode(ImageCapture.CAPTURE_MODE_MAXIMIZE_QUALITY)
             .setResolutionSelector(captureResolutionSelector)
+            .setFlashMode(flashMode)
 
         // Inject Camera2 hardware ISP parameters for razor-sharp clarity
         val camera2Extender = Camera2Interop.Extender(captureBuilder)
@@ -159,6 +166,16 @@ class CameraManager(private val context: Context) {
 
     fun setExposureCompensation(evIndex: Int) {
         camera?.cameraControl?.setExposureCompensationIndex(evIndex)
+    }
+
+    fun hasFlashUnit(): Boolean {
+        return camera?.cameraInfo?.hasFlashUnit() ?: false
+    }
+
+    fun setTorchEnabled(enabled: Boolean) {
+        if (hasFlashUnit()) {
+            camera?.cameraControl?.enableTorch(enabled)
+        }
     }
 
     fun focusAt(meteringPoint: MeteringPoint) {

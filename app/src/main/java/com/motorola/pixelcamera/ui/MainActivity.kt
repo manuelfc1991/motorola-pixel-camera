@@ -14,7 +14,9 @@ import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
+import androidx.camera.core.ImageCapture
 import androidx.core.content.ContextCompat
+import androidx.core.widget.ImageViewCompat
 import androidx.lifecycle.lifecycleScope
 import com.motorola.pixelcamera.R
 import com.motorola.pixelcamera.core.CameraManager
@@ -86,6 +88,43 @@ class MainActivity : AppCompatActivity() {
             binding.tv108MpBadge.setTextColor(ContextCompat.getColor(this, R.color.pixel_text_secondary))
             binding.tvSensorInfo.text = "108MP HM2"
         }
+
+        val flashPref = prefs.getInt(SettingsActivity.KEY_FLASH_MODE, ImageCapture.FLASH_MODE_OFF)
+        cameraManager.flashMode = flashPref
+        updateFlashUi(flashPref)
+        updateQuickSettingsUi()
+    }
+
+    private fun updateQuickSettingsUi() {
+        val fMode = cameraManager.flashMode
+        binding.qsFlashOff.setTextColor(ContextCompat.getColor(this, if (fMode == ImageCapture.FLASH_MODE_OFF) R.color.pixel_pill_active else R.color.pixel_text_secondary))
+        binding.qsFlashAuto.setTextColor(ContextCompat.getColor(this, if (fMode == ImageCapture.FLASH_MODE_AUTO) R.color.pixel_accent_yellow else R.color.pixel_text_secondary))
+        binding.qsFlashOn.setTextColor(ContextCompat.getColor(this, if (fMode == ImageCapture.FLASH_MODE_ON) R.color.pixel_accent_yellow else R.color.pixel_text_secondary))
+
+        val isRaw = cameraManager.isRawEnabled
+        binding.qsRawJpeg.setTextColor(ContextCompat.getColor(this, if (!isRaw) R.color.pixel_pill_active else R.color.pixel_text_secondary))
+        binding.qsRawDng.setTextColor(ContextCompat.getColor(this, if (isRaw) R.color.pixel_accent_yellow else R.color.pixel_text_secondary))
+
+        val is108 = cameraManager.is108MpEnabled
+        binding.qsRes12.setTextColor(ContextCompat.getColor(this, if (!is108) R.color.pixel_pill_active else R.color.pixel_text_secondary))
+        binding.qsRes108.setTextColor(ContextCompat.getColor(this, if (is108) R.color.pixel_accent_blue else R.color.pixel_text_secondary))
+    }
+
+    private fun updateFlashUi(mode: Int) {
+        when (mode) {
+            ImageCapture.FLASH_MODE_AUTO -> {
+                binding.btnFlash.setImageResource(R.drawable.ic_flash_auto)
+                ImageViewCompat.setImageTintList(binding.btnFlash, ContextCompat.getColorStateList(this, R.color.pixel_accent_yellow))
+            }
+            ImageCapture.FLASH_MODE_ON -> {
+                binding.btnFlash.setImageResource(R.drawable.ic_flash_on)
+                ImageViewCompat.setImageTintList(binding.btnFlash, ContextCompat.getColorStateList(this, R.color.pixel_accent_yellow))
+            }
+            else -> {
+                binding.btnFlash.setImageResource(R.drawable.ic_flash_off)
+                ImageViewCompat.setImageTintList(binding.btnFlash, ContextCompat.getColorStateList(this, R.color.pixel_text_secondary))
+            }
+        }
     }
 
     private fun allPermissionsGranted(): Boolean {
@@ -105,9 +144,50 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun setupListeners() {
-        // Settings Gear Button
+        // Settings / Quick Settings Toggle
         binding.btnSettings.setOnClickListener {
+            if (binding.quickSettingsSheet.visibility == View.VISIBLE) {
+                binding.quickSettingsSheet.visibility = View.GONE
+            } else {
+                updateQuickSettingsUi()
+                binding.quickSettingsSheet.visibility = View.VISIBLE
+            }
+        }
+
+        binding.btnQuickSettingsDone.setOnClickListener {
+            binding.quickSettingsSheet.visibility = View.GONE
+        }
+
+        binding.btnOpenFullSettings.setOnClickListener {
+            binding.quickSettingsSheet.visibility = View.GONE
             startActivity(Intent(this, SettingsActivity::class.java))
+        }
+
+        // Quick Settings Toggles
+        binding.qsFlashOff.setOnClickListener { setQuickFlash(ImageCapture.FLASH_MODE_OFF) }
+        binding.qsFlashAuto.setOnClickListener { setQuickFlash(ImageCapture.FLASH_MODE_AUTO) }
+        binding.qsFlashOn.setOnClickListener { setQuickFlash(ImageCapture.FLASH_MODE_ON) }
+
+        binding.qsRawJpeg.setOnClickListener { setQuickRaw(false) }
+        binding.qsRawDng.setOnClickListener { setQuickRaw(true) }
+
+        binding.qsRes12.setOnClickListener { setQuickResolution(false) }
+        binding.qsRes108.setOnClickListener { setQuickResolution(true) }
+
+        // Flash Button Toggle (Off -> Auto -> On -> Off)
+        binding.btnFlash.setOnClickListener {
+            val nextFlash = when (cameraManager.flashMode) {
+                ImageCapture.FLASH_MODE_OFF -> ImageCapture.FLASH_MODE_AUTO
+                ImageCapture.FLASH_MODE_AUTO -> ImageCapture.FLASH_MODE_ON
+                else -> ImageCapture.FLASH_MODE_OFF
+            }
+            setQuickFlash(nextFlash)
+            val statusText = when (nextFlash) {
+                ImageCapture.FLASH_MODE_AUTO -> "Flash Auto"
+                ImageCapture.FLASH_MODE_ON -> "Flash On"
+                else -> "Flash Off"
+            }
+            Toast.makeText(this, statusText, Toast.LENGTH_SHORT).show()
         }
 
         // Shutter Button
@@ -210,13 +290,35 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    private fun setQuickFlash(mode: Int) {
+        cameraManager.flashMode = mode
+        prefs.edit().putInt(SettingsActivity.KEY_FLASH_MODE, mode).apply()
+        updateFlashUi(mode)
+        updateQuickSettingsUi()
+    }
+
+    private fun setQuickRaw(enabled: Boolean) {
+        cameraManager.isRawEnabled = enabled
+        prefs.edit().putBoolean(SettingsActivity.KEY_RAW_ENABLED, enabled).apply()
+        syncSettings()
+        updateQuickSettingsUi()
+        Toast.makeText(this, if (enabled) "RAW (DNG) enabled" else "JPEG only", Toast.LENGTH_SHORT).show()
+    }
+
+    private fun setQuickResolution(is108Mp: Boolean) {
+        cameraManager.is108MpEnabled = is108Mp
+        prefs.edit().putBoolean(SettingsActivity.KEY_108MP_REMOSAIC, is108Mp).apply()
+        syncSettings()
+        updateQuickSettingsUi()
+        Toast.makeText(this, if (is108Mp) "108MP Remosaic ON" else "12MP Nona-binning ON", Toast.LENGTH_SHORT).show()
+    }
+
     private fun updateZoom(zoom: Float, selectedView: TextView) {
         cameraManager.setZoom(zoom)
         val zoomButtons = listOf(binding.btnZoomUltrawide, binding.btnZoom1x, binding.btnZoom2x)
         for (btn in zoomButtons) {
             if (btn == selectedView) {
-                btn.setBackgroundResource(R.drawable.bg_pill_container)
-                btn.backgroundTintList = ContextCompat.getColorStateList(this, R.color.pixel_pill_active)
+                btn.setBackgroundResource(R.drawable.bg_zoom_pill_active)
                 btn.setTextColor(ContextCompat.getColor(this, R.color.pixel_pill_text_active))
             } else {
                 btn.background = null
@@ -246,6 +348,13 @@ class MainActivity : AppCompatActivity() {
                 v.setTextColor(ContextCompat.getColor(this, R.color.pixel_text_secondary))
                 v.paint.isFakeBoldText = false
             }
+        }
+
+        // Update Pixel Shutter color per mode
+        when (mode) {
+            CameraMode.NIGHT_SIGHT -> binding.btnShutter.setImageResource(R.drawable.bg_shutter_night)
+            CameraMode.VIDEO -> binding.btnShutter.setImageResource(R.drawable.bg_shutter_video)
+            else -> binding.btnShutter.setImageResource(R.drawable.bg_shutter_button)
         }
 
         // Update Overlays Visibility per Mode

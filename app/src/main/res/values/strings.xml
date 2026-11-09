@@ -1,5 +1,5 @@
 <resources>
-    <string name="app_name">Pixel Camera</string>
+    <string name="app_name">Camera</string>
     <string name="mode_night_sight">Night Sight</string>
     <string name="mode_portrait">Portrait</string>
     <string name="mode_camera">Camera</string>
