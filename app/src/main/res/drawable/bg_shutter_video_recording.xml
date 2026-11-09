@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Outer concentric ring -->
+    <item>
+        <shape android:shape="oval">
+            <size android:width="86dp" android:height="86dp" />
+            <stroke android:width="3.5dp" android:color="@color/pixel_shutter_outer" />
+            <solid android:color="@color/transparent" />
+        </shape>
+    </item>
+    <!-- Inner solid video red stop square -->
+    <item android:top="25dp" android:bottom="25dp" android:left="25dp" android:right="25dp">
+        <shape android:shape="rectangle">
+            <corners android:radius="8dp" />
+            <solid android:color="@color/pixel_shutter_video" />
+        </shape>
+    </item>
+</layer-list>

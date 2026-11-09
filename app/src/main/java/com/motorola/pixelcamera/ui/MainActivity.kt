@@ -1,6 +1,8 @@
 package com.motorola.pixelcamera.ui
 
 import android.Manifest
+import android.animation.ObjectAnimator
+import android.animation.ValueAnimator
 import android.content.Context
 import android.content.Intent
 import android.content.SharedPreferences
@@ -15,6 +17,7 @@ import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.camera.core.ImageCapture
+import androidx.camera.video.VideoRecordEvent
 import androidx.core.content.ContextCompat
 import androidx.core.widget.ImageViewCompat
 import androidx.lifecycle.lifecycleScope
@@ -22,7 +25,9 @@ import com.motorola.pixelcamera.R
 import com.motorola.pixelcamera.core.CameraManager
 import com.motorola.pixelcamera.core.CameraMode
 import com.motorola.pixelcamera.databinding.ActivityMainBinding
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 
 class MainActivity : AppCompatActivity() {
@@ -33,6 +38,14 @@ class MainActivity : AppCompatActivity() {
 
     private var currentMode: CameraMode = CameraMode.CAMERA
     private var isCapturing = false
+
+    // Video Recording Timer & Animation Jobs
+    private var videoTimerJob: Job? = null
+    private var recordingDotAnimator: ObjectAnimator? = null
+    private var recordingSeconds = 0
+
+    // Aperture blur strength for Portrait mode (progress 0..100)
+    private var portraitBlurProgress = 50
 
     private val permissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
@@ -55,6 +68,15 @@ class MainActivity : AppCompatActivity() {
 
         prefs = getSharedPreferences(SettingsActivity.PREFS_NAME, Context.MODE_PRIVATE)
         cameraManager = CameraManager(this)
+
+        // Live Histogram callback for Pro Mode
+        cameraManager.onHistogramUpdate = { r, g, b ->
+            if (currentMode == CameraMode.PRO) {
+                runOnUiThread {
+                    binding.histogramView.updateHistogram(r, g, b)
+                }
+            }
+        }
 
         setupListeners()
 
@@ -195,16 +217,35 @@ class MainActivity : AppCompatActivity() {
             onShutterClicked()
         }
 
-        // Camera Switch
+        // Camera Switch (Front <-> Rear)
         binding.btnSwitchCamera.setOnClickListener {
             binding.btnSwitchCamera.animate().rotationBy(180f).setDuration(300).start()
-            cameraManager.switchCamera(this, binding.viewFinder)
+            cameraManager.switchCamera()
+            val isFront = cameraManager.isFrontCamera()
+            binding.zoomPillContainer.visibility = if (isFront) View.GONE else View.VISIBLE
+            if (!isFront) {
+                selectZoomPill(binding.btnZoom1x)
+            }
         }
 
-        // Zoom Selectors (.6x, 1x, 2x)
-        binding.btnZoomUltrawide.setOnClickListener { updateZoom(0.6f, binding.btnZoomUltrawide) }
-        binding.btnZoom1x.setOnClickListener { updateZoom(1.0f, binding.btnZoom1x) }
-        binding.btnZoom2x.setOnClickListener { updateZoom(2.0f, binding.btnZoom2x) }
+        // Physical Zoom Selectors (.6x Ultrawide Camera 3, 1x Main Camera 0, 2x Tele Camera 0)
+        binding.btnZoomUltrawide.setOnClickListener {
+            cameraManager.switchToLens(CameraManager.CAMERA_ULTRAWIDE, 1.0f)
+            selectZoomPill(binding.btnZoomUltrawide)
+            binding.tvSensorInfo.text = "8MP UW"
+        }
+
+        binding.btnZoom1x.setOnClickListener {
+            cameraManager.switchToLens(CameraManager.CAMERA_MAIN, 1.0f)
+            selectZoomPill(binding.btnZoom1x)
+            binding.tvSensorInfo.text = if (cameraManager.is108MpEnabled) "108MP ULTRA" else "108MP HM2"
+        }
+
+        binding.btnZoom2x.setOnClickListener {
+            cameraManager.switchToLens(CameraManager.CAMERA_MAIN, 2.0f)
+            selectZoomPill(binding.btnZoom2x)
+            binding.tvSensorInfo.text = "2X SUPER RES"
+        }
 
         // Mode Carousel
         binding.modeNightSight.setOnClickListener { setMode(CameraMode.NIGHT_SIGHT, binding.modeNightSight) }
@@ -213,9 +254,10 @@ class MainActivity : AppCompatActivity() {
         binding.modeVideo.setOnClickListener { setMode(CameraMode.VIDEO, binding.modeVideo) }
         binding.modePro.setOnClickListener { setMode(CameraMode.PRO, binding.modePro) }
 
-        // Portrait Aperture Slider
+        // Portrait Aperture Slider (f/1.4 - f/16)
         binding.sbAperture.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
             override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
+                portraitBlurProgress = progress
                 val fStops = arrayOf("f / 1.4", "f / 1.8", "f / 2.2", "f / 2.8", "f / 4.0", "f / 5.6", "f / 8.0", "f / 11", "f / 16")
                 val index = ((100 - progress) / 100f * (fStops.size - 1)).toInt().coerceIn(0, fStops.size - 1)
                 binding.tvApertureLabel.text = fStops[index]
@@ -225,30 +267,16 @@ class MainActivity : AppCompatActivity() {
             override fun onStopTrackingTouch(seekBar: SeekBar?) {}
         })
 
-        // RAW Badge Toggle
-        binding.tvRawBadge.setOnClickListener {
-            cameraManager.isRawEnabled = !cameraManager.isRawEnabled
-            prefs.edit().putBoolean(SettingsActivity.KEY_RAW_ENABLED, cameraManager.isRawEnabled).apply()
-            syncSettings()
-            Toast.makeText(this, if (cameraManager.isRawEnabled) "RAW (DNG) enabled" else "RAW disabled", Toast.LENGTH_SHORT).show()
-        }
-
-        // 108 MP Badge Toggle
-        binding.tv108MpBadge.setOnClickListener {
-            cameraManager.is108MpEnabled = !cameraManager.is108MpEnabled
-            prefs.edit().putBoolean(SettingsActivity.KEY_108MP_REMOSAIC, cameraManager.is108MpEnabled).apply()
-            syncSettings()
-            Toast.makeText(this, if (cameraManager.is108MpEnabled) "108MP Remosaic ON" else "12MP Nona-binning ON", Toast.LENGTH_SHORT).show()
-        }
-
-        // Pro Controls: ISO Slider
+        // Pro Controls: ISO Slider (0 = Auto, 100..6400)
         binding.sbIso.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
             override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
                 if (progress == 0) {
                     binding.tvIsoLabel.text = "ISO AUTO"
+                    cameraManager.setManualIso(0)
                 } else {
                     val iso = progress * 100
                     binding.tvIsoLabel.text = "ISO $iso"
+                    cameraManager.setManualIso(iso)
                 }
             }
             override fun onStartTrackingTouch(seekBar: SeekBar?) {}
@@ -310,11 +338,11 @@ class MainActivity : AppCompatActivity() {
         prefs.edit().putBoolean(SettingsActivity.KEY_108MP_REMOSAIC, is108Mp).apply()
         syncSettings()
         updateQuickSettingsUi()
+        cameraManager.bindCameraUseCases()
         Toast.makeText(this, if (is108Mp) "108MP Remosaic ON" else "12MP Nona-binning ON", Toast.LENGTH_SHORT).show()
     }
 
-    private fun updateZoom(zoom: Float, selectedView: TextView) {
-        cameraManager.setZoom(zoom)
+    private fun selectZoomPill(selectedView: TextView) {
         val zoomButtons = listOf(binding.btnZoomUltrawide, binding.btnZoom1x, binding.btnZoom2x)
         for (btn in zoomButtons) {
             if (btn == selectedView) {
@@ -328,7 +356,17 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun setMode(mode: CameraMode, selectedView: TextView) {
+        if (currentMode == mode) return
+
+        // If recording video when switching modes, stop it first
+        if (cameraManager.isRecordingVideo()) {
+            stopVideoRecordingUi()
+            cameraManager.stopVideoRecording()
+        }
+
         currentMode = mode
+        cameraManager.currentCameraMode = mode
+
         val modeViews = listOf(
             binding.modeNightSight,
             binding.modePortrait,
@@ -376,13 +414,9 @@ class MainActivity : AppCompatActivity() {
                 binding.proControlPanel.visibility = View.VISIBLE
                 binding.histogramView.visibility = View.VISIBLE
                 binding.overlayPortraitAperture.visibility = View.GONE
-                val r = IntArray(256) { (Math.sin(it * 0.04) * 50 + 60).toInt() }
-                val g = IntArray(256) { (Math.sin(it * 0.05 + 1.0) * 60 + 70).toInt() }
-                val b = IntArray(256) { (Math.sin(it * 0.03 + 2.0) * 45 + 50).toInt() }
-                binding.histogramView.updateHistogram(r, g, b)
             }
             CameraMode.VIDEO -> {
-                binding.tvHdrBadge.text = "EIS 4K"
+                binding.tvHdrBadge.text = "FHD VIDEO"
                 binding.proControlPanel.visibility = View.GONE
                 binding.histogramView.visibility = View.GONE
                 binding.overlayPortraitAperture.visibility = View.GONE
@@ -394,6 +428,9 @@ class MainActivity : AppCompatActivity() {
                 binding.overlayPortraitAperture.visibility = View.GONE
             }
         }
+
+        // Rebind use cases for optimal performance in active mode (e.g. VideoCapture vs ImageAnalysis)
+        cameraManager.bindCameraUseCases()
     }
 
     private fun showFocusRing(x: Float, y: Float) {
@@ -424,6 +461,11 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun onShutterClicked() {
+        if (currentMode == CameraMode.VIDEO) {
+            handleVideoShutter()
+            return
+        }
+
         if (isCapturing) return
         isCapturing = true
 
@@ -431,24 +473,18 @@ class MainActivity : AppCompatActivity() {
             binding.btnShutter.animate().scaleX(1.0f).scaleY(1.0f).setDuration(120).start()
         }.start()
 
-        // If Night Sight is active, show the circular countdown overlay
+        // If Night Sight is active, show the countdown overlay
         if (currentMode == CameraMode.NIGHT_SIGHT) {
             binding.overlayNightHoldStill.visibility = View.VISIBLE
-            binding.tvNightTimer.text = "1.8s"
-            lifecycleScope.launch {
-                delay(600)
-                binding.tvNightTimer.text = "1.2s"
-                delay(600)
-                binding.tvNightTimer.text = "0.6s"
-                delay(600)
-                binding.overlayNightHoldStill.visibility = View.GONE
-            }
+            binding.tvNightTimer.text = "Hold still..."
         } else {
             binding.processingPill.visibility = View.VISIBLE
+            binding.tvProcessingStatus.text = "Capturing..."
         }
 
         lifecycleScope.launch {
-            val uri: Uri? = cameraManager.capturePhoto(currentMode) { status ->
+            val blurStrength = 2f + (portraitBlurProgress / 100f) * 24f
+            val uri: Uri? = cameraManager.capturePhoto(currentMode, blurStrength) { status ->
                 runOnUiThread {
                     binding.tvProcessingStatus.text = status
                 }
@@ -465,6 +501,83 @@ class MainActivity : AppCompatActivity() {
                 Toast.makeText(this@MainActivity, "Capture failed", Toast.LENGTH_SHORT).show()
             }
         }
+    }
+
+    private fun handleVideoShutter() {
+        if (cameraManager.isRecordingVideo()) {
+            // Stop recording
+            stopVideoRecordingUi()
+            cameraManager.stopVideoRecording()
+        } else {
+            // Start recording
+            val started = cameraManager.startVideoRecording { event ->
+                runOnUiThread {
+                    when (event) {
+                        is VideoRecordEvent.Start -> {
+                            startVideoRecordingUi()
+                        }
+                        is VideoRecordEvent.Finalize -> {
+                            stopVideoRecordingUi()
+                            if (!event.hasError()) {
+                                val uri = event.outputResults.outputUri
+                                binding.ivGalleryThumbnail.setImageURI(uri)
+                                Toast.makeText(this, "Video saved to Gallery", Toast.LENGTH_SHORT).show()
+                            } else {
+                                Toast.makeText(this, "Video record error: ${event.error}", Toast.LENGTH_SHORT).show()
+                            }
+                        }
+                    }
+                }
+            }
+            if (started) {
+                startVideoRecordingUi()
+            } else {
+                Toast.makeText(this, "Failed to start recording", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
+    private fun startVideoRecordingUi() {
+        binding.btnShutter.setImageResource(R.drawable.bg_shutter_video_recording)
+        binding.videoRecordingBanner.visibility = View.VISIBLE
+
+        recordingSeconds = 0
+        binding.tvVideoTimer.text = "00:00"
+
+        // Blinking recording dot
+        recordingDotAnimator = ObjectAnimator.ofFloat(binding.viewRecordingDot, "alpha", 1f, 0.2f).apply {
+            duration = 500
+            repeatMode = ValueAnimator.REVERSE
+            repeatCount = ValueAnimator.INFINITE
+            start()
+        }
+
+        // Live timer job
+        videoTimerJob?.cancel()
+        videoTimerJob = lifecycleScope.launch {
+            while (isActive) {
+                delay(1000)
+                recordingSeconds++
+                val min = recordingSeconds / 60
+                val sec = recordingSeconds % 60
+                binding.tvVideoTimer.text = String.format("%02d:%02d", min, sec)
+            }
+        }
+    }
+
+    private fun stopVideoRecordingUi() {
+        binding.btnShutter.setImageResource(R.drawable.bg_shutter_video)
+        binding.videoRecordingBanner.visibility = View.GONE
+        videoTimerJob?.cancel()
+        videoTimerJob = null
+        recordingDotAnimator?.cancel()
+        recordingDotAnimator = null
+        binding.viewRecordingDot.alpha = 1f
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        stopVideoRecordingUi()
     }
 
     companion object {
