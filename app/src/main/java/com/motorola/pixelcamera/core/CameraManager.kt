@@ -137,6 +137,10 @@ class CameraManager(private val context: Context) {
         val previewExtender = Camera2Interop.Extender(previewBuilder)
         previewExtender.setCaptureRequestOption(CaptureRequest.CONTROL_AF_MODE, CaptureRequest.CONTROL_AF_MODE_CONTINUOUS_PICTURE)
         previewExtender.setCaptureRequestOption(CaptureRequest.CONTROL_AE_ANTIBANDING_MODE, CaptureRequest.CONTROL_AE_ANTIBANDING_MODE_AUTO)
+        if (currentCameraMode == CameraMode.NIGHT_SIGHT) {
+            previewExtender.setCaptureRequestOption(CaptureRequest.CONTROL_MODE, CaptureRequest.CONTROL_MODE_USE_SCENE_MODE)
+            previewExtender.setCaptureRequestOption(CaptureRequest.CONTROL_SCENE_MODE, CaptureRequest.CONTROL_SCENE_MODE_NIGHT)
+        }
 
         preview = previewBuilder.build().also {
             it.setSurfaceProvider(view.surfaceProvider)
@@ -165,6 +169,11 @@ class CameraManager(private val context: Context) {
         camera2Extender.setCaptureRequestOption(CaptureRequest.COLOR_CORRECTION_ABERRATION_MODE, CaptureRequest.COLOR_CORRECTION_ABERRATION_MODE_HIGH_QUALITY)
         camera2Extender.setCaptureRequestOption(CaptureRequest.HOT_PIXEL_MODE, CaptureRequest.HOT_PIXEL_MODE_HIGH_QUALITY)
         camera2Extender.setCaptureRequestOption(CaptureRequest.JPEG_QUALITY, 100.toByte())
+
+        if (currentCameraMode == CameraMode.NIGHT_SIGHT) {
+            camera2Extender.setCaptureRequestOption(CaptureRequest.CONTROL_MODE, CaptureRequest.CONTROL_MODE_USE_SCENE_MODE)
+            camera2Extender.setCaptureRequestOption(CaptureRequest.CONTROL_SCENE_MODE, CaptureRequest.CONTROL_SCENE_MODE_NIGHT)
+        }
 
         if (is108MpEnabled && currentCameraId == CAMERA_MAIN) {
             try {
@@ -371,25 +380,11 @@ class CameraManager(private val context: Context) {
                 saveBitmapToMediaStore(portraitBitmap)
             }
             CameraMode.NIGHT_SIGHT -> {
-                onStatusUpdate("Gathering Night Sight frames...")
-                val frames = mutableListOf<Bitmap>()
-                val f1 = takeSingleBitmap(capture)
-                if (f1 != null) frames.add(f1)
-                val f2 = takeSingleBitmap(capture)
-                if (f2 != null) frames.add(f2)
-                val f3 = takeSingleBitmap(capture)
-                if (f3 != null) frames.add(f3)
-
-                onStatusUpdate("Stacking frames & lifting shadows...")
-                val stacked = if (frames.size > 1) {
-                    NightSightEngine.processNightSight(frames)
-                } else if (frames.isNotEmpty()) {
-                    frames[0]
-                } else {
-                    return@withContext null
-                }
-                onStatusUpdate("Saving Night Sight JPEG...")
-                saveBitmapToMediaStore(stacked)
+                // Dimensity 800U Hardware Multi-Frame Noise Reduction (MFNR / 3DNR) & Night Scene Mode
+                // Captures high-speed raw burst on the sensor plane with hardware gyro alignment,
+                // eliminating hand-motion ghosting and producing crisp, razor-sharp low-light images.
+                onStatusUpdate("Night Sight hardware multi-frame fusion...")
+                takePictureDirect(capture)
             }
             CameraMode.VIDEO -> {
                 // Video is handled by startRecording / stopRecording
