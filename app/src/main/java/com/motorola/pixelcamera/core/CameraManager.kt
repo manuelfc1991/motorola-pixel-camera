@@ -5,12 +5,20 @@ import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Matrix
+import android.hardware.camera2.CaptureRequest
 import android.net.Uri
 import android.os.Build
 import android.os.Environment
 import android.provider.MediaStore
 import android.util.Log
+import android.util.Size
+import androidx.annotation.OptIn
+import androidx.camera.camera2.interop.Camera2Interop
+import androidx.camera.camera2.interop.ExperimentalCamera2Interop
 import androidx.camera.core.*
+import androidx.camera.core.resolutionselector.AspectRatioStrategy
+import androidx.camera.core.resolutionselector.ResolutionSelector
+import androidx.camera.core.resolutionselector.ResolutionStrategy
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
 import androidx.core.content.ContextCompat
@@ -67,6 +75,7 @@ class CameraManager(private val context: Context) {
             }, ContextCompat.getMainExecutor(context))
         }
 
+    @OptIn(ExperimentalCamera2Interop::class)
     fun bindCameraUseCases(lifecycleOwner: LifecycleOwner, previewView: PreviewView) {
         val provider = cameraProvider ?: return
 
@@ -76,17 +85,49 @@ class CameraManager(private val context: Context) {
             .requireLensFacing(currentLensFacing)
             .build()
 
-        preview = Preview.Builder()
-            .setTargetAspectRatio(AspectRatio.RATIO_4_3)
+        val previewResolutionSelector = ResolutionSelector.Builder()
+            .setAspectRatioStrategy(AspectRatioStrategy.RATIO_4_3_FALLBACK_AUTO_STRATEGY)
+            .setResolutionStrategy(
+                ResolutionStrategy(
+                    Size(1920, 1440),
+                    ResolutionStrategy.FALLBACK_RULE_CLOSEST_HIGHER_THEN_LOWER
+                )
+            )
             .build()
-            .also {
-                it.setSurfaceProvider(previewView.surfaceProvider)
-            }
 
-        imageCapture = ImageCapture.Builder()
-            .setCaptureMode(ImageCapture.CAPTURE_MODE_MAXIMIZE_QUALITY)
-            .setTargetAspectRatio(AspectRatio.RATIO_4_3)
+        val previewBuilder = Preview.Builder()
+            .setResolutionSelector(previewResolutionSelector)
+
+        val previewExtender = Camera2Interop.Extender(previewBuilder)
+        previewExtender.setCaptureRequestOption(CaptureRequest.CONTROL_AF_MODE, CaptureRequest.CONTROL_AF_MODE_CONTINUOUS_PICTURE)
+        previewExtender.setCaptureRequestOption(CaptureRequest.CONTROL_AE_ANTIBANDING_MODE, CaptureRequest.CONTROL_AE_ANTIBANDING_MODE_AUTO)
+
+        preview = previewBuilder.build().also {
+            it.setSurfaceProvider(previewView.surfaceProvider)
+        }
+
+        val captureResolutionSelector = ResolutionSelector.Builder()
+            .setAspectRatioStrategy(AspectRatioStrategy.RATIO_4_3_FALLBACK_AUTO_STRATEGY)
+            .setResolutionStrategy(ResolutionStrategy.HIGHEST_AVAILABLE_STRATEGY)
             .build()
+
+        val captureBuilder = ImageCapture.Builder()
+            .setCaptureMode(ImageCapture.CAPTURE_MODE_MAXIMIZE_QUALITY)
+            .setResolutionSelector(captureResolutionSelector)
+
+        // Inject Camera2 hardware ISP parameters for razor-sharp clarity
+        val camera2Extender = Camera2Interop.Extender(captureBuilder)
+        camera2Extender.setCaptureRequestOption(CaptureRequest.CONTROL_AF_MODE, CaptureRequest.CONTROL_AF_MODE_CONTINUOUS_PICTURE)
+        camera2Extender.setCaptureRequestOption(CaptureRequest.CONTROL_AE_ANTIBANDING_MODE, CaptureRequest.CONTROL_AE_ANTIBANDING_MODE_AUTO)
+        camera2Extender.setCaptureRequestOption(CaptureRequest.SHADING_MODE, CaptureRequest.SHADING_MODE_HIGH_QUALITY)
+        camera2Extender.setCaptureRequestOption(CaptureRequest.TONEMAP_MODE, CaptureRequest.TONEMAP_MODE_HIGH_QUALITY)
+        camera2Extender.setCaptureRequestOption(CaptureRequest.EDGE_MODE, CaptureRequest.EDGE_MODE_HIGH_QUALITY)
+        camera2Extender.setCaptureRequestOption(CaptureRequest.NOISE_REDUCTION_MODE, CaptureRequest.NOISE_REDUCTION_MODE_HIGH_QUALITY)
+        camera2Extender.setCaptureRequestOption(CaptureRequest.COLOR_CORRECTION_ABERRATION_MODE, CaptureRequest.COLOR_CORRECTION_ABERRATION_MODE_HIGH_QUALITY)
+        camera2Extender.setCaptureRequestOption(CaptureRequest.HOT_PIXEL_MODE, CaptureRequest.HOT_PIXEL_MODE_HIGH_QUALITY)
+        camera2Extender.setCaptureRequestOption(CaptureRequest.JPEG_QUALITY, 100.toByte())
+
+        imageCapture = captureBuilder.build()
 
         try {
             camera = provider.bindToLifecycle(
@@ -128,13 +169,13 @@ class CameraManager(private val context: Context) {
     }
 
     /**
-     * Executes capture and applies computational photography pipelines
+     * Executes capture and applies the improved high-fidelity computational photography pipeline
      */
     suspend fun capturePhoto(mode: CameraMode, onStatusUpdate: (String) -> Unit): Uri? =
         withContext(Dispatchers.IO) {
             val capture = imageCapture ?: return@withContext null
 
-            onStatusUpdate("Exposing sensor...")
+            onStatusUpdate("Capturing high-res frame...")
 
             // Frame capture
             val baseBitmap = takeSingleBitmap(capture) ?: return@withContext null
@@ -149,7 +190,7 @@ class CameraManager(private val context: Context) {
 
             val processedBitmap: Bitmap = when (mode) {
                 CameraMode.CAMERA -> {
-                    onStatusUpdate("Enhancing HDR+ details...")
+                    onStatusUpdate("Refining clarity & micro-contrast...")
                     HdrProcessor.processHdr(listOf(baseBitmap))
                 }
                 CameraMode.NIGHT_SIGHT -> {
@@ -177,7 +218,7 @@ class CameraManager(private val context: Context) {
                 processedBitmap
             }
 
-            onStatusUpdate("Saving photo...")
+            onStatusUpdate("Saving 100% quality JPEG...")
             saveBitmapToMediaStore(finalBitmap)
         }
 
@@ -235,7 +276,7 @@ class CameraManager(private val context: Context) {
 
         try {
             resolver.openOutputStream(uri)?.use { stream ->
-                bitmap.compress(Bitmap.CompressFormat.JPEG, 97, stream)
+                bitmap.compress(Bitmap.CompressFormat.JPEG, 100, stream)
             }
 
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
