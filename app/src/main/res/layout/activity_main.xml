@@ -31,10 +31,22 @@
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toTopOf="parent">
 
+        <!-- Settings Gear Icon -->
+        <ImageView
+            android:id="@+id/btnSettings"
+            android:layout_width="36dp"
+            android:layout_height="36dp"
+            android:background="@drawable/bg_pill_container"
+            android:clickable="true"
+            android:focusable="true"
+            android:padding="8dp"
+            android:src="@drawable/ic_settings" />
+
         <TextView
             android:id="@+id/tvHdrBadge"
             android:layout_width="wrap_content"
             android:layout_height="32dp"
+            android:layout_marginStart="8dp"
             android:background="@drawable/bg_pill_container"
             android:gravity="center"
             android:paddingHorizontal="12dp"
@@ -50,8 +62,8 @@
             android:layout_marginStart="8dp"
             android:background="@drawable/bg_pill_container"
             android:gravity="center"
-            android:paddingHorizontal="12dp"
-            android:text="RAW DNG"
+            android:paddingHorizontal="10dp"
+            android:text="RAW"
             android:textColor="@color/pixel_text_secondary"
             android:textSize="12sp" />
 
@@ -62,7 +74,7 @@
             android:layout_marginStart="8dp"
             android:background="@drawable/bg_pill_container"
             android:gravity="center"
-            android:paddingHorizontal="12dp"
+            android:paddingHorizontal="10dp"
             android:text="108MP"
             android:textColor="@color/pixel_text_secondary"
             android:textSize="12sp" />
@@ -81,25 +93,175 @@
             android:textSize="12sp" />
     </LinearLayout>
 
+    <!-- Horizon Level Indicator (Pixel Style) -->
+    <LinearLayout
+        android:id="@+id/horizonLevelIndicator"
+        android:layout_width="160dp"
+        android:layout_height="24dp"
+        android:alpha="0.6"
+        android:gravity="center"
+        android:orientation="horizontal"
+        app:layout_constraintBottom_toBottomOf="@+id/viewFinder"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="@+id/viewFinder">
+
+        <View
+            android:layout_width="32dp"
+            android:layout_height="1.5dp"
+            android:background="@color/pixel_accent_yellow" />
+
+        <View
+            android:layout_width="8dp"
+            android:layout_height="8dp"
+            android:layout_marginHorizontal="8dp"
+            android:background="@drawable/ic_focus_ring" />
+
+        <View
+            android:layout_width="32dp"
+            android:layout_height="1.5dp"
+            android:background="@color/pixel_accent_yellow" />
+    </LinearLayout>
+
     <!-- Real-time RGB Histogram Overlay -->
     <com.motorola.pixelcamera.ui.HistogramView
         android:id="@+id/histogramView"
         android:layout_width="120dp"
         android:layout_height="64dp"
         android:layout_margin="16dp"
+        android:visibility="gone"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintTop_toBottomOf="@+id/topBar" />
 
-    <!-- Tap to Focus Animated Reticle -->
-    <ImageView
-        android:id="@+id/focusRing"
-        android:layout_width="64dp"
-        android:layout_height="64dp"
-        android:src="@drawable/ic_focus_ring"
+    <!-- Tap to Focus Animated Reticle Container (with exposure slider) -->
+    <LinearLayout
+        android:id="@+id/focusReticleContainer"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
         android:visibility="gone"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toTopOf="parent"
-        tools:visibility="visible" />
+        tools:visibility="visible">
+
+        <ImageView
+            android:id="@+id/focusRing"
+            android:layout_width="64dp"
+            android:layout_height="64dp"
+            android:src="@drawable/ic_focus_ring" />
+
+        <!-- Vertical Sun Exposure Control beside Focus Ring -->
+        <LinearLayout
+            android:layout_width="wrap_content"
+            android:layout_height="64dp"
+            android:layout_marginStart="4dp"
+            android:background="@drawable/bg_pill_container"
+            android:gravity="center"
+            android:orientation="vertical"
+            android:paddingHorizontal="4dp">
+
+            <ImageView
+                android:layout_width="16dp"
+                android:layout_height="16dp"
+                android:src="@drawable/ic_exposure_sun" />
+
+            <View
+                android:layout_width="2dp"
+                android:layout_height="24dp"
+                android:layout_marginTop="2dp"
+                android:background="@color/pixel_text_secondary" />
+        </LinearLayout>
+    </LinearLayout>
+
+    <!-- NIGHT SIGHT OVERLAY: Circular Hold Still Countdown -->
+    <LinearLayout
+        android:id="@+id/overlayNightHoldStill"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:background="@drawable/bg_pill_container"
+        android:backgroundTint="#CC121316"
+        android:elevation="10dp"
+        android:gravity="center"
+        android:orientation="vertical"
+        android:padding="20dp"
+        android:visibility="gone"
+        app:layout_constraintBottom_toBottomOf="@+id/viewFinder"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="@+id/viewFinder"
+        tools:visibility="visible">
+
+        <ProgressBar
+            android:layout_width="64dp"
+            android:layout_height="64dp"
+            android:indeterminate="true"
+            android:indeterminateTint="@color/pixel_accent_yellow" />
+
+        <TextView
+            android:id="@+id/tvNightTimer"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:text="1.8s"
+            android:textColor="@color/pixel_accent_yellow"
+            android:textSize="18sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Hold still • Capturing light"
+            android:textColor="@color/pixel_text_white"
+            android:textSize="12sp" />
+    </LinearLayout>
+
+    <!-- PORTRAIT MODE APERTURE SLIDER OVERLAY -->
+    <LinearLayout
+        android:id="@+id/overlayPortraitAperture"
+        android:layout_width="wrap_content"
+        android:layout_height="40dp"
+        android:layout_marginBottom="12dp"
+        android:background="@drawable/bg_pill_container"
+        android:backgroundTint="#DD181A1D"
+        android:elevation="6dp"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingHorizontal="16dp"
+        android:visibility="gone"
+        app:layout_constraintBottom_toTopOf="@+id/zoomPillContainer"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        tools:visibility="visible">
+
+        <TextView
+            android:id="@+id/tvApertureLabel"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="f / 1.8"
+            android:textColor="@color/pixel_accent_yellow"
+            android:textSize="13sp"
+            android:textStyle="bold" />
+
+        <SeekBar
+            android:id="@+id/sbAperture"
+            android:layout_width="120dp"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="8dp"
+            android:max="100"
+            android:progress="70"
+            android:progressTint="@color/pixel_accent_yellow"
+            android:thumbTint="@color/pixel_accent_yellow" />
+
+        <TextView
+            android:id="@+id/tvBokehPercent"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="8dp"
+            android:text="Blur 70%"
+            android:textColor="@color/pixel_text_secondary"
+            android:textSize="12sp" />
+    </LinearLayout>
 
     <!-- Processing Toast Pill -->
     <LinearLayout
@@ -134,7 +296,7 @@
             android:textSize="13sp" />
     </LinearLayout>
 
-    <!-- Pro Manual Controls Drawer (ISO, Shutter, Focus, EV) -->
+    <!-- Pro Manual Controls Drawer (ISO, EV) -->
     <LinearLayout
         android:id="@+id/proControlPanel"
         android:layout_width="match_parent"
@@ -172,7 +334,7 @@
                 android:thumbTint="@color/pixel_accent_yellow" />
         </LinearLayout>
 
-        <!-- Exposure Compensation (EV) Slider Row -->
+        <!-- EV Slider Row -->
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"

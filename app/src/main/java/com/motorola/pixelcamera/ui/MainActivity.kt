@@ -1,7 +1,9 @@
 package com.motorola.pixelcamera.ui
 
 import android.Manifest
+import android.content.Context
 import android.content.Intent
+import android.content.SharedPreferences
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Bundle
@@ -18,12 +20,14 @@ import com.motorola.pixelcamera.R
 import com.motorola.pixelcamera.core.CameraManager
 import com.motorola.pixelcamera.core.CameraMode
 import com.motorola.pixelcamera.databinding.ActivityMainBinding
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 class MainActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivityMainBinding
     private lateinit var cameraManager: CameraManager
+    private lateinit var prefs: SharedPreferences
 
     private var currentMode: CameraMode = CameraMode.CAMERA
     private var isCapturing = false
@@ -47,6 +51,7 @@ class MainActivity : AppCompatActivity() {
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
+        prefs = getSharedPreferences(SettingsActivity.PREFS_NAME, Context.MODE_PRIVATE)
         cameraManager = CameraManager(this)
 
         setupListeners()
@@ -55,6 +60,31 @@ class MainActivity : AppCompatActivity() {
             setupCamera()
         } else {
             permissionLauncher.launch(REQUIRED_PERMISSIONS)
+        }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        syncSettings()
+    }
+
+    private fun syncSettings() {
+        val rawPref = prefs.getBoolean(SettingsActivity.KEY_RAW_ENABLED, false)
+        cameraManager.isRawEnabled = rawPref
+        if (rawPref) {
+            binding.tvRawBadge.setTextColor(ContextCompat.getColor(this, R.color.pixel_accent_yellow))
+        } else {
+            binding.tvRawBadge.setTextColor(ContextCompat.getColor(this, R.color.pixel_text_secondary))
+        }
+
+        val remosaicPref = prefs.getBoolean(SettingsActivity.KEY_108MP_REMOSAIC, true)
+        cameraManager.is108MpEnabled = remosaicPref
+        if (remosaicPref) {
+            binding.tv108MpBadge.setTextColor(ContextCompat.getColor(this, R.color.pixel_accent_blue))
+            binding.tvSensorInfo.text = "108MP ULTRA"
+        } else {
+            binding.tv108MpBadge.setTextColor(ContextCompat.getColor(this, R.color.pixel_text_secondary))
+            binding.tvSensorInfo.text = "108MP HM2"
         }
     }
 
@@ -75,6 +105,11 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun setupListeners() {
+        // Settings Gear Button
+        binding.btnSettings.setOnClickListener {
+            startActivity(Intent(this, SettingsActivity::class.java))
+        }
+
         // Shutter Button
         binding.btnShutter.setOnClickListener {
             onShutterClicked()
@@ -98,30 +133,32 @@ class MainActivity : AppCompatActivity() {
         binding.modeVideo.setOnClickListener { setMode(CameraMode.VIDEO, binding.modeVideo) }
         binding.modePro.setOnClickListener { setMode(CameraMode.PRO, binding.modePro) }
 
+        // Portrait Aperture Slider
+        binding.sbAperture.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+            override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
+                val fStops = arrayOf("f / 1.4", "f / 1.8", "f / 2.2", "f / 2.8", "f / 4.0", "f / 5.6", "f / 8.0", "f / 11", "f / 16")
+                val index = ((100 - progress) / 100f * (fStops.size - 1)).toInt().coerceIn(0, fStops.size - 1)
+                binding.tvApertureLabel.text = fStops[index]
+                binding.tvBokehPercent.text = "Blur $progress%"
+            }
+            override fun onStartTrackingTouch(seekBar: SeekBar?) {}
+            override fun onStopTrackingTouch(seekBar: SeekBar?) {}
+        })
+
         // RAW Badge Toggle
         binding.tvRawBadge.setOnClickListener {
             cameraManager.isRawEnabled = !cameraManager.isRawEnabled
-            if (cameraManager.isRawEnabled) {
-                binding.tvRawBadge.setTextColor(ContextCompat.getColor(this, R.color.pixel_accent_yellow))
-                Toast.makeText(this, "RAW (DNG) capture enabled", Toast.LENGTH_SHORT).show()
-            } else {
-                binding.tvRawBadge.setTextColor(ContextCompat.getColor(this, R.color.pixel_text_secondary))
-                Toast.makeText(this, "RAW capture disabled", Toast.LENGTH_SHORT).show()
-            }
+            prefs.edit().putBoolean(SettingsActivity.KEY_RAW_ENABLED, cameraManager.isRawEnabled).apply()
+            syncSettings()
+            Toast.makeText(this, if (cameraManager.isRawEnabled) "RAW (DNG) enabled" else "RAW disabled", Toast.LENGTH_SHORT).show()
         }
 
         // 108 MP Badge Toggle
         binding.tv108MpBadge.setOnClickListener {
             cameraManager.is108MpEnabled = !cameraManager.is108MpEnabled
-            if (cameraManager.is108MpEnabled) {
-                binding.tv108MpBadge.setTextColor(ContextCompat.getColor(this, R.color.pixel_accent_blue))
-                binding.tvSensorInfo.text = "108MP ULTRA"
-                Toast.makeText(this, "108MP High-Resolution Mode ON", Toast.LENGTH_SHORT).show()
-            } else {
-                binding.tv108MpBadge.setTextColor(ContextCompat.getColor(this, R.color.pixel_text_secondary))
-                binding.tvSensorInfo.text = "108MP HM2"
-                Toast.makeText(this, "108MP Nona-binning (12MP) Mode", Toast.LENGTH_SHORT).show()
-            }
+            prefs.edit().putBoolean(SettingsActivity.KEY_108MP_REMOSAIC, cameraManager.is108MpEnabled).apply()
+            syncSettings()
+            Toast.makeText(this, if (cameraManager.is108MpEnabled) "108MP Remosaic ON" else "12MP Nona-binning ON", Toast.LENGTH_SHORT).show()
         }
 
         // Pro Controls: ISO Slider
@@ -211,23 +248,25 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
-        // Update Top Badges & Pro Drawer Visibility
+        // Update Overlays Visibility per Mode
         when (mode) {
             CameraMode.NIGHT_SIGHT -> {
                 binding.tvHdrBadge.text = "NIGHT SIGHT"
                 binding.proControlPanel.visibility = View.GONE
                 binding.histogramView.visibility = View.GONE
+                binding.overlayPortraitAperture.visibility = View.GONE
             }
             CameraMode.PORTRAIT -> {
                 binding.tvHdrBadge.text = "PORTRAIT DEPTH"
                 binding.proControlPanel.visibility = View.GONE
                 binding.histogramView.visibility = View.GONE
+                binding.overlayPortraitAperture.visibility = View.VISIBLE
             }
             CameraMode.PRO -> {
                 binding.tvHdrBadge.text = "PRO MANUAL"
                 binding.proControlPanel.visibility = View.VISIBLE
                 binding.histogramView.visibility = View.VISIBLE
-                // Trigger simulated live histogram
+                binding.overlayPortraitAperture.visibility = View.GONE
                 val r = IntArray(256) { (Math.sin(it * 0.04) * 50 + 60).toInt() }
                 val g = IntArray(256) { (Math.sin(it * 0.05 + 1.0) * 60 + 70).toInt() }
                 val b = IntArray(256) { (Math.sin(it * 0.03 + 2.0) * 45 + 50).toInt() }
@@ -237,37 +276,39 @@ class MainActivity : AppCompatActivity() {
                 binding.tvHdrBadge.text = "EIS 4K"
                 binding.proControlPanel.visibility = View.GONE
                 binding.histogramView.visibility = View.GONE
+                binding.overlayPortraitAperture.visibility = View.GONE
             }
             CameraMode.CAMERA -> {
                 binding.tvHdrBadge.text = "HDR+ ON"
                 binding.proControlPanel.visibility = View.GONE
                 binding.histogramView.visibility = View.GONE
+                binding.overlayPortraitAperture.visibility = View.GONE
             }
         }
     }
 
     private fun showFocusRing(x: Float, y: Float) {
-        val ring = binding.focusRing
-        val halfW = ring.width / 2
-        val halfH = ring.height / 2
+        val container = binding.focusReticleContainer
+        val halfW = container.width / 2
+        val halfH = container.height / 2
 
-        ring.x = x - halfW
-        ring.y = y - halfH
-        ring.visibility = View.VISIBLE
-        ring.alpha = 1f
-        ring.scaleX = 1.3f
-        ring.scaleY = 1.3f
+        container.x = x - halfW
+        container.y = y - halfH
+        container.visibility = View.VISIBLE
+        container.alpha = 1f
+        container.scaleX = 1.3f
+        container.scaleY = 1.3f
 
-        ring.animate()
+        container.animate()
             .scaleX(1.0f)
             .scaleY(1.0f)
             .setDuration(220)
             .withEndAction {
-                ring.animate()
+                container.animate()
                     .alpha(0f)
-                    .setStartDelay(1000)
+                    .setStartDelay(1200)
                     .setDuration(400)
-                    .withEndAction { ring.visibility = View.GONE }
+                    .withEndAction { container.visibility = View.GONE }
                     .start()
             }
             .start()
@@ -281,7 +322,21 @@ class MainActivity : AppCompatActivity() {
             binding.btnShutter.animate().scaleX(1.0f).scaleY(1.0f).setDuration(120).start()
         }.start()
 
-        binding.processingPill.visibility = View.VISIBLE
+        // If Night Sight is active, show the circular countdown overlay
+        if (currentMode == CameraMode.NIGHT_SIGHT) {
+            binding.overlayNightHoldStill.visibility = View.VISIBLE
+            binding.tvNightTimer.text = "1.8s"
+            lifecycleScope.launch {
+                delay(600)
+                binding.tvNightTimer.text = "1.2s"
+                delay(600)
+                binding.tvNightTimer.text = "0.6s"
+                delay(600)
+                binding.overlayNightHoldStill.visibility = View.GONE
+            }
+        } else {
+            binding.processingPill.visibility = View.VISIBLE
+        }
 
         lifecycleScope.launch {
             val uri: Uri? = cameraManager.capturePhoto(currentMode) { status ->
@@ -291,6 +346,7 @@ class MainActivity : AppCompatActivity() {
             }
 
             binding.processingPill.visibility = View.GONE
+            binding.overlayNightHoldStill.visibility = View.GONE
             isCapturing = false
 
             if (uri != null) {
