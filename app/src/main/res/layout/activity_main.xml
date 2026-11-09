@@ -1,0 +1,368 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.constraintlayout.widget.ConstraintLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:id="@+id/rootView"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/pixel_black">
+
+    <!-- Camera Preview Viewfinder -->
+    <androidx.camera.view.PreviewView
+        android:id="@+id/viewFinder"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        app:layout_constraintBottom_toTopOf="@+id/bottomControlPanel"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@+id/topBar" />
+
+    <!-- Top Status & Quick Settings Bar -->
+    <LinearLayout
+        android:id="@+id/topBar"
+        android:layout_width="match_parent"
+        android:layout_height="64dp"
+        android:background="@color/pixel_black"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingHorizontal="16dp"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent">
+
+        <TextView
+            android:id="@+id/tvHdrBadge"
+            android:layout_width="wrap_content"
+            android:layout_height="32dp"
+            android:background="@drawable/bg_pill_container"
+            android:gravity="center"
+            android:paddingHorizontal="12dp"
+            android:text="HDR+ ON"
+            android:textColor="@color/pixel_accent_blue"
+            android:textSize="12sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/tvRawBadge"
+            android:layout_width="wrap_content"
+            android:layout_height="32dp"
+            android:layout_marginStart="8dp"
+            android:background="@drawable/bg_pill_container"
+            android:gravity="center"
+            android:paddingHorizontal="12dp"
+            android:text="RAW DNG"
+            android:textColor="@color/pixel_text_secondary"
+            android:textSize="12sp" />
+
+        <TextView
+            android:id="@+id/tv108MpBadge"
+            android:layout_width="wrap_content"
+            android:layout_height="32dp"
+            android:layout_marginStart="8dp"
+            android:background="@drawable/bg_pill_container"
+            android:gravity="center"
+            android:paddingHorizontal="12dp"
+            android:text="108MP"
+            android:textColor="@color/pixel_text_secondary"
+            android:textSize="12sp" />
+
+        <View
+            android:layout_width="0dp"
+            android:layout_height="1dp"
+            android:layout_weight="1" />
+
+        <TextView
+            android:id="@+id/tvSensorInfo"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="108MP HM2"
+            android:textColor="@color/pixel_text_secondary"
+            android:textSize="12sp" />
+    </LinearLayout>
+
+    <!-- Real-time RGB Histogram Overlay -->
+    <com.motorola.pixelcamera.ui.HistogramView
+        android:id="@+id/histogramView"
+        android:layout_width="120dp"
+        android:layout_height="64dp"
+        android:layout_margin="16dp"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintTop_toBottomOf="@+id/topBar" />
+
+    <!-- Tap to Focus Animated Reticle -->
+    <ImageView
+        android:id="@+id/focusRing"
+        android:layout_width="64dp"
+        android:layout_height="64dp"
+        android:src="@drawable/ic_focus_ring"
+        android:visibility="gone"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent"
+        tools:visibility="visible" />
+
+    <!-- Processing Toast Pill -->
+    <LinearLayout
+        android:id="@+id/processingPill"
+        android:layout_width="wrap_content"
+        android:layout_height="40dp"
+        android:layout_marginBottom="12dp"
+        android:background="@drawable/bg_pill_container"
+        android:elevation="8dp"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingHorizontal="16dp"
+        android:visibility="gone"
+        app:layout_constraintBottom_toTopOf="@+id/proControlPanel"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        tools:visibility="visible">
+
+        <ProgressBar
+            android:layout_width="18dp"
+            android:layout_height="18dp"
+            android:indeterminate="true"
+            android:indeterminateTint="@color/pixel_accent_yellow" />
+
+        <TextView
+            android:id="@+id/tvProcessingStatus"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="10dp"
+            android:text="@string/hdr_processing"
+            android:textColor="@color/pixel_text_white"
+            android:textSize="13sp" />
+    </LinearLayout>
+
+    <!-- Pro Manual Controls Drawer (ISO, Shutter, Focus, EV) -->
+    <LinearLayout
+        android:id="@+id/proControlPanel"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:background="#DD121316"
+        android:orientation="vertical"
+        android:paddingHorizontal="16dp"
+        android:paddingVertical="8dp"
+        android:visibility="gone"
+        app:layout_constraintBottom_toTopOf="@+id/zoomPillContainer"
+        tools:visibility="visible">
+
+        <!-- ISO Slider Row -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
+            <TextView
+                android:id="@+id/tvIsoLabel"
+                android:layout_width="80dp"
+                android:layout_height="wrap_content"
+                android:text="ISO AUTO"
+                android:textColor="@color/pixel_accent_yellow"
+                android:textSize="12sp"
+                android:textStyle="bold" />
+            <SeekBar
+                android:id="@+id/sbIso"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:max="192"
+                android:progress="0"
+                android:progressTint="@color/pixel_accent_yellow"
+                android:thumbTint="@color/pixel_accent_yellow" />
+        </LinearLayout>
+
+        <!-- Exposure Compensation (EV) Slider Row -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
+            <TextView
+                android:id="@+id/tvEvLabel"
+                android:layout_width="80dp"
+                android:layout_height="wrap_content"
+                android:text="EV 0.0"
+                android:textColor="@color/pixel_text_white"
+                android:textSize="12sp"
+                android:textStyle="bold" />
+            <SeekBar
+                android:id="@+id/sbEv"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:max="24"
+                android:progress="12"
+                android:progressTint="@color/pixel_accent_blue"
+                android:thumbTint="@color/pixel_accent_blue" />
+        </LinearLayout>
+    </LinearLayout>
+
+    <!-- Zoom Switcher (.6x, 1x, 2x) -->
+    <LinearLayout
+        android:id="@+id/zoomPillContainer"
+        android:layout_width="wrap_content"
+        android:layout_height="44dp"
+        android:layout_marginBottom="12dp"
+        android:background="@drawable/bg_pill_container"
+        android:elevation="6dp"
+        android:gravity="center"
+        android:orientation="horizontal"
+        android:paddingHorizontal="8dp"
+        app:layout_constraintBottom_toTopOf="@+id/modeCarousel"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent">
+
+        <TextView
+            android:id="@+id/btnZoomUltrawide"
+            android:layout_width="40dp"
+            android:layout_height="32dp"
+            android:gravity="center"
+            android:text="@string/zoom_ultrawide"
+            android:textColor="@color/pixel_text_secondary"
+            android:textSize="13sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/btnZoom1x"
+            android:layout_width="40dp"
+            android:layout_height="32dp"
+            android:background="@drawable/bg_pill_container"
+            android:backgroundTint="@color/pixel_pill_active"
+            android:gravity="center"
+            android:text="@string/zoom_1x"
+            android:textColor="@color/pixel_pill_text_active"
+            android:textSize="13sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/btnZoom2x"
+            android:layout_width="40dp"
+            android:layout_height="32dp"
+            android:gravity="center"
+            android:text="@string/zoom_2x"
+            android:textColor="@color/pixel_text_secondary"
+            android:textSize="13sp"
+            android:textStyle="bold" />
+    </LinearLayout>
+
+    <!-- Mode Carousel (Night Sight, Portrait, Camera, Video, Pro) -->
+    <HorizontalScrollView
+        android:id="@+id/modeCarousel"
+        android:layout_width="match_parent"
+        android:layout_height="48dp"
+        android:background="@color/pixel_black"
+        android:scrollbars="none"
+        app:layout_constraintBottom_toTopOf="@+id/bottomControlPanel">
+
+        <LinearLayout
+            android:layout_width="wrap_content"
+            android:layout_height="match_parent"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:paddingHorizontal="24dp">
+
+            <TextView
+                android:id="@+id/modeNightSight"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:paddingHorizontal="16dp"
+                android:paddingVertical="8dp"
+                android:text="@string/mode_night_sight"
+                android:textColor="@color/pixel_text_secondary"
+                android:textSize="14sp" />
+
+            <TextView
+                android:id="@+id/modePortrait"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:paddingHorizontal="16dp"
+                android:paddingVertical="8dp"
+                android:text="@string/mode_portrait"
+                android:textColor="@color/pixel_text_secondary"
+                android:textSize="14sp" />
+
+            <TextView
+                android:id="@+id/modeCamera"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:background="@drawable/bg_pill_container"
+                android:backgroundTint="@color/pixel_pill_active"
+                android:paddingHorizontal="18dp"
+                android:paddingVertical="8dp"
+                android:text="@string/mode_camera"
+                android:textColor="@color/pixel_pill_text_active"
+                android:textSize="14sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/modeVideo"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:paddingHorizontal="16dp"
+                android:paddingVertical="8dp"
+                android:text="@string/mode_video"
+                android:textColor="@color/pixel_text_secondary"
+                android:textSize="14sp" />
+
+            <TextView
+                android:id="@+id/modePro"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:paddingHorizontal="16dp"
+                android:paddingVertical="8dp"
+                android:text="@string/mode_pro"
+                android:textColor="@color/pixel_text_secondary"
+                android:textSize="14sp" />
+        </LinearLayout>
+    </HorizontalScrollView>
+
+    <!-- Bottom Controls (Gallery Thumbnail, Shutter Button, Switch Camera) -->
+    <androidx.constraintlayout.widget.ConstraintLayout
+        android:id="@+id/bottomControlPanel"
+        android:layout_width="match_parent"
+        android:layout_height="112dp"
+        android:background="@color/pixel_black"
+        app:layout_constraintBottom_toBottomOf="parent">
+
+        <ImageView
+            android:id="@+id/ivGalleryThumbnail"
+            android:layout_width="54dp"
+            android:layout_height="54dp"
+            android:layout_marginStart="32dp"
+            android:background="@drawable/bg_pill_container"
+            android:padding="2dp"
+            android:scaleType="centerCrop"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toTopOf="parent" />
+
+        <ImageView
+            android:id="@+id/btnShutter"
+            android:layout_width="86dp"
+            android:layout_height="86dp"
+            android:clickable="true"
+            android:focusable="true"
+            android:src="@drawable/bg_shutter_button"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toTopOf="parent" />
+
+        <ImageView
+            android:id="@+id/btnSwitchCamera"
+            android:layout_width="54dp"
+            android:layout_height="54dp"
+            android:layout_marginEnd="32dp"
+            android:background="@drawable/bg_pill_container"
+            android:clickable="true"
+            android:focusable="true"
+            android:padding="12dp"
+            android:src="@drawable/ic_switch_camera"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintTop_toTopOf="parent" />
+
+    </androidx.constraintlayout.widget.ConstraintLayout>
+
+</androidx.constraintlayout.widget.ConstraintLayout>

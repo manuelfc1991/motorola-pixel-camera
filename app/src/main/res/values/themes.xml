@@ -1,0 +1,16 @@
+<resources>
+    <style name="Theme.MotorolaPixelCamera" parent="Theme.MaterialComponents.DayNight.NoActionBar">
+        <item name="colorPrimary">@color/pixel_accent_blue</item>
+        <item name="colorSecondary">@color/pixel_accent_yellow</item>
+        <item name="android:statusBarColor">@color/pixel_black</item>
+        <item name="android:navigationBarColor">@color/pixel_black</item>
+    </style>
+
+    <style name="Theme.MotorolaPixelCamera.Fullscreen" parent="Theme.MotorolaPixelCamera">
+        <item name="android:windowNoTitle">true</item>
+        <item name="android:windowActionBar">false</item>
+        <item name="android:windowFullscreen">false</item>
+        <item name="android:windowDrawsSystemBarBackgrounds">true</item>
+        <item name="android:windowLayoutInDisplayCutoutMode">shortEdges</item>
+    </style>
+</resources>
