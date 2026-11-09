@@ -1,7 +1,16 @@
-<?xml version="1.0" encoding="utf-8"?>
-<shape xmlns:android="http://schemas.android.com/apk/res/android"
-    android:shape="oval">
-    <size android:width="72dp" android:height="72dp" />
-    <stroke android:width="2.5dp" android:color="@color/pixel_accent_yellow" />
-    <solid android:color="@color/transparent" />
-</shape>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="64dp"
+    android:height="64dp"
+    android:viewportWidth="64"
+    android:viewportHeight="64">
+    <!-- Outer Focus Ring -->
+    <path
+        android:strokeWidth="2.5"
+        android:strokeColor="#FFFFFF"
+        android:fillColor="@color/transparent"
+        android:pathData="M32,32 m-28,0 a28,28 0 1,0 56,0 a28,28 0 1,0 -56,0" />
+    <!-- Center Point -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M32,32 m-3.5,0 a3.5,3.5 0 1,0 7,0 a3.5,3.5 0 1,0 -7,0" />
+</vector>
