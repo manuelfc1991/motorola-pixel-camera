@@ -1,0 +1,557 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Nokia Lumia Camera UI Mockup</title>
+  <script src="https://www.gstatic.com/antigravity/web/dev/tailwindcss.min.js"></script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Segoe+UI:wght@300;400;600;700&display=swap');
+    
+    * {
+      font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, Roboto, sans-serif;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+
+    /* Lumia Dial Arc animations */
+    .arc-track {
+      transition: stroke-dashoffset 0.4s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.3s ease;
+    }
+    
+    .dial-indicator {
+      transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
+    /* Subtle pulse animation for shutter drag hint */
+    @keyframes pulse-drag {
+      0%, 100% { transform: translateX(0); }
+      50% { transform: translateX(-8px); }
+    }
+    .hint-drag {
+      animation: pulse-drag 2s infinite ease-in-out;
+    }
+
+    /* Grid overlay lines */
+    .grid-line {
+      stroke: rgba(255, 255, 255, 0.22);
+      stroke-width: 1;
+      stroke-dasharray: 4 4;
+    }
+  </style>
+</head>
+<body class="bg-slate-950 text-white min-h-screen flex flex-col items-center justify-center p-4">
+
+  <!-- Header & Instructions -->
+  <header class="w-full max-w-4xl flex items-center justify-between mb-4 px-2">
+    <div>
+      <div class="flex items-center gap-2">
+        <span class="text-xs font-bold tracking-widest uppercase bg-yellow-400 text-black px-2 py-0.5 rounded">PureView 108MP</span>
+        <h1 class="text-xl font-light tracking-wide text-white">Lumia Camera <span class="font-semibold text-cyan-400">Pro UI</span></h1>
+      </div>
+      <p class="text-xs text-slate-400 mt-1">Interactive Mockup: Drag or click the concentric radial dials to adjust ISO, Shutter, Focus, WB & EV.</p>
+    </div>
+    <div class="flex items-center gap-3">
+      <button id="btnToggleAllArcs" class="px-3 py-1.5 rounded bg-slate-800 hover:bg-slate-700 text-xs font-medium text-cyan-300 border border-slate-700 flex items-center gap-1.5 transition">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4"></path></svg>
+        <span id="txtToggleArcs">Unfurl All Dials</span>
+      </button>
+      <button id="btnResetAuto" class="px-3 py-1.5 rounded bg-slate-800 hover:bg-slate-700 text-xs font-medium text-amber-400 border border-slate-700 transition">
+        Reset to Auto
+      </button>
+    </div>
+  </header>
+
+  <!-- Phone Mockup Device Canvas (Landscape Lumia Experience) -->
+  <div class="relative w-full max-w-4xl aspect-[16/9] bg-black rounded-3xl overflow-hidden shadow-2xl border-4 border-slate-800 flex">
+
+    <!-- Viewfinder Layer (Live Simulated Scene) -->
+    <div id="viewfinder" class="absolute inset-0 bg-cover bg-center transition-all duration-300" 
+         style="background-image: url('https://images.unsplash.com/photo-1506744038136-46273834b3fb?auto=format&fit=crop&w=1600&q=80'); filter: brightness(1) contrast(1) blur(0px) hue-rotate(0deg);">
+      
+      <!-- Golden Ratio / 3rds Grid Overlay -->
+      <svg id="framingGrid" class="absolute inset-0 w-full h-full pointer-events-none transition-opacity duration-300 opacity-60">
+        <line x1="33.33%" y1="0" x2="33.33%" y2="100%" class="grid-line"></line>
+        <line x1="66.66%" y1="0" x2="66.66%" y2="100%" class="grid-line"></line>
+        <line x1="0" y1="33.33%" x2="100%" y2="33.33%" class="grid-line"></line>
+        <line x1="0" y1="66.66%" x2="100%" y2="66.66%" class="grid-line"></line>
+        <!-- Center Focus Reticle -->
+        <circle cx="50%" cy="50%" r="28" stroke="rgba(255,255,255,0.4)" stroke-width="1.5" fill="none"></circle>
+        <circle cx="50%" cy="50%" r="3" fill="rgba(255,255,255,0.8)"></circle>
+      </svg>
+
+      <!-- PureView Vignette & Noise overlay -->
+      <div class="absolute inset-0 bg-radial from-transparent via-transparent to-black/60 pointer-events-none"></div>
+    </div>
+
+    <!-- Top Status / Settings Ribbon (Classic Windows Phone Style) -->
+    <div class="absolute top-0 inset-x-0 h-14 bg-gradient-to-b from-black/80 via-black/40 to-transparent flex items-center justify-between px-6 z-30">
+      <!-- Left: Flash & Mode badges -->
+      <div class="flex items-center gap-4">
+        <!-- Flash Toggle -->
+        <button id="btnFlash" class="flex items-center gap-1.5 text-xs font-semibold tracking-wider text-slate-300 hover:text-white transition">
+          <svg class="w-4 h-4 text-amber-400" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M11.3 1.046A1 1 0 0112 2v5h4a1 1 0 01.82 1.573l-7 10A1 1 0 018 18v-5H4a1 1 0 01-.82-1.573l7-10a1 1 0 011.12-.38z" clip-rule="evenodd"></path></svg>
+          <span id="lblFlash">AUTO</span>
+        </button>
+
+        <span class="text-slate-600">|</span>
+
+        <!-- Scene info -->
+        <div class="flex items-center gap-3 text-xs tracking-wider font-light text-slate-300">
+          <span id="badgeWb" class="hover:text-cyan-400 cursor-pointer">WB: <b class="font-semibold text-white">AUTO</b></span>
+          <span id="badgeFocus" class="hover:text-cyan-400 cursor-pointer">FOCUS: <b class="font-semibold text-white">AUTO</b></span>
+          <span id="badgeIso" class="hover:text-cyan-400 cursor-pointer">ISO: <b class="font-semibold text-white">AUTO</b></span>
+          <span id="badgeShutter" class="hover:text-cyan-400 cursor-pointer">SEC: <b class="font-semibold text-white">AUTO</b></span>
+          <span id="badgeEv" class="hover:text-cyan-400 cursor-pointer">EV: <b class="font-semibold text-white">0.0</b></span>
+        </div>
+      </div>
+
+      <!-- Right: Grid, PureView Badge, Settings Ellipsis -->
+      <div class="flex items-center gap-4">
+        <button id="btnToggleGrid" class="text-xs text-slate-400 hover:text-white flex items-center gap-1 font-mono transition">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"></path></svg>
+          <span>GRID</span>
+        </button>
+        <span class="text-slate-600">|</span>
+        <button id="btnSettingsMenu" class="text-white hover:text-cyan-400 text-lg tracking-widest font-bold px-1 transition">
+          •••
+        </button>
+      </div>
+    </div>
+
+    <!-- THE LEGENDARY CONCENTRIC RADIAL ARCS (SVG LAYER) -->
+    <div id="radialDialLayer" class="absolute inset-0 pointer-events-none z-20 overflow-hidden">
+      <svg id="dialSvg" class="w-full h-full" viewBox="0 0 1000 562.5" preserveAspectRatio="none">
+        
+        <!-- Definitions for curved gradients and tick filters -->
+        <defs>
+          <linearGradient id="arcGlow" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stop-color="#00A4EF" stop-opacity="0.8"/>
+            <stop offset="100%" stop-color="#FFFFFF" stop-opacity="0.4"/>
+          </linearGradient>
+          <filter id="glow">
+            <feGaussianBlur stdDeviation="2" result="coloredBlur"/>
+            <feMerge>
+              <feMergeNode in="coloredBlur"/>
+              <feMergeNode in="SourceGraphic"/>
+            </feMerge>
+          </filter>
+        </defs>
+
+        <!-- Base Pivot Point: Right edge center (X: 920, Y: 281) -->
+        <g id="arcsContainer" class="transition-opacity duration-300 opacity-0 pointer-events-auto">
+          
+          <!-- Arc 1: White Balance (Radius: 440) -->
+          <g id="groupArcWb" class="cursor-pointer">
+            <path id="pathArcWb" d="M 920, -159 A 440 440 0 0 0 920, 721" fill="none" stroke="rgba(255,255,255,0.18)" stroke-width="32" stroke-linecap="round"/>
+            <path id="activeArcWb" d="M 920, -159 A 440 440 0 0 0 920, 721" fill="none" stroke="url(#arcGlow)" stroke-width="3" opacity="0.6"/>
+            <!-- Ticks & Text are rendered dynamically via JS -->
+            <g id="ticksWb"></g>
+            <circle id="thumbWb" cx="480" cy="281" r="9" fill="#00A4EF" stroke="#FFFFFF" stroke-width="3" filter="url(#glow)"/>
+          </g>
+
+          <!-- Arc 2: Focus (Radius: 360) -->
+          <g id="groupArcFocus" class="cursor-pointer">
+            <path id="pathArcFocus" d="M 920, -79 A 360 360 0 0 0 920, 641" fill="none" stroke="rgba(255,255,255,0.18)" stroke-width="32" stroke-linecap="round"/>
+            <g id="ticksFocus"></g>
+            <circle id="thumbFocus" cx="560" cy="281" r="9" fill="#00A4EF" stroke="#FFFFFF" stroke-width="3" filter="url(#glow)"/>
+          </g>
+
+          <!-- Arc 3: ISO (Radius: 280) -->
+          <g id="groupArcIso" class="cursor-pointer">
+            <path id="pathArcIso" d="M 920, 1 A 280 280 0 0 0 920, 561" fill="none" stroke="rgba(255,255,255,0.18)" stroke-width="32" stroke-linecap="round"/>
+            <g id="ticksIso"></g>
+            <circle id="thumbIso" cx="640" cy="281" r="9" fill="#00A4EF" stroke="#FFFFFF" stroke-width="3" filter="url(#glow)"/>
+          </g>
+
+          <!-- Arc 4: Shutter Speed (Radius: 200) -->
+          <g id="groupArcShutter" class="cursor-pointer">
+            <path id="pathArcShutter" d="M 920, 81 A 200 200 0 0 0 920, 481" fill="none" stroke="rgba(255,255,255,0.18)" stroke-width="32" stroke-linecap="round"/>
+            <g id="ticksShutter"></g>
+            <circle id="thumbShutter" cx="720" cy="281" r="9" fill="#00A4EF" stroke="#FFFFFF" stroke-width="3" filter="url(#glow)"/>
+          </g>
+
+          <!-- Arc 5: Exposure Compensation EV (Radius: 120) -->
+          <g id="groupArcEv" class="cursor-pointer">
+            <path id="pathArcEv" d="M 920, 161 A 120 120 0 0 0 920, 401" fill="none" stroke="rgba(255,255,255,0.18)" stroke-width="32" stroke-linecap="round"/>
+            <g id="ticksEv"></g>
+            <circle id="thumbEv" cx="800" cy="281" r="9" fill="#00A4EF" stroke="#FFFFFF" stroke-width="3" filter="url(#glow)"/>
+          </g>
+
+        </g>
+      </svg>
+    </div>
+
+    <!-- Right Control Dock (The Classic Shutter & Mode Switcher) -->
+    <div class="relative ml-auto w-24 h-full bg-gradient-to-l from-black/90 via-black/60 to-transparent flex flex-col items-center justify-between py-6 z-30 pointer-events-auto">
+      
+      <!-- Top: Camera Roll Preview Thumbnail -->
+      <button id="btnCameraRoll" class="relative w-12 h-12 rounded-full overflow-hidden border border-white/40 shadow-lg group hover:scale-105 transition">
+        <img src="https://images.unsplash.com/photo-1506744038136-46273834b3fb?auto=format&fit=crop&w=150&q=80" alt="Roll" class="w-full h-full object-cover">
+        <div class="absolute inset-0 bg-black/20 group-hover:bg-transparent transition"></div>
+        <div class="absolute -left-1 top-1/2 -translate-y-1/2 text-white/80">
+          <svg class="w-3 h-3 -rotate-90" fill="currentColor" viewBox="0 0 20 20"><path d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z"></path></svg>
+        </div>
+      </button>
+
+      <!-- Center: THE ICONIC LUMIA SHUTTER BUTTON -->
+      <div class="relative flex flex-col items-center">
+        <!-- Drag Leftward Hint Arrow -->
+        <div id="dragHint" class="absolute -left-12 top-1/2 -translate-y-1/2 flex items-center text-cyan-300 text-xs font-mono hint-drag pointer-events-none opacity-80">
+          <svg class="w-5 h-5 -rotate-90" fill="currentColor" viewBox="0 0 20 20"><path d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z"></path></svg>
+        </div>
+
+        <button id="btnShutter" class="w-18 h-18 rounded-full bg-white/10 p-1.5 border border-white/30 backdrop-blur-md hover:scale-105 active:scale-95 transition-all shadow-2xl flex items-center justify-center">
+          <div class="w-14 h-14 rounded-full bg-white flex items-center justify-center shadow-inner">
+            <div class="w-11 h-11 rounded-full border-2 border-slate-900/40 flex items-center justify-center">
+              <svg class="w-6 h-6 text-slate-900" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M4 5a2 2 0 00-2 2v8a2 2 0 002 2h12a2 2 0 002-2V7a2 2 0 00-2-2h-1.586a1 1 0 01-.707-.293l-1.121-1.121A2 2 0 009.172 3H6.828a2 2 0 00-1.414.586L4.293 4.707A1 1 0 013.586 5H4zm6 9a3 3 0 100-6 3 3 0 000 6z" clip-rule="evenodd"></path></svg>
+            </div>
+          </div>
+        </button>
+        <span class="text-[10px] tracking-widest text-slate-400 font-mono uppercase mt-1">Capture</span>
+      </div>
+
+      <!-- Bottom: Camera Mode Switcher (Smart / Stills / Video) -->
+      <div class="flex flex-col items-center gap-3">
+        <button id="modeStills" class="text-xs font-semibold text-white tracking-widest uppercase hover:text-cyan-400 transition">STILL</button>
+        <button id="modeSmart" class="text-xs font-semibold text-slate-500 tracking-widest uppercase hover:text-cyan-400 transition">SMART</button>
+        <button id="modeVideo" class="text-xs font-semibold text-slate-500 tracking-widest uppercase hover:text-cyan-400 transition">VIDEO</button>
+      </div>
+
+    </div>
+
+    <!-- Active Value Readout Overlay (Center-top during adjustment) -->
+    <div id="activeValuePill" class="absolute top-16 left-1/2 -translate-x-1/2 px-4 py-1.5 rounded-full bg-black/75 backdrop-blur-md border border-cyan-500/50 text-cyan-300 font-mono text-sm tracking-widest uppercase shadow-xl opacity-0 pointer-events-none transition-opacity duration-200 z-30">
+      ISO 800
+    </div>
+
+    <!-- Lumia PureView 108MP Watermark Tag (Bottom Left) -->
+    <div class="absolute bottom-5 left-6 flex items-center gap-2 pointer-events-none z-10 opacity-75">
+      <div class="w-2.5 h-2.5 rounded-full bg-cyan-400"></div>
+      <span class="text-xs font-semibold tracking-wider font-mono text-white/90">PUREVIEW 108MP</span>
+      <span class="text-[10px] text-slate-400">ZEISS OPTICS SIMULATION</span>
+    </div>
+
+  </div>
+
+  <!-- Interactive Controls Guide & Feature Comparison -->
+  <footer class="w-full max-w-4xl mt-6 grid grid-cols-1 md:grid-cols-3 gap-4">
+    <div class="bg-slate-900 border border-slate-800 rounded-xl p-4">
+      <div class="flex items-center gap-2 text-cyan-400 text-sm font-semibold mb-1">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg>
+        Concentric Dial Concept
+      </div>
+      <p class="text-xs text-slate-400 leading-relaxed">
+        Dragging the shutter button leftwards or clicking <b>"Unfurl All Dials"</b> brings up the five nested radial sliders. Each dial operates at its own radius from the pivot point on the right edge.
+      </p>
+    </div>
+
+    <div class="bg-slate-900 border border-slate-800 rounded-xl p-4">
+      <div class="flex items-center gap-2 text-amber-400 text-sm font-semibold mb-1">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
+        Live Viewfinder Reaction
+      </div>
+      <p class="text-xs text-slate-400 leading-relaxed">
+        Changing <b>ISO</b> and <b>Shutter</b> simulates exposure in real-time on the scene. Changing <b>Focus</b> simulates manual optical blur, and <b>WB</b> warms or cools the scene tone.
+      </p>
+    </div>
+
+    <div class="bg-slate-900 border border-slate-800 rounded-xl p-4">
+      <div class="flex items-center gap-2 text-emerald-400 text-sm font-semibold mb-1">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+        Android Architecture Fit
+      </div>
+      <p class="text-xs text-slate-400 leading-relaxed">
+        Can be built in our Android app via a custom <code>LumiaRadialDialView.kt</code> utilizing Android Canvas arcs and linked to MediaTek Camera2 manual sensor keys.
+      </p>
+    </div>
+  </footer>
+
+  <!-- Inline Script Driving the Interactive Concentric Arcs -->
+  <script>
+    // Dial Data Definitions (Values & Angles in degrees)
+    const DIAL_SPECS = {
+      wb: {
+        radius: 440,
+        options: ['Auto', 'Cloudy', 'Daylight', 'Fluorescent', 'Incandescent'],
+        startAngle: 155,
+        endAngle: 205,
+        defaultIndex: 0,
+        thumbId: 'thumbWb',
+        ticksId: 'ticksWb',
+        badgeId: 'badgeWb',
+        label: 'White Balance'
+      },
+      focus: {
+        radius: 360,
+        options: ['Auto', 'Macro', '0.2m', '0.5m', '1m', 'Infinity'],
+        startAngle: 150,
+        endAngle: 210,
+        defaultIndex: 0,
+        thumbId: 'thumbFocus',
+        ticksId: 'ticksFocus',
+        badgeId: 'badgeFocus',
+        label: 'Focus Distance'
+      },
+      iso: {
+        radius: 280,
+        options: ['Auto', '100', '200', '400', '800', '1600', '3200'],
+        startAngle: 145,
+        endAngle: 215,
+        defaultIndex: 0,
+        thumbId: 'thumbIso',
+        ticksId: 'ticksIso',
+        badgeId: 'badgeIso',
+        label: 'ISO Sensitivity'
+      },
+      shutter: {
+        radius: 200,
+        options: ['Auto', '1/2000', '1/1000', '1/500', '1/250', '1/125', '1/60', '1/30', '1/15', '1/4', '1s', '2s', '4s'],
+        startAngle: 140,
+        endAngle: 220,
+        defaultIndex: 0,
+        thumbId: 'thumbShutter',
+        ticksId: 'ticksShutter',
+        badgeId: 'badgeShutter',
+        label: 'Shutter Speed'
+      },
+      ev: {
+        radius: 120,
+        options: ['-2.0', '-1.0', '-0.5', '0.0', '+0.5', '+1.0', '+2.0'],
+        startAngle: 135,
+        endAngle: 225,
+        defaultIndex: 3,
+        thumbId: 'thumbEv',
+        ticksId: 'ticksEv',
+        badgeId: 'badgeEv',
+        label: 'Exposure EV'
+      }
+    };
+
+    const PIVOT = { x: 920, y: 281.25 };
+    const currentValues = { wb: 0, focus: 0, iso: 0, shutter: 0, ev: 3 };
+    let dialsExpanded = false;
+
+    // Helper: Angle to coordinate relative to pivot
+    function polarToCartesian(centerX, centerY, radius, angleInDegrees) {
+      const angleInRadians = (angleInDegrees * Math.PI) / 180.0;
+      return {
+        x: centerX + radius * Math.cos(angleInRadians),
+        y: centerY + radius * Math.sin(angleInRadians)
+      };
+    }
+
+    // Initialize all concentric ticks and text
+    function initDials() {
+      for (const [key, spec] of Object.entries(DIAL_SPECS)) {
+        const ticksContainer = document.getElementById(spec.ticksId);
+        ticksContainer.innerHTML = '';
+        const count = spec.options.length;
+        const step = (spec.endAngle - spec.startAngle) / (count - 1);
+
+        spec.options.forEach((opt, idx) => {
+          const angle = spec.startAngle + idx * step;
+          const ptInner = polarToCartesian(PIVOT.x, PIVOT.y, spec.radius - 12, angle);
+          const ptOuter = polarToCartesian(PIVOT.x, PIVOT.y, spec.radius + 12, angle);
+          const ptText = polarToCartesian(PIVOT.x, PIVOT.y, spec.radius - 22, angle);
+
+          // Tick line
+          const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+          line.setAttribute('x1', ptInner.x);
+          line.setAttribute('y1', ptInner.y);
+          line.setAttribute('x2', ptOuter.x);
+          line.setAttribute('y2', ptOuter.y);
+          line.setAttribute('stroke', idx === currentValues[key] ? '#00A4EF' : 'rgba(255,255,255,0.4)');
+          line.setAttribute('stroke-width', idx === currentValues[key] ? '2.5' : '1.5');
+          line.dataset.key = key;
+          line.dataset.index = idx;
+          ticksContainer.appendChild(line);
+
+          // Clickable hit zone
+          const hit = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+          hit.setAttribute('cx', (ptInner.x + ptOuter.x) / 2);
+          hit.setAttribute('cy', (ptInner.y + ptOuter.y) / 2);
+          hit.setAttribute('r', '18');
+          hit.setAttribute('fill', 'transparent');
+          hit.setAttribute('class', 'cursor-pointer pointer-events-auto');
+          hit.onclick = (e) => {
+            e.stopPropagation();
+            setDialValue(key, idx);
+          };
+          ticksContainer.appendChild(hit);
+
+          // Text label (sparse labels on dense dials)
+          if (count <= 7 || idx % 2 === 0 || idx === count - 1 || idx === 0) {
+            const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+            text.setAttribute('x', ptText.x);
+            text.setAttribute('y', ptText.y + 4);
+            text.setAttribute('font-size', '10');
+            text.setAttribute('font-family', 'Segoe UI, sans-serif');
+            text.setAttribute('font-weight', idx === currentValues[key] ? 'bold' : 'normal');
+            text.setAttribute('fill', idx === currentValues[key] ? '#00A4EF' : 'rgba(255,255,255,0.7)');
+            text.setAttribute('text-anchor', 'end');
+            text.textContent = opt;
+            ticksContainer.appendChild(text);
+          }
+        });
+
+        // Set initial thumb position
+        updateThumbPosition(key, currentValues[key]);
+      }
+    }
+
+    function updateThumbPosition(key, index) {
+      const spec = DIAL_SPECS[key];
+      const count = spec.options.length;
+      const step = (spec.endAngle - spec.startAngle) / (count - 1);
+      const angle = spec.startAngle + index * step;
+      const pt = polarToCartesian(PIVOT.x, PIVOT.y, spec.radius, angle);
+      
+      const thumb = document.getElementById(spec.thumbId);
+      thumb.setAttribute('cx', pt.x);
+      thumb.setAttribute('cy', pt.y);
+    }
+
+    function setDialValue(key, index) {
+      currentValues[key] = index;
+      const spec = DIAL_SPECS[key];
+      const valStr = spec.options[index];
+
+      // Update thumb
+      updateThumbPosition(key, index);
+
+      // Refresh ticks
+      initDials();
+
+      // Update top status bar badge
+      const badge = document.getElementById(spec.badgeId);
+      const prefix = key.toUpperCase();
+      badge.innerHTML = `${prefix}: <b class="${index === 0 ? 'text-white' : 'text-cyan-400'}">${valStr}</b>`;
+
+      // Show temporary floating pill
+      showActivePill(`${spec.label}: ${valStr}`);
+
+      // Apply real-time viewfinder simulation
+      applyViewfinderSimulation();
+    }
+
+    function showActivePill(msg) {
+      const pill = document.getElementById('activeValuePill');
+      pill.textContent = msg;
+      pill.style.opacity = '1';
+      clearTimeout(window._pillTimer);
+      window._pillTimer = setTimeout(() => {
+        pill.style.opacity = '0';
+      }, 1400);
+    }
+
+    // Viewfinder Exposure & Optics Simulation
+    function applyViewfinderSimulation() {
+      const vf = document.getElementById('viewfinder');
+      
+      // ISO brightness simulation
+      let isoMultiplier = 1.0;
+      const isoVal = DIAL_SPECS.iso.options[currentValues.iso];
+      if (isoVal !== 'Auto') {
+        isoMultiplier = Math.sqrt(parseInt(isoVal, 10) / 400.0);
+      }
+
+      // Shutter speed exposure simulation
+      let shutterMultiplier = 1.0;
+      const sVal = DIAL_SPECS.shutter.options[currentValues.shutter];
+      if (sVal !== 'Auto') {
+        if (sVal.startsWith('1/')) {
+          const denom = parseInt(sVal.split('/')[1], 10);
+          shutterMultiplier = 125.0 / denom;
+        } else if (sVal.endsWith('s')) {
+          const sec = parseFloat(sVal);
+          shutterMultiplier = sec * 8.0;
+        }
+      }
+
+      // EV offset
+      const evVal = parseFloat(DIAL_SPECS.ev.options[currentValues.ev]);
+      const evMultiplier = Math.pow(2, evVal);
+
+      // Combined brightness
+      const combinedBrightness = Math.max(0.3, Math.min(2.5, isoMultiplier * shutterMultiplier * evMultiplier));
+
+      // Focus blur
+      let blurPx = 0;
+      const fVal = DIAL_SPECS.focus.options[currentValues.focus];
+      if (fVal === 'Macro') blurPx = 4;
+      else if (fVal === '0.2m') blurPx = 2;
+      else if (fVal === 'Infinity') blurPx = 1;
+
+      // White Balance Hue shift
+      let hueShift = 0;
+      const wbVal = DIAL_SPECS.wb.options[currentValues.wb];
+      if (wbVal === 'Cloudy') hueShift = 15;
+      else if (wbVal === 'Incandescent') hueShift = -25;
+      else if (wbVal === 'Fluorescent') hueShift = -10;
+
+      vf.style.filter = `brightness(${combinedBrightness.toFixed(2)}) contrast(1.05) blur(${blurPx}px) hue-rotate(${hueShift}deg)`;
+    }
+
+    // Toggle Arc Visibility
+    function toggleArcs(expand) {
+      dialsExpanded = expand !== undefined ? expand : !dialsExpanded;
+      const container = document.getElementById('arcsContainer');
+      const btnTxt = document.getElementById('txtToggleArcs');
+      const dragHint = document.getElementById('dragHint');
+
+      if (dialsExpanded) {
+        container.classList.remove('opacity-0');
+        container.classList.add('opacity-100');
+        btnTxt.textContent = 'Collapse Dials';
+        dragHint.style.display = 'none';
+      } else {
+        container.classList.remove('opacity-100');
+        container.classList.add('opacity-0');
+        btnTxt.textContent = 'Unfurl All Dials';
+        dragHint.style.display = 'flex';
+      }
+    }
+
+    // Event Listeners
+    document.getElementById('btnToggleAllArcs').onclick = () => toggleArcs();
+    
+    // Clicking Shutter or dragging it leftward unfurls dials
+    document.getElementById('btnShutter').onclick = () => {
+      if (!dialsExpanded) toggleArcs(true);
+      else showActivePill('Captured 108MP PureView Frame');
+    };
+
+    // Reset to Auto
+    document.getElementById('btnResetAuto').onclick = () => {
+      setDialValue('wb', 0);
+      setDialValue('focus', 0);
+      setDialValue('iso', 0);
+      setDialValue('shutter', 0);
+      setDialValue('ev', 3);
+      showActivePill('All Controls Restored to Auto');
+    };
+
+    // Grid toggle
+    let gridVisible = true;
+    document.getElementById('btnToggleGrid').onclick = () => {
+      gridVisible = !gridVisible;
+      document.getElementById('framingGrid').style.opacity = gridVisible ? '0.6' : '0';
+    };
+
+    // Flash Toggle
+    const flashModes = ['AUTO', 'ON', 'OFF'];
+    let flashIdx = 0;
+    document.getElementById('btnFlash').onclick = () => {
+      flashIdx = (flashIdx + 1) % flashModes.length;
+      document.getElementById('lblFlash').textContent = flashModes[flashIdx];
+      showActivePill(`Flash: ${flashModes[flashIdx]}`);
+    };
+
+    // Initialize on load
+    initDials();
+    applyViewfinderSimulation();
+  </script>
+
+</body>
+</html>

@@ -1,0 +1,378 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Google Pixel Camera UI Mockup</title>
+  <script src="https://www.gstatic.com/antigravity/web/dev/tailwindcss.min.js"></script>
+  <style>
+    @keyframes pulse-ring {
+      0% { transform: scale(1.3); opacity: 0.9; }
+      100% { transform: scale(1.0); opacity: 1; }
+    }
+    .animate-focus {
+      animation: pulse-ring 0.3s cubic-bezier(0.1, 0.9, 0.2, 1) forwards;
+    }
+    .pixel-font {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Google Sans", sans-serif;
+    }
+  </style>
+</head>
+<body class="bg-transparent text-[var(--foreground)] antialiased p-2 flex flex-col items-center justify-center pixel-font">
+
+  <!-- Main Card Container -->
+  <div class="bg-[var(--card)] text-[var(--foreground)] border border-[var(--border)] rounded-2xl p-4 shadow-xl max-w-4xl w-full">
+    
+    <!-- Header with Screen Selector Pills -->
+    <div class="flex flex-col sm:flex-row items-center justify-between pb-3 border-b border-[var(--border)] mb-4 gap-2">
+      <div>
+        <h2 class="text-base font-bold text-[var(--foreground)] flex items-center gap-2">
+          <span class="inline-block w-3 h-3 rounded-full bg-blue-500"></span>
+          Google Pixel Camera UI — Screen Mockups
+        </h2>
+        <p class="text-xs text-[var(--muted-foreground)]">Motorola Edge 20 Fusion (108 MP HM2 + MT6853)</p>
+      </div>
+
+      <!-- Mode Selector Tabs -->
+      <div class="flex flex-wrap gap-1 bg-black/20 p-1 rounded-xl border border-[var(--border)]">
+        <button onclick="switchScreen('photo')" id="tab-photo" class="px-2.5 py-1 text-xs font-semibold rounded-lg bg-blue-500 text-white shadow transition-all">1. Camera (HDR+)</button>
+        <button onclick="switchScreen('night')" id="tab-night" class="px-2.5 py-1 text-xs font-medium rounded-lg text-[var(--muted-foreground)] hover:text-[var(--foreground)] transition-all">2. Night Sight</button>
+        <button onclick="switchScreen('portrait')" id="tab-portrait" class="px-2.5 py-1 text-xs font-medium rounded-lg text-[var(--muted-foreground)] hover:text-[var(--foreground)] transition-all">3. Portrait</button>
+        <button onclick="switchScreen('pro')" id="tab-pro" class="px-2.5 py-1 text-xs font-medium rounded-lg text-[var(--muted-foreground)] hover:text-[var(--foreground)] transition-all">4. Pro Controls</button>
+        <button onclick="switchScreen('settings')" id="tab-settings" class="px-2.5 py-1 text-xs font-medium rounded-lg text-[var(--muted-foreground)] hover:text-[var(--foreground)] transition-all">5. Quick Settings</button>
+      </div>
+    </div>
+
+    <!-- Phone Screen Mockup Frame -->
+    <div class="flex justify-center">
+      <div class="w-[340px] h-[670px] bg-black rounded-[42px] border-[5px] border-zinc-800 shadow-2xl relative overflow-hidden flex flex-col select-none">
+        
+        <!-- Screen Punch Hole Camera -->
+        <div class="absolute top-3 left-1/2 -translate-x-1/2 w-3.5 h-3.5 bg-zinc-900 rounded-full border border-zinc-800 z-50 flex items-center justify-center">
+          <div class="w-1.5 h-1.5 rounded-full bg-blue-900/60"></div>
+        </div>
+
+        <!-- TOP BAR (Material You Pixel Status Pills) -->
+        <div class="pt-8 px-4 pb-2 flex items-center justify-between z-30 bg-gradient-to-b from-black/80 to-transparent">
+          <div class="flex items-center gap-1.5">
+            <!-- Settings Gear / Dropdown Pill -->
+            <button onclick="switchScreen('settings')" class="bg-zinc-800/80 hover:bg-zinc-700/80 text-white px-2.5 py-1 rounded-full text-xs font-medium flex items-center gap-1 backdrop-blur-md border border-white/10">
+              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/><circle cx="12" cy="12" r="3" stroke-width="2"/></svg>
+            </button>
+            
+            <div id="badge-hdr" class="bg-blue-500/20 text-blue-300 px-2.5 py-1 rounded-full text-[11px] font-bold border border-blue-500/30">
+              HDR+ ON
+            </div>
+            <div id="badge-raw" class="bg-zinc-800/80 text-zinc-300 px-2 py-1 rounded-full text-[11px] border border-white/10 font-mono">
+              RAW
+            </div>
+          </div>
+
+          <div class="text-[11px] font-semibold text-zinc-400 bg-black/40 px-2 py-0.5 rounded-md backdrop-blur">
+            108MP HM2
+          </div>
+        </div>
+
+        <!-- VIEWFINDER AREA -->
+        <div class="relative flex-1 bg-gradient-to-b from-zinc-900 via-zinc-800 to-zinc-950 flex items-center justify-center overflow-hidden">
+          
+          <!-- Background Scene Simulation -->
+          <div id="scene-bg" class="absolute inset-0 bg-cover bg-center transition-all duration-500" style="background-image: radial-gradient(circle at 50% 40%, #3a3f4a 0%, #17191d 70%, #0d0e10 100%);">
+            <!-- Simulated subject texture -->
+            <div class="w-full h-full opacity-40 flex items-center justify-center">
+              <div class="w-44 h-56 rounded-3xl border border-white/10 bg-white/5 backdrop-blur-sm flex flex-col items-center justify-center">
+                <div class="w-20 h-20 rounded-full border border-white/20 bg-white/10 mb-2"></div>
+                <div class="w-28 h-10 rounded-xl border border-white/15 bg-white/5"></div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Horizon Level Indicator Line (Pixel Style) -->
+          <div class="absolute inset-x-8 top-1/2 -translate-y-1/2 flex items-center justify-between opacity-60 pointer-events-none">
+            <div class="w-10 h-0.5 bg-yellow-400/80"></div>
+            <div class="w-2.5 h-2.5 rounded-full border border-yellow-400/80"></div>
+            <div class="w-10 h-0.5 bg-yellow-400/80"></div>
+          </div>
+
+          <!-- Tap to Focus Animated Yellow Ring (Screen 1 & 4) -->
+          <div id="focus-reticle" class="absolute top-[38%] left-[46%] w-14 h-14 rounded-full border-2 border-yellow-400 flex items-center justify-center animate-focus shadow-lg shadow-yellow-400/20">
+            <div class="w-1.5 h-1.5 bg-yellow-400 rounded-full"></div>
+            <!-- Exposure slider bar beside focus ring -->
+            <div class="absolute -right-5 top-1/2 -translate-y-1/2 flex flex-col items-center gap-1 bg-black/50 p-1 rounded-full">
+              <svg class="w-2.5 h-2.5 text-yellow-400" fill="currentColor" viewBox="0 0 20 20"><path d="M10 2a1 1 0 011 1v1a1 1 0 11-2 0V3a1 1 0 011-1zm4 8a4 4 0 11-8 0 4 4 0 018 0zm-.464 4.95l.707.707a1 1 0 001.414-1.414l-.707-.707a1 1 0 00-1.414 1.414zm2.12-10.607a1 1 0 010 1.414l-.706.707a1 1 0 11-1.414-1.414l.707-.707a1 1 0 011.414 0zM17 11a1 1 0 100-2h-1a1 1 0 100 2h1zm-7 4a1 1 0 011 1v1a1 1 0 11-2 0v-1a1 1 0 011-1zM5.05 6.464A1 1 0 106.465 5.05l-.708-.707a1 1 0 00-1.414 1.414l.707.707zm1.414 8.486l-.707.707a1 1 0 01-1.414-1.414l.707-.707a1 1 0 011.414 1.414zM4 11a1 1 0 100-2H3a1 1 0 000 2h1z"/></svg>
+              <div class="w-0.5 h-8 bg-white/40 rounded-full"></div>
+            </div>
+          </div>
+
+          <!-- SCREEN OVERLAY 2: Night Sight Hold Still -->
+          <div id="overlay-night" class="hidden absolute inset-0 bg-black/50 backdrop-blur-xs flex flex-col items-center justify-center z-20">
+            <div class="relative w-28 h-28 flex items-center justify-center">
+              <svg class="w-full h-full transform -rotate-90" viewBox="0 0 100 100">
+                <circle cx="50" cy="50" r="42" stroke="rgba(255,255,255,0.2)" stroke-width="4" fill="transparent" />
+                <circle cx="50" cy="50" r="42" stroke="#FDD663" stroke-width="4" stroke-dasharray="264" stroke-dashoffset="80" stroke-linecap="round" fill="transparent" />
+              </svg>
+              <div class="absolute flex flex-col items-center">
+                <span class="text-xl font-bold text-yellow-300 font-mono">1.8s</span>
+                <span class="text-[10px] text-zinc-300">Hold still</span>
+              </div>
+            </div>
+            <p class="text-xs text-zinc-200 mt-4 bg-black/60 px-3 py-1 rounded-full border border-white/10">Capturing light • Multi-frame stack</p>
+          </div>
+
+          <!-- SCREEN OVERLAY 3: Portrait Aperture Slider -->
+          <div id="overlay-portrait" class="hidden absolute bottom-4 inset-x-4 z-20 flex flex-col items-center gap-2">
+            <div class="bg-black/70 backdrop-blur-md px-3 py-1.5 rounded-full border border-white/15 flex items-center gap-3 text-xs">
+              <span class="text-yellow-400 font-bold">f / 1.8</span>
+              <div class="w-32 h-1 bg-white/20 rounded-full relative">
+                <div class="absolute left-1/3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 rounded-full bg-yellow-400 shadow"></div>
+              </div>
+              <span class="text-zinc-400 font-mono">Depth 75%</span>
+            </div>
+          </div>
+
+          <!-- SCREEN OVERLAY 4: Pro Controls Drawer & RGB Histogram -->
+          <div id="overlay-pro" class="hidden absolute inset-x-0 bottom-0 top-0 z-20 flex flex-col justify-between p-3 pointer-events-none">
+            <!-- Floating Mini Histogram -->
+            <div class="self-end bg-black/80 backdrop-blur border border-white/15 rounded-xl p-2 w-32 h-16 flex flex-col justify-between pointer-events-auto">
+              <div class="flex justify-between text-[10px] text-zinc-400 font-mono">
+                <span>RGB HIST</span>
+                <span class="text-yellow-400">108MP</span>
+              </div>
+              <!-- Simulated Waveform -->
+              <div class="h-8 flex items-end gap-0.5">
+                <div class="flex-1 bg-red-500/60 h-3 rounded-t-sm"></div>
+                <div class="flex-1 bg-green-500/60 h-6 rounded-t-sm"></div>
+                <div class="flex-1 bg-blue-500/60 h-8 rounded-t-sm"></div>
+                <div class="flex-1 bg-yellow-400/80 h-5 rounded-t-sm"></div>
+                <div class="flex-1 bg-white/60 h-4 rounded-t-sm"></div>
+                <div class="flex-1 bg-blue-400/70 h-7 rounded-t-sm"></div>
+                <div class="flex-1 bg-green-400/60 h-3 rounded-t-sm"></div>
+              </div>
+            </div>
+
+            <!-- Pro Slider Controls -->
+            <div class="bg-black/90 backdrop-blur-md border border-white/15 rounded-2xl p-3 flex flex-col gap-2 pointer-events-auto shadow-2xl">
+              <div class="flex items-center justify-between text-[11px]">
+                <span class="text-yellow-400 font-bold">ISO 400</span>
+                <span class="text-zinc-300 font-mono">1/250s</span>
+                <span class="text-blue-400 font-mono">5400K WB</span>
+                <span class="text-green-400 font-mono">EV +0.3</span>
+              </div>
+              <!-- Sliders -->
+              <div class="flex flex-col gap-1.5 pt-1 border-t border-white/10">
+                <div class="flex items-center gap-2 text-[10px]">
+                  <span class="w-8 text-zinc-400">ISO</span>
+                  <div class="flex-1 h-1 bg-zinc-700 rounded-full relative">
+                    <div class="w-1/4 h-full bg-yellow-400 rounded-full"></div>
+                    <div class="absolute left-1/4 top-1/2 -translate-y-1/2 w-3 h-3 bg-yellow-400 rounded-full"></div>
+                  </div>
+                </div>
+                <div class="flex items-center gap-2 text-[10px]">
+                  <span class="w-8 text-zinc-400">SPEED</span>
+                  <div class="flex-1 h-1 bg-zinc-700 rounded-full relative">
+                    <div class="w-1/2 h-full bg-blue-400 rounded-full"></div>
+                    <div class="absolute left-1/2 top-1/2 -translate-y-1/2 w-3 h-3 bg-blue-400 rounded-full"></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- SCREEN OVERLAY 5: Quick Settings Sheet (Material You) -->
+          <div id="overlay-settings" class="hidden absolute inset-0 bg-black/60 backdrop-blur-sm z-40 flex flex-col justify-end">
+            <div class="bg-zinc-900 border-t border-white/15 rounded-t-3xl p-4 flex flex-col gap-3 shadow-2xl">
+              <div class="w-10 h-1 bg-zinc-700 rounded-full self-center mb-1"></div>
+              <div class="flex items-center justify-between">
+                <span class="text-xs font-bold text-white">Camera Settings</span>
+                <button onclick="switchScreen('photo')" class="text-xs text-blue-400 font-semibold">Done</button>
+              </div>
+
+              <!-- Quick Toggles Grid -->
+              <div class="grid grid-cols-3 gap-2">
+                <div class="bg-zinc-800/90 p-2.5 rounded-xl border border-white/10 flex flex-col items-center gap-1">
+                  <span class="text-[10px] text-zinc-400">HDR+</span>
+                  <span class="text-xs font-bold text-blue-400">Enhanced</span>
+                </div>
+                <div class="bg-zinc-800/90 p-2.5 rounded-xl border border-white/10 flex flex-col items-center gap-1">
+                  <span class="text-[10px] text-zinc-400">RAW Format</span>
+                  <span class="text-xs font-bold text-yellow-400">RAW + JPG</span>
+                </div>
+                <div class="bg-zinc-800/90 p-2.5 rounded-xl border border-white/10 flex flex-col items-center gap-1">
+                  <span class="text-[10px] text-zinc-400">Resolution</span>
+                  <span class="text-xs font-bold text-white">108MP Binned</span>
+                </div>
+                <div class="bg-zinc-800/90 p-2.5 rounded-xl border border-white/10 flex flex-col items-center gap-1">
+                  <span class="text-[10px] text-zinc-400">Ratio</span>
+                  <span class="text-xs font-bold text-white">4:3 Native</span>
+                </div>
+                <div class="bg-zinc-800/90 p-2.5 rounded-xl border border-white/10 flex flex-col items-center gap-1">
+                  <span class="text-[10px] text-zinc-400">Timer</span>
+                  <span class="text-xs font-bold text-zinc-500">Off</span>
+                </div>
+                <div class="bg-zinc-800/90 p-2.5 rounded-xl border border-white/10 flex flex-col items-center gap-1">
+                  <span class="text-[10px] text-zinc-400">Grid</span>
+                  <span class="text-xs font-bold text-white">3 x 3</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- FLOATING ZOOM PILL (.6x, 1x, 2x) -->
+          <div class="absolute bottom-3 left-1/2 -translate-x-1/2 z-30 bg-black/60 backdrop-blur-md px-1.5 py-1 rounded-full border border-white/10 flex items-center gap-1 shadow-lg">
+            <button onclick="setZoom(0.6)" id="zoom-06" class="w-7 h-7 rounded-full text-[11px] font-bold text-zinc-400 flex items-center justify-center hover:text-white transition">.6</button>
+            <button onclick="setZoom(1.0)" id="zoom-10" class="w-7 h-7 rounded-full text-[11px] font-bold bg-[#D3E3FD] text-[#041E49] flex items-center justify-center shadow">1x</button>
+            <button onclick="setZoom(2.0)" id="zoom-20" class="w-7 h-7 rounded-full text-[11px] font-bold text-zinc-400 flex items-center justify-center hover:text-white transition">2</button>
+          </div>
+
+        </div>
+
+        <!-- BOTTOM CONTROLS & CAROUSEL (Pixel 9 Style) -->
+        <div class="bg-black pt-2 pb-5 px-4 flex flex-col gap-3 z-30">
+          
+          <!-- Mode Carousel Slider -->
+          <div class="flex items-center justify-center gap-4 text-xs font-medium overflow-x-auto py-1 text-zinc-400 no-scrollbar">
+            <button onclick="switchScreen('night')" id="mode-night" class="hover:text-white transition whitespace-nowrap">Night Sight</button>
+            <button onclick="switchScreen('portrait')" id="mode-portrait" class="hover:text-white transition whitespace-nowrap">Portrait</button>
+            <button onclick="switchScreen('photo')" id="mode-photo" class="bg-[#D3E3FD] text-[#041E49] font-bold px-3 py-1 rounded-full shadow transition whitespace-nowrap">Camera</button>
+            <button onclick="switchScreen('pro')" id="mode-pro" class="hover:text-white transition whitespace-nowrap">Pro</button>
+            <button class="hover:text-white transition whitespace-nowrap opacity-60">Video</button>
+          </div>
+
+          <!-- Bottom Control Bar (Thumbnail, Shutter, Switcher) -->
+          <div class="flex items-center justify-between px-3 pt-1">
+            
+            <!-- Gallery Thumbnail Button -->
+            <div class="w-12 h-12 rounded-full border-2 border-zinc-700 bg-zinc-800 overflow-hidden flex items-center justify-center cursor-pointer hover:border-zinc-500 transition shadow">
+              <div class="w-full h-full bg-gradient-to-tr from-amber-700 to-indigo-900 opacity-80"></div>
+            </div>
+
+            <!-- PIXEL CONCENTRIC SHUTTER BUTTON -->
+            <div class="relative cursor-pointer group" onclick="triggerShutter()">
+              <!-- Outer Ring -->
+              <div class="w-20 h-20 rounded-full border-4 border-white flex items-center justify-center group-active:scale-95 transition-all duration-150">
+                <!-- Inner Solid Button -->
+                <div id="shutter-inner" class="w-16 h-16 rounded-full bg-zinc-100 group-active:bg-zinc-300 transition-colors shadow-inner"></div>
+              </div>
+            </div>
+
+            <!-- Front/Rear Camera Switcher -->
+            <button onclick="flipCamera()" id="btn-flip" class="w-12 h-12 rounded-full bg-zinc-800/90 hover:bg-zinc-700/90 text-white flex items-center justify-center transition border border-white/10 shadow active:rotate-180 duration-300">
+              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+            </button>
+
+          </div>
+
+          <!-- Android Gesture Home Indicator Bar -->
+          <div class="w-32 h-1 bg-white/40 rounded-full self-center mt-1"></div>
+
+        </div>
+
+      </div>
+    </div>
+
+    <!-- Feature Description Footer -->
+    <div class="mt-4 pt-3 border-t border-[var(--border)] text-xs text-[var(--muted-foreground)] flex flex-wrap justify-between gap-2">
+      <div id="info-mode" class="flex items-center gap-2 text-[var(--foreground)] font-semibold">
+        <span>📸 Mode: <strong>Camera (HDR+ Enhanced)</strong></span>
+      </div>
+      <div>Sensor: <strong>Samsung ISOCELL HM2 (108 MP Nona-Binning to 12 MP)</strong></div>
+    </div>
+
+  </div>
+
+  <script>
+    let currentScreen = 'photo';
+    let isFlipped = false;
+
+    function switchScreen(mode) {
+      currentScreen = mode;
+      
+      // Hide all overlays
+      document.getElementById('overlay-night').classList.add('hidden');
+      document.getElementById('overlay-portrait').classList.add('hidden');
+      document.getElementById('overlay-pro').classList.add('hidden');
+      document.getElementById('overlay-settings').classList.add('hidden');
+      document.getElementById('focus-reticle').classList.remove('hidden');
+
+      // Reset Tabs
+      const tabs = ['photo', 'night', 'portrait', 'pro', 'settings'];
+      tabs.forEach(t => {
+        const btn = document.getElementById('tab-' + t);
+        if (btn) {
+          btn.className = "px-2.5 py-1 text-xs font-medium rounded-lg text-[var(--muted-foreground)] hover:text-[var(--foreground)] transition-all";
+        }
+      });
+      const activeTab = document.getElementById('tab-' + mode);
+      if (activeTab) {
+        activeTab.className = "px-2.5 py-1 text-xs font-semibold rounded-lg bg-blue-500 text-white shadow transition-all";
+      }
+
+      // Reset Carousel buttons
+      const modes = ['night', 'portrait', 'photo', 'pro'];
+      modes.forEach(m => {
+        const btn = document.getElementById('mode-' + m);
+        if (btn) {
+          btn.className = "hover:text-white transition whitespace-nowrap";
+        }
+      });
+
+      const infoText = document.getElementById('info-mode');
+      const shutterInner = document.getElementById('shutter-inner');
+
+      if (mode === 'photo') {
+        document.getElementById('mode-photo').className = "bg-[#D3E3FD] text-[#041E49] font-bold px-3 py-1 rounded-full shadow transition whitespace-nowrap";
+        infoText.innerHTML = "📸 Mode: <strong>Camera (HDR+ Enhanced)</strong> — 12 MP binned RAW fusion";
+        shutterInner.className = "w-16 h-16 rounded-full bg-zinc-100 group-active:bg-zinc-300 transition-colors shadow-inner";
+      } else if (mode === 'night') {
+        document.getElementById('overlay-night').classList.remove('hidden');
+        document.getElementById('mode-night').className = "bg-[#D3E3FD] text-[#041E49] font-bold px-3 py-1 rounded-full shadow transition whitespace-nowrap";
+        infoText.innerHTML = "🌙 Mode: <strong>Night Sight</strong> — Multi-frame temporal accumulation for zero noise";
+        shutterInner.className = "w-16 h-16 rounded-full bg-yellow-300 shadow-inner";
+      } else if (mode === 'portrait') {
+        document.getElementById('overlay-portrait').classList.remove('hidden');
+        document.getElementById('mode-portrait').className = "bg-[#D3E3FD] text-[#041E49] font-bold px-3 py-1 rounded-full shadow transition whitespace-nowrap";
+        infoText.innerHTML = "👤 Mode: <strong>Portrait Bokeh</strong> — Progressive optical depth simulation";
+        shutterInner.className = "w-16 h-16 rounded-full bg-zinc-100 shadow-inner";
+      } else if (mode === 'pro') {
+        document.getElementById('overlay-pro').classList.remove('hidden');
+        document.getElementById('mode-pro').className = "bg-[#D3E3FD] text-[#041E49] font-bold px-3 py-1 rounded-full shadow transition whitespace-nowrap";
+        infoText.innerHTML = "⚙️ Mode: <strong>Pro Manual</strong> — Live RGB histogram, manual ISO (100–19200) & shutter speed";
+        shutterInner.className = "w-16 h-16 rounded-full bg-zinc-100 shadow-inner";
+      } else if (mode === 'settings') {
+        document.getElementById('overlay-settings').classList.remove('hidden');
+        infoText.innerHTML = "⚙️ Mode: <strong>Quick Settings Sheet</strong> — Material You swipe-down preferences";
+      }
+    }
+
+    function setZoom(val) {
+      const z06 = document.getElementById('zoom-06');
+      const z10 = document.getElementById('zoom-10');
+      const z20 = document.getElementById('zoom-20');
+
+      [z06, z10, z20].forEach(z => {
+        z.className = "w-7 h-7 rounded-full text-[11px] font-bold text-zinc-400 flex items-center justify-center hover:text-white transition";
+      });
+
+      if (val === 0.6) {
+        z06.className = "w-7 h-7 rounded-full text-[11px] font-bold bg-[#D3E3FD] text-[#041E49] flex items-center justify-center shadow";
+      } else if (val === 1.0) {
+        z10.className = "w-7 h-7 rounded-full text-[11px] font-bold bg-[#D3E3FD] text-[#041E49] flex items-center justify-center shadow";
+      } else if (val === 2.0) {
+        z20.className = "w-7 h-7 rounded-full text-[11px] font-bold bg-[#D3E3FD] text-[#041E49] flex items-center justify-center shadow";
+      }
+    }
+
+    function flipCamera() {
+      isFlipped = !isFlipped;
+      const btn = document.getElementById('btn-flip');
+      btn.style.transform = isFlipped ? 'rotate(180deg)' : 'rotate(0deg)';
+    }
+
+    function triggerShutter() {
+      const reticle = document.getElementById('focus-reticle');
+      reticle.classList.remove('animate-focus');
+      void reticle.offsetWidth; // trigger reflow
+      reticle.classList.add('animate-focus');
+    }
+  </script>
+</body>
+</html>
