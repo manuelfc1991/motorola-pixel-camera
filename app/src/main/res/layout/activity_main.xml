@@ -204,46 +204,101 @@
             android:textSize="13sp" />
     </LinearLayout>
 
-    <!-- Horizon Level Indicator Line (Pixel Gold Crosshair & Bars) -->
-    <LinearLayout
-        android:id="@+id/horizonLevelIndicator"
+    <!-- Interactive Google Pixel Gyro Horizon & 2D Flat-Lay Level Indicator -->
+    <FrameLayout
+        android:id="@+id/horizonLevelContainer"
         android:layout_width="160dp"
-        android:layout_height="24dp"
+        android:layout_height="80dp"
         android:alpha="0.85"
-        android:gravity="center"
-        android:orientation="horizontal"
         app:layout_constraintBottom_toBottomOf="@+id/viewFinderCard"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toTopOf="@+id/viewFinderCard">
 
-        <View
-            android:layout_width="38dp"
-            android:layout_height="1.8dp"
-            android:background="@color/pixel_accent_yellow" />
-
-        <!-- Center Crosshair + -->
+        <!-- Fixed Center Optical Reticle (+) -->
         <FrameLayout
-            android:layout_width="14dp"
-            android:layout_height="14dp"
-            android:layout_marginHorizontal="6dp">
+            android:id="@+id/horizonCenterReticle"
+            android:layout_width="18dp"
+            android:layout_height="18dp"
+            android:layout_gravity="center">
             <View
-                android:layout_width="12dp"
-                android:layout_height="1.8dp"
+                android:id="@+id/horizonCrosshairH"
+                android:layout_width="14dp"
+                android:layout_height="2dp"
                 android:layout_gravity="center"
                 android:background="@color/pixel_accent_yellow" />
             <View
-                android:layout_width="1.8dp"
-                android:layout_height="12dp"
+                android:id="@+id/horizonCrosshairV"
+                android:layout_width="2dp"
+                android:layout_height="14dp"
                 android:layout_gravity="center"
                 android:background="@color/pixel_accent_yellow" />
         </FrameLayout>
 
-        <View
-            android:layout_width="38dp"
-            android:layout_height="1.8dp"
-            android:background="@color/pixel_accent_yellow" />
-    </LinearLayout>
+        <!-- Floating 2D Reticle (+) for Top-Down / Desk Alignment -->
+        <FrameLayout
+            android:id="@+id/horizonFloatingReticle"
+            android:layout_width="18dp"
+            android:layout_height="18dp"
+            android:layout_gravity="center"
+            android:visibility="gone">
+            <View
+                android:id="@+id/horizonFloatingCrosshairH"
+                android:layout_width="14dp"
+                android:layout_height="2dp"
+                android:layout_gravity="center"
+                android:background="#CCFFFFFF" />
+            <View
+                android:id="@+id/horizonFloatingCrosshairV"
+                android:layout_width="2dp"
+                android:layout_height="14dp"
+                android:layout_gravity="center"
+                android:background="#CCFFFFFF" />
+        </FrameLayout>
+
+        <!-- Dynamically Rotating Horizon Wings (for upright photography) -->
+        <LinearLayout
+            android:id="@+id/horizonRotatingBar"
+            android:layout_width="160dp"
+            android:layout_height="24dp"
+            android:layout_gravity="center"
+            android:gravity="center"
+            android:orientation="horizontal">
+
+            <View
+                android:id="@+id/horizonWingLeft"
+                android:layout_width="40dp"
+                android:layout_height="1.8dp"
+                android:background="@color/pixel_accent_yellow" />
+
+            <!-- Gap matching the center reticle -->
+            <View
+                android:layout_width="26dp"
+                android:layout_height="1dp"
+                android:background="@android:color/transparent" />
+
+            <View
+                android:id="@+id/horizonWingRight"
+                android:layout_width="40dp"
+                android:layout_height="1.8dp"
+                android:background="@color/pixel_accent_yellow" />
+        </LinearLayout>
+
+        <!-- Degree readout badge (Google Camera style, e.g. "0°" or "2°") -->
+        <TextView
+            android:id="@+id/tvHorizonAngle"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center_horizontal|bottom"
+            android:text="0°"
+            android:textColor="@color/pixel_accent_yellow"
+            android:textSize="10sp"
+            android:textStyle="bold"
+            android:shadowColor="#80000000"
+            android:shadowDx="1"
+            android:shadowDy="1"
+            android:shadowRadius="2" />
+    </FrameLayout>
 
     <!-- Real-time RGB Histogram Overlay -->
     <com.motorola.pixelcamera.ui.HistogramView

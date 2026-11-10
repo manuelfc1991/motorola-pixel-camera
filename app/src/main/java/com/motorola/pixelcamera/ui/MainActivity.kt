@@ -27,6 +27,12 @@ import androidx.camera.core.ImageCapture
 import androidx.camera.video.VideoRecordEvent
 import androidx.core.content.ContextCompat
 import androidx.core.widget.ImageViewCompat
+import android.graphics.Color
+import android.hardware.Sensor
+import android.hardware.SensorEvent
+import android.hardware.SensorEventListener
+import android.hardware.SensorManager
+import android.view.HapticFeedbackConstants
 import androidx.lifecycle.lifecycleScope
 import com.motorola.pixelcamera.R
 import com.motorola.pixelcamera.core.CameraManager
@@ -38,6 +44,8 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlin.math.abs
+import kotlin.math.atan2
+import kotlin.math.roundToInt
 
 class MainActivity : AppCompatActivity() {
 
@@ -69,6 +77,124 @@ class MainActivity : AppCompatActivity() {
     private var portraitBlurProgress = 50
     private var latestCapturedUri: Uri? = null
 
+    // Gyroscope / Accelerometer Horizon Level Indicator
+    private var sensorManager: SensorManager? = null
+    private var accelerometer: Sensor? = null
+    private var filteredRoll = 0f
+    private var isLevelAligned = false
+
+    private val sensorListener = object : SensorEventListener {
+        override fun onSensorChanged(event: SensorEvent?) {
+            if (event == null || event.sensor.type != Sensor.TYPE_ACCELEROMETER) return
+
+            val ax = event.values[0]
+            val ay = event.values[1]
+            val az = event.values[2]
+
+            val isFlatLay = abs(az) >= 8.2f // Top-down / table flat-lay shot
+
+            if (isFlatLay) {
+                // Mode A: Top-Down Flat-Lay 2D Crosshair
+                binding.horizonRotatingBar.visibility = View.GONE
+                binding.horizonFloatingReticle.visibility = View.VISIBLE
+                binding.horizonLevelContainer.alpha = 0.85f
+
+                val density = resources.displayMetrics.density
+                val maxRadius = 24f * density
+                val targetDx = (-ax * 6f * density).coerceIn(-maxRadius, maxRadius)
+                val targetDy = (ay * 6f * density).coerceIn(-maxRadius, maxRadius)
+
+                val distance = kotlin.math.hypot(targetDx, targetDy)
+                val isNowLevel = distance < 3.5f * density
+
+                if (isNowLevel) {
+                    binding.horizonFloatingReticle.translationX = 0f
+                    binding.horizonFloatingReticle.translationY = 0f
+                    binding.tvHorizonAngle.text = "0°"
+
+                    val goldColor = ContextCompat.getColor(this@MainActivity, R.color.pixel_accent_yellow)
+                    binding.horizonCrosshairH.setBackgroundColor(goldColor)
+                    binding.horizonCrosshairV.setBackgroundColor(goldColor)
+                    binding.horizonFloatingCrosshairH.setBackgroundColor(goldColor)
+                    binding.horizonFloatingCrosshairV.setBackgroundColor(goldColor)
+                    binding.tvHorizonAngle.setTextColor(goldColor)
+
+                    if (!isLevelAligned) {
+                        isLevelAligned = true
+                        binding.horizonLevelContainer.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK)
+                    }
+                } else {
+                    isLevelAligned = false
+                    binding.horizonFloatingReticle.translationX = targetDx
+                    binding.horizonFloatingReticle.translationY = targetDy
+
+                    val deg = kotlin.math.round(Math.toDegrees(atan2(distance.toDouble(), (9.8 * 6f * density)))).toInt()
+                    binding.tvHorizonAngle.text = "${deg}°"
+
+                    val tiltColor = Color.parseColor("#CCFFFFFF")
+                    val goldColor = ContextCompat.getColor(this@MainActivity, R.color.pixel_accent_yellow)
+                    binding.horizonCrosshairH.setBackgroundColor(goldColor)
+                    binding.horizonCrosshairV.setBackgroundColor(goldColor)
+                    binding.horizonFloatingCrosshairH.setBackgroundColor(tiltColor)
+                    binding.horizonFloatingCrosshairV.setBackgroundColor(tiltColor)
+                    binding.tvHorizonAngle.setTextColor(tiltColor)
+                }
+            } else {
+                // Mode B: Upright Photography Horizon Wings (Portrait / Landscape Roll)
+                binding.horizonFloatingReticle.visibility = View.GONE
+                binding.horizonRotatingBar.visibility = View.VISIBLE
+                binding.horizonLevelContainer.alpha = 0.85f
+
+                val roll = Math.toDegrees(atan2(-ax.toDouble(), ay.toDouble())).toFloat()
+
+                val targetOrientation = when {
+                    roll in -45f..45f -> 0f
+                    roll > 45f && roll <= 135f -> 90f
+                    roll < -45f && roll >= -135f -> -90f
+                    else -> 180f
+                }
+
+                val rawDelta = roll - targetOrientation
+                filteredRoll = filteredRoll * 0.82f + rawDelta * 0.18f
+
+                val absDelta = abs(filteredRoll)
+                val isNowLevel = absDelta <= 1.0f
+
+                if (isNowLevel) {
+                    binding.horizonRotatingBar.rotation = 0f
+                    binding.tvHorizonAngle.text = "0°"
+
+                    val goldColor = ContextCompat.getColor(this@MainActivity, R.color.pixel_accent_yellow)
+                    binding.horizonWingLeft.setBackgroundColor(goldColor)
+                    binding.horizonWingRight.setBackgroundColor(goldColor)
+                    binding.horizonCrosshairH.setBackgroundColor(goldColor)
+                    binding.horizonCrosshairV.setBackgroundColor(goldColor)
+                    binding.tvHorizonAngle.setTextColor(goldColor)
+
+                    if (!isLevelAligned) {
+                        isLevelAligned = true
+                        binding.horizonLevelContainer.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK)
+                    }
+                } else {
+                    isLevelAligned = false
+                    binding.horizonRotatingBar.rotation = -filteredRoll
+                    val deg = absDelta.roundToInt()
+                    binding.tvHorizonAngle.text = "${deg}°"
+
+                    val tiltColor = Color.parseColor("#CCFFFFFF")
+                    val goldColor = ContextCompat.getColor(this@MainActivity, R.color.pixel_accent_yellow)
+                    binding.horizonWingLeft.setBackgroundColor(tiltColor)
+                    binding.horizonWingRight.setBackgroundColor(tiltColor)
+                    binding.horizonCrosshairH.setBackgroundColor(goldColor)
+                    binding.horizonCrosshairV.setBackgroundColor(goldColor)
+                    binding.tvHorizonAngle.setTextColor(tiltColor)
+                }
+            }
+        }
+
+        override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {}
+    }
+
     private val permissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
     ) { permissions ->
@@ -91,6 +217,9 @@ class MainActivity : AppCompatActivity() {
 
         prefs = getSharedPreferences(SettingsActivity.PREFS_NAME, Context.MODE_PRIVATE)
         cameraManager = CameraManager(this)
+
+        sensorManager = getSystemService(Context.SENSOR_SERVICE) as? SensorManager
+        accelerometer = sensorManager?.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)
 
         // Live Histogram callback for Pro Mode
         cameraManager.onHistogramUpdate = { r, g, b ->
@@ -116,6 +245,14 @@ class MainActivity : AppCompatActivity() {
         super.onResume()
         syncSettings()
         loadLatestGalleryThumbnail()
+        accelerometer?.let {
+            sensorManager?.registerListener(sensorListener, it, SensorManager.SENSOR_DELAY_UI)
+        }
+    }
+
+    override fun onPause() {
+        super.onPause()
+        sensorManager?.unregisterListener(sensorListener)
     }
 
     private fun initDefaultUiState() {
