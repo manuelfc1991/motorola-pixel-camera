@@ -66,6 +66,7 @@ Explore the design specifications, interactive UI prototypes, and device evaluat
 * [Feature Compatibility Matrix](documentation/reports/feature_compatibility_matrix.md): Status of Camera2 vendor extensions and sensors.
 * [GCam Evaluation Report](documentation/reports/gcam_investigation_and_evaluation.md): Deep-dive into why standard GCam ports fail on Dimensity 800U.
 * [Testing & Validation Report](documentation/reports/testing_and_validation_report.md): Physical device test log and image quality metrics.
+* [Night Sight & Clarity Worklog](documentation/reports/night_sight_and_clarity_worklog.md): Night Sight fixes, HAL MFNR findings, failed attempts, and next ideas.
 
 ---
 
