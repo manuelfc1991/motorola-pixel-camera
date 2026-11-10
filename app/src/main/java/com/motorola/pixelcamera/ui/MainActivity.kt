@@ -372,6 +372,10 @@ class MainActivity : AppCompatActivity() {
         cameraManager.currentVideoResolution = if (videoQualityPref == "4k") CameraManager.VideoResolution.UHD else CameraManager.VideoResolution.FHD
         cameraManager.currentVideoFps = if (videoFpsPref == 60) CameraManager.VideoFps.FPS_60 else CameraManager.VideoFps.FPS_30
 
+        com.motorola.pixelcamera.computational.HdrProcessor.saturationMultiplier = prefs.getInt(SettingsActivity.KEY_SATURATION, 100) / 100f
+        com.motorola.pixelcamera.computational.HdrProcessor.microContrastMultiplier = prefs.getInt(SettingsActivity.KEY_MICRO_CONTRAST, 100) / 100f
+        com.motorola.pixelcamera.computational.HdrProcessor.sharpnessMultiplier = prefs.getInt(SettingsActivity.KEY_SHARPNESS, 100) / 100f
+
         updateFlashUi(flashPref)
         updateQuickSettingsUi()
     }

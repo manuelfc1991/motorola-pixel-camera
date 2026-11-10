@@ -25,6 +25,10 @@ object HdrProcessor {
     private const val TEXT_BOOST_STRENGTH = 1.15f
     private const val HALO_LIMIT = 38f
 
+    var saturationMultiplier: Float = 1.0f
+    var microContrastMultiplier: Float = 1.0f
+    var sharpnessMultiplier: Float = 1.0f
+
     /**
      * Process single or multi-frame burst with Google HDR+ algorithm
      */
@@ -104,12 +108,12 @@ object HdrProcessor {
                     absDelta < CORING_THRESHOLD -> 0f
                     absDelta <= 35.0f -> {
                         val sign = if (delta > 0) 1f else -1f
-                        sign * (absDelta - CORING_THRESHOLD) * TEXT_BOOST_STRENGTH
+                        sign * (absDelta - CORING_THRESHOLD) * (TEXT_BOOST_STRENGTH * sharpnessMultiplier)
                     }
                     else -> {
                         val sign = if (delta > 0) 1f else -1f
-                        val baseBoost = (35.0f - CORING_THRESHOLD) * TEXT_BOOST_STRENGTH
-                        val extra = (absDelta - 35.0f) * 0.25f
+                        val baseBoost = (35.0f - CORING_THRESHOLD) * (TEXT_BOOST_STRENGTH * sharpnessMultiplier)
+                        val extra = (absDelta - 35.0f) * 0.25f * sharpnessMultiplier
                         sign * min(baseBoost + extra, HALO_LIMIT)
                     }
                 }
@@ -132,11 +136,11 @@ object HdrProcessor {
         val outPixels = IntArray(totalPixels)
         for (i in 0 until totalPixels) {
             var yVal = sharpY[i]
-            val cbVal = cleanCb[i] - 128f
-            val crVal = cleanCr[i] - 128f
+            val cbVal = (cleanCb[i] - 128f) * saturationMultiplier
+            val crVal = (cleanCr[i] - 128f) * saturationMultiplier
 
             // Shadow Lifting & Dynamic Highlight Compression (Google Tomte-style Tone Curve)
-            yVal = applyPixelToneCurve(yVal)
+            yVal = applyPixelToneCurve(yVal, microContrastMultiplier)
 
             val r = (yVal + 1.402f * crVal).coerceIn(0f, 255f)
             val g = (yVal - 0.344136f * cbVal - 0.714136f * crVal).coerceIn(0f, 255f)
@@ -277,7 +281,7 @@ object HdrProcessor {
      * Google Pixel Local Dynamic Range Tone Curve:
      * Lifts shadow details without grain amplification and gracefully rolls off highlights.
      */
-    private fun applyPixelToneCurve(y: Float): Float {
+    private fun applyPixelToneCurve(y: Float, contrastMultiplier: Float = 1.0f): Float {
         val norm = y / 255.0f
 
         // Shadow lifting formula: gently illuminates dark tones
@@ -285,7 +289,8 @@ object HdrProcessor {
 
         // Smooth Hermite S-curve for contrast
         val hermite = norm * norm * (3.0f - 2.0f * norm)
-        val blended = norm * 0.40f + hermite * 0.60f + shadowLift
+        val contrastWeight = (0.60f * contrastMultiplier).coerceIn(0.2f, 0.95f)
+        val blended = norm * (1.0f - contrastWeight) + hermite * contrastWeight + shadowLift
 
         return (blended * 255.0f).coerceIn(0f, 255f)
     }

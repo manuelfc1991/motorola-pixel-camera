@@ -187,6 +187,105 @@
                     android:layout_marginVertical="8dp"
                     android:background="#26282E" />
 
+                <!-- Color Saturation Tuning Slider -->
+                <TextView
+                    android:id="@+id/tvSaturationLabel"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Color Saturation: 1.00x"
+                    android:textColor="@color/pixel_text_white"
+                    android:textSize="14sp" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Vibrancy &amp; chroma punch in processed JPEG"
+                    android:textColor="@color/pixel_text_secondary"
+                    android:textSize="12sp" />
+
+                <SeekBar
+                    android:id="@+id/sbSaturation"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:max="150"
+                    android:min="50"
+                    android:progress="100"
+                    android:progressTint="@color/pixel_accent_blue"
+                    android:thumbTint="@color/pixel_accent_blue" />
+
+                <View
+                    android:layout_width="match_parent"
+                    android:layout_height="1dp"
+                    android:layout_marginVertical="8dp"
+                    android:background="#26282E" />
+
+                <!-- Micro-Contrast Tuning Slider -->
+                <TextView
+                    android:id="@+id/tvMicroContrastLabel"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Micro-Contrast: 1.00x"
+                    android:textColor="@color/pixel_text_white"
+                    android:textSize="14sp" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Pixel Hermite tone curve local dynamic depth"
+                    android:textColor="@color/pixel_text_secondary"
+                    android:textSize="12sp" />
+
+                <SeekBar
+                    android:id="@+id/sbMicroContrast"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:max="150"
+                    android:min="50"
+                    android:progress="100"
+                    android:progressTint="@color/pixel_accent_blue"
+                    android:thumbTint="@color/pixel_accent_blue" />
+
+                <View
+                    android:layout_width="match_parent"
+                    android:layout_height="1dp"
+                    android:layout_marginVertical="8dp"
+                    android:background="#26282E" />
+
+                <!-- Noise-Cored Sharpening Slider -->
+                <TextView
+                    android:id="@+id/tvSharpnessLabel"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Edge Sharpening: 1.00x"
+                    android:textColor="@color/pixel_text_white"
+                    android:textSize="14sp" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="8-neighbor omnidirectional detail boost with anti-halo"
+                    android:textColor="@color/pixel_text_secondary"
+                    android:textSize="12sp" />
+
+                <SeekBar
+                    android:id="@+id/sbSharpness"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:max="200"
+                    android:min="0"
+                    android:progress="100"
+                    android:progressTint="@color/pixel_accent_blue"
+                    android:thumbTint="@color/pixel_accent_blue" />
+
+                <View
+                    android:layout_width="match_parent"
+                    android:layout_height="1dp"
+                    android:layout_marginVertical="8dp"
+                    android:background="#26282E" />
+
                 <com.google.android.material.switchmaterial.SwitchMaterial
                     android:id="@+id/swUltraHdr"
                     android:layout_width="match_parent"

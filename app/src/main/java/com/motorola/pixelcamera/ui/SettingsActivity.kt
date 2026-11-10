@@ -5,7 +5,9 @@ import android.content.SharedPreferences
 import android.os.Bundle
 import android.widget.SeekBar
 import androidx.appcompat.app.AppCompatActivity
+import com.motorola.pixelcamera.computational.HdrProcessor
 import com.motorola.pixelcamera.databinding.ActivitySettingsBinding
+import java.util.Locale
 
 class SettingsActivity : AppCompatActivity() {
 
@@ -35,6 +37,18 @@ class SettingsActivity : AppCompatActivity() {
         val hdrFrames = prefs.getInt(KEY_HDR_FRAMES, 18)
         binding.sbHdrFrames.progress = hdrFrames
         binding.tvHdrFramesLabel.text = "HDR+ Frame Count: $hdrFrames frames"
+
+        val sat = prefs.getInt(KEY_SATURATION, 100)
+        binding.sbSaturation.progress = sat
+        binding.tvSaturationLabel.text = String.format(Locale.US, "Color Saturation: %.2fx", sat / 100f)
+
+        val contrast = prefs.getInt(KEY_MICRO_CONTRAST, 100)
+        binding.sbMicroContrast.progress = contrast
+        binding.tvMicroContrastLabel.text = String.format(Locale.US, "Micro-Contrast: %.2fx", contrast / 100f)
+
+        val sharp = prefs.getInt(KEY_SHARPNESS, 100)
+        binding.sbSharpness.progress = sharp
+        binding.tvSharpnessLabel.text = String.format(Locale.US, "Edge Sharpening: %.2fx", sharp / 100f)
     }
 
     private fun setupListeners() {
@@ -78,6 +92,39 @@ class SettingsActivity : AppCompatActivity() {
             override fun onStartTrackingTouch(seekBar: SeekBar?) {}
             override fun onStopTrackingTouch(seekBar: SeekBar?) {}
         })
+
+        binding.sbSaturation.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+            override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
+                val mult = progress / 100f
+                binding.tvSaturationLabel.text = String.format(Locale.US, "Color Saturation: %.2fx", mult)
+                HdrProcessor.saturationMultiplier = mult
+                prefs.edit().putInt(KEY_SATURATION, progress).apply()
+            }
+            override fun onStartTrackingTouch(seekBar: SeekBar?) {}
+            override fun onStopTrackingTouch(seekBar: SeekBar?) {}
+        })
+
+        binding.sbMicroContrast.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+            override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
+                val mult = progress / 100f
+                binding.tvMicroContrastLabel.text = String.format(Locale.US, "Micro-Contrast: %.2fx", mult)
+                HdrProcessor.microContrastMultiplier = mult
+                prefs.edit().putInt(KEY_MICRO_CONTRAST, progress).apply()
+            }
+            override fun onStartTrackingTouch(seekBar: SeekBar?) {}
+            override fun onStopTrackingTouch(seekBar: SeekBar?) {}
+        })
+
+        binding.sbSharpness.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+            override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
+                val mult = progress / 100f
+                binding.tvSharpnessLabel.text = String.format(Locale.US, "Edge Sharpening: %.2fx", mult)
+                HdrProcessor.sharpnessMultiplier = mult
+                prefs.edit().putInt(KEY_SHARPNESS, progress).apply()
+            }
+            override fun onStartTrackingTouch(seekBar: SeekBar?) {}
+            override fun onStopTrackingTouch(seekBar: SeekBar?) {}
+        })
     }
 
     companion object {
@@ -93,5 +140,8 @@ class SettingsActivity : AppCompatActivity() {
         const val KEY_FLASH_MODE = "flash_mode"
         const val KEY_VIDEO_QUALITY = "video_quality"
         const val KEY_VIDEO_FPS = "video_fps"
+        const val KEY_SATURATION = "pref_saturation"
+        const val KEY_MICRO_CONTRAST = "pref_micro_contrast"
+        const val KEY_SHARPNESS = "pref_sharpness"
     }
 }
