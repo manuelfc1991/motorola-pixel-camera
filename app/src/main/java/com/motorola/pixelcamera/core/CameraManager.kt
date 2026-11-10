@@ -644,9 +644,11 @@ class CameraManager(private val context: Context) {
                         takePictureDirect(capture)
                     }
                 } else {
-                    onStatusUpdate("Night Sight: Capturing 4 multi-frame exposures...")
+                    // Each capture is already a 6-frame aligned MediaTek MFNR merge (~1.5s in the HAL).
+                    // Handheld, more captures only add hold time and hand drift, so keep it short.
+                    onStatusUpdate("Night Sight: Capturing $NIGHT_HANDHELD_CAPTURES multi-frame exposures...")
                     val burst = mutableListOf<Bitmap>()
-                    for (i in 0 until 4) {
+                    for (i in 0 until NIGHT_HANDHELD_CAPTURES) {
                         val bmp = runCatching { takeSingleBitmap(capture) }.getOrNull()
                         if (bmp != null) burst.add(bmp)
                     }
@@ -952,5 +954,6 @@ class CameraManager(private val context: Context) {
         const val CAMERA_MAIN = "0"
         const val CAMERA_FRONT = "1"
         const val CAMERA_ULTRAWIDE = "3"
+        private const val NIGHT_HANDHELD_CAPTURES = 2
     }
 }
