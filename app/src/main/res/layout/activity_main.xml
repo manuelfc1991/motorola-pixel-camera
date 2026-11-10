@@ -216,6 +216,27 @@
             android:text="00:00"
             android:textColor="@color/pixel_text_white"
             android:textSize="13sp" />
+
+        <!-- Real-time Directional Audio Zoom Indicator -->
+        <TextView
+            android:id="@+id/tvAudioZoomIndicator"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="10dp"
+            android:background="@drawable/bg_pill_container"
+            android:backgroundTint="#338AB4F8"
+            android:drawableStart="@drawable/ic_mic_zoom"
+            android:drawablePadding="4dp"
+            android:gravity="center_vertical"
+            android:paddingHorizontal="8dp"
+            android:paddingVertical="2dp"
+            android:text="AUDIO ZOOM 1.0×"
+            android:textColor="@color/pixel_accent_cyan"
+            android:textSize="11sp"
+            android:textStyle="bold"
+            android:visibility="gone"
+            app:drawableTint="@color/pixel_accent_cyan"
+            tools:visibility="visible" />
     </LinearLayout>
 
     <!-- Interactive Google Pixel Gyro Horizon & 2D Flat-Lay Level Indicator -->
@@ -538,6 +559,120 @@
             android:textColor="@color/pixel_text_white"
             android:textSize="13sp" />
     </LinearLayout>
+
+    <!-- PANORAMA MODE GUIDANCE OVERLAY -->
+    <androidx.constraintlayout.widget.ConstraintLayout
+        android:id="@+id/overlayPanoramaGuide"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        android:elevation="7dp"
+        android:visibility="gone"
+        app:layout_constraintBottom_toBottomOf="@+id/viewFinderCard"
+        app:layout_constraintEnd_toEndOf="@+id/viewFinderCard"
+        app:layout_constraintStart_toStartOf="@+id/viewFinderCard"
+        app:layout_constraintTop_toTopOf="@+id/viewFinderCard">
+
+        <!-- Center Horizontal Alignment Tracking Line -->
+        <View
+            android:id="@+id/linePanoramaHorizon"
+            android:layout_width="0dp"
+            android:layout_height="2dp"
+            android:background="#66FFFFFF"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toTopOf="parent" />
+
+        <!-- Target Center Circle Reticle -->
+        <View
+            android:id="@+id/reticlePanoramaCenter"
+            android:layout_width="16dp"
+            android:layout_height="16dp"
+            android:background="@drawable/bg_pill_container"
+            android:backgroundTint="@color/pixel_accent_yellow"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toTopOf="parent" />
+
+        <!-- Directional Pan Arrow -->
+        <ImageView
+            android:id="@+id/ivPanoramaArrow"
+            android:layout_width="32dp"
+            android:layout_height="32dp"
+            android:layout_marginStart="24dp"
+            android:src="@drawable/ic_panorama_arrow"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintStart_toEndOf="@+id/reticlePanoramaCenter"
+            app:layout_constraintTop_toTopOf="parent"
+            app:tint="@color/pixel_accent_cyan" />
+
+        <!-- Prompt Text Pill -->
+        <TextView
+            android:id="@+id/tvPanoramaPrompt"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="24dp"
+            android:background="@drawable/bg_pill_container"
+            android:backgroundTint="#CC181A1D"
+            android:paddingHorizontal="16dp"
+            android:paddingVertical="6dp"
+            android:text="Pan steadily along the line"
+            android:textColor="@color/pixel_text_white"
+            android:textSize="13sp"
+            android:textStyle="bold"
+            app:layout_constraintBottom_toTopOf="@+id/linePanoramaHorizon"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toStartOf="parent" />
+
+        <!-- Sweep Angle & Progress Badge -->
+        <TextView
+            android:id="@+id/tvPanoramaAngle"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="20dp"
+            android:background="@drawable/bg_pill_container"
+            android:backgroundTint="#CC181A1D"
+            android:paddingHorizontal="14dp"
+            android:paddingVertical="4dp"
+            android:text="0° / 180°"
+            android:textColor="@color/pixel_accent_yellow"
+            android:textSize="12sp"
+            android:textStyle="bold"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toBottomOf="@+id/linePanoramaHorizon" />
+
+        <!-- Bottom Live Panoramic Preview Strip & Progress Bar -->
+        <FrameLayout
+            android:layout_width="0dp"
+            android:layout_height="44dp"
+            android:layout_marginHorizontal="24dp"
+            android:layout_marginBottom="16dp"
+            android:background="@drawable/bg_pill_container"
+            android:backgroundTint="#DD121316"
+            android:padding="3dp"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toStartOf="parent">
+
+            <ImageView
+                android:id="@+id/ivPanoramaStrip"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:scaleType="fitCenter" />
+
+            <ProgressBar
+                android:id="@+id/pbPanoramaProgress"
+                style="?android:attr/progressBarStyleHorizontal"
+                android:layout_width="match_parent"
+                android:layout_height="4dp"
+                android:layout_gravity="bottom"
+                android:max="100"
+                android:progress="0"
+                android:progressTint="@color/pixel_accent_yellow" />
+        </FrameLayout>
+    </androidx.constraintlayout.widget.ConstraintLayout>
 
     <!-- Pro Manual Controls Drawer (Shutter, ISO, Focus, WB, EV) -->
     <LinearLayout
@@ -1815,6 +1950,73 @@
                                 </LinearLayout>
                             </LinearLayout>
 
+                            <!-- Audio Zoom Row -->
+                            <LinearLayout
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:gravity="center_vertical"
+                                android:orientation="horizontal"
+                                android:paddingVertical="8dp">
+
+                                <LinearLayout
+                                    android:layout_width="0dp"
+                                    android:layout_height="wrap_content"
+                                    android:layout_weight="1"
+                                    android:orientation="vertical">
+
+                                    <TextView
+                                        android:layout_width="wrap_content"
+                                        android:layout_height="wrap_content"
+                                        android:text="Audio Zoom"
+                                        android:textColor="@color/pixel_text_white"
+                                        android:textSize="13sp" />
+
+                                    <TextView
+                                        android:id="@+id/tvQsAudioZoomSubtitle"
+                                        android:layout_width="wrap_content"
+                                        android:layout_height="wrap_content"
+                                        android:layout_marginTop="2dp"
+                                        android:text="On • Focuses on subject"
+                                        android:textColor="@color/pixel_accent_blue"
+                                        android:textSize="14sp"
+                                        android:textStyle="bold" />
+                                </LinearLayout>
+
+                                <LinearLayout
+                                    android:layout_width="120dp"
+                                    android:layout_height="36dp"
+                                    android:background="@drawable/bg_segmented_container"
+                                    android:orientation="horizontal"
+                                    android:padding="3dp">
+
+                                    <TextView
+                                        android:id="@+id/btnQsAudioZoomOff"
+                                        android:layout_width="0dp"
+                                        android:layout_height="match_parent"
+                                        android:layout_weight="1"
+                                        android:clickable="true"
+                                        android:focusable="true"
+                                        android:gravity="center"
+                                        android:text="Off"
+                                        android:textColor="@color/pixel_text_white"
+                                        android:textSize="12sp" />
+
+                                    <TextView
+                                        android:id="@+id/btnQsAudioZoomOn"
+                                        android:layout_width="0dp"
+                                        android:layout_height="match_parent"
+                                        android:layout_weight="1"
+                                        android:background="@drawable/bg_segmented_pill_active"
+                                        android:clickable="true"
+                                        android:focusable="true"
+                                        android:gravity="center"
+                                        android:text="On"
+                                        android:textColor="@color/pixel_pill_text_active"
+                                        android:textSize="12sp"
+                                        android:textStyle="bold" />
+                                </LinearLayout>
+                            </LinearLayout>
+
                             <!-- Row 5: Grid in Video -->
                             <LinearLayout
                                 android:layout_width="match_parent"
@@ -2197,6 +2399,14 @@
             android:layout_height="match_parent"
             android:scaleType="fitCenter" />
 
+        <!-- Looping VideoView for Motion Photo Playback -->
+        <VideoView
+            android:id="@+id/vvPreviewMotion"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:layout_gravity="center"
+            android:visibility="gone" />
+
         <!-- Top Bar: Back Button, Title, Share -->
         <LinearLayout
             android:layout_width="match_parent"
@@ -2238,6 +2448,40 @@
                 android:padding="10dp"
                 android:src="@android:drawable/ic_menu_share"
                 app:tint="@color/pixel_text_white" />
+        </LinearLayout>
+
+        <!-- Top Shot / Motion Photo Playback Toggle Pill -->
+        <LinearLayout
+            android:id="@+id/btnPreviewMotionToggle"
+            android:layout_width="wrap_content"
+            android:layout_height="32dp"
+            android:layout_gravity="top|center_horizontal"
+            android:layout_marginTop="72dp"
+            android:background="@drawable/bg_pill_container"
+            android:backgroundTint="#CC1F2328"
+            android:clickable="true"
+            android:focusable="true"
+            android:gravity="center"
+            android:orientation="horizontal"
+            android:paddingHorizontal="14dp"
+            android:visibility="gone">
+
+            <ImageView
+                android:id="@+id/ivPreviewMotionIcon"
+                android:layout_width="16dp"
+                android:layout_height="16dp"
+                android:src="@drawable/ic_play_arrow"
+                app:tint="@color/pixel_accent_sand" />
+
+            <TextView
+                android:id="@+id/tvPreviewMotionLabel"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="6dp"
+                android:text="Motion"
+                android:textColor="@color/pixel_accent_sand"
+                android:textSize="12sp"
+                android:textStyle="bold" />
         </LinearLayout>
 
         <!-- Bottom Details Banner -->

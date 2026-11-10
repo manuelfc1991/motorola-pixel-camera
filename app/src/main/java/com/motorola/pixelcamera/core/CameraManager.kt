@@ -32,13 +32,16 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.LifecycleOwner
 import com.motorola.pixelcamera.computational.AstrophotographyEngine
 import com.motorola.pixelcamera.computational.HdrProcessor
+import com.motorola.pixelcamera.computational.MotionPhotoEngine
 import com.motorola.pixelcamera.computational.NightSightEngine
+import com.motorola.pixelcamera.computational.PanoramaEngine
 import com.motorola.pixelcamera.computational.PortraitEngine
 import com.motorola.pixelcamera.hardware.MotorolaVendorHelper
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
 import java.io.ByteArrayOutputStream
+import java.io.File
 import java.text.SimpleDateFormat
 import java.util.*
 import java.util.concurrent.Executors
@@ -55,6 +58,20 @@ class CameraManager(private val context: Context) {
     private var videoCapture: VideoCapture<Recorder>? = null
     private var imageAnalysis: ImageAnalysis? = null
     private var activeRecording: Recording? = null
+
+    val panoramaEngine by lazy { PanoramaEngine(context) }
+    val audioZoomManager by lazy { AudioZoomManager(context) }
+
+    enum class TopShotMode {
+        OFF, AUTO, ON
+    }
+
+    var topShotMode: TopShotMode = TopShotMode.AUTO
+    var audioZoomEnabled: Boolean = true
+        set(value) {
+            field = value
+            audioZoomManager.setAudioZoomEnabled(value)
+        }
 
     // Physical Camera IDs discovered on Motorola Edge 20 Fusion (kyoto)
     var currentCameraId: String = CAMERA_MAIN
@@ -241,10 +258,10 @@ class CameraManager(private val context: Context) {
             .build()
         videoCapture = VideoCapture.withOutput(recorder)
 
-        // 4. Image Analysis Use Case (Real-time Live RGB/Luminance Histogram in Pro Mode)
+        // 4. Image Analysis Use Case (Real-time Live RGB/Luminance Histogram, Top Shot, Panorama)
         val analysis = ImageAnalysis.Builder()
             .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
-            .setOutputImageFormat(ImageAnalysis.OUTPUT_IMAGE_FORMAT_YUV_420_888)
+            .setOutputImageFormat(ImageAnalysis.OUTPUT_IMAGE_FORMAT_RGBA_8888)
             .build()
 
         analysis.setAnalyzer(cameraExecutor) { imageProxy ->
@@ -254,15 +271,37 @@ class CameraManager(private val context: Context) {
                     val buffer = plane.buffer
                     val remaining = buffer.remaining()
                     if (remaining > 0) {
-                        val step = (remaining / 2048).coerceAtLeast(1)
-                        val hist = IntArray(256)
+                        val step = (remaining / 2048).coerceAtLeast(4)
+                        val histR = IntArray(256)
+                        val histG = IntArray(256)
+                        val histB = IntArray(256)
                         var p = 0
-                        while (p < remaining) {
-                            val lum = buffer.get(p).toInt() and 0xFF
-                            hist[lum]++
+                        while (p < remaining - 3) {
+                            val r = buffer.get(p).toInt() and 0xFF
+                            val g = buffer.get(p + 1).toInt() and 0xFF
+                            val b = buffer.get(p + 2).toInt() and 0xFF
+                            histR[r]++
+                            histG[g]++
+                            histB[b]++
                             p += step
                         }
-                        onHistogramUpdate?.invoke(hist, hist, hist)
+                        onHistogramUpdate?.invoke(histR, histG, histB)
+                    }
+                }
+
+                // If Top Shot or Panorama active, stream frames
+                val needsFrame = (topShotMode != TopShotMode.OFF && (currentCameraMode == CameraMode.CAMERA || currentCameraMode == CameraMode.PORTRAIT)) ||
+                        (currentCameraMode == CameraMode.PANORAMA && panoramaEngine.isCapturing())
+
+                if (needsFrame) {
+                    val bmp = imageProxyRgbaToBitmap(imageProxy)
+                    if (bmp != null) {
+                        if (topShotMode != TopShotMode.OFF) {
+                            MotionPhotoEngine.pushPreviewFrame(bmp)
+                        }
+                        if (currentCameraMode == CameraMode.PANORAMA && panoramaEngine.isCapturing()) {
+                            panoramaEngine.processIncomingFrame(bmp)
+                        }
                     }
                 }
             } catch (e: Exception) {
@@ -282,9 +321,7 @@ class CameraManager(private val context: Context) {
             useCases.add(imageCapture!!)
         } else {
             useCases.add(imageCapture!!)
-            if (currentCameraMode == CameraMode.PRO) {
-                useCases.add(imageAnalysis!!)
-            }
+            useCases.add(imageAnalysis!!)
         }
 
         try {
@@ -357,6 +394,7 @@ class CameraManager(private val context: Context) {
         val maxRatio = zState?.maxZoomRatio ?: 8.0f
         val clamped = ratio.coerceIn(minRatio, maxRatio)
         camera?.cameraControl?.setZoomRatio(clamped)
+        audioZoomManager.onZoomRatioChanged(clamped)
     }
 
     fun setExposureCompensation(evIndex: Int) {
@@ -515,7 +553,10 @@ class CameraManager(private val context: Context) {
 
         when (mode) {
             CameraMode.CAMERA, CameraMode.PRO -> {
-                if (is108MpEnabled) {
+                val shouldRecordMotion = (topShotMode != TopShotMode.OFF) && (mode == CameraMode.CAMERA)
+                val motionFrames = if (shouldRecordMotion) MotionPhotoEngine.snapshotFrames() else emptyList()
+
+                val savedUri = if (is108MpEnabled) {
                     onStatusUpdate("Capturing 108MP Ultra...")
                     takePictureDirect(capture)
                 } else if (hdrPlusMode == 0 && !isGoogleAwbEnabled) {
@@ -539,8 +580,25 @@ class CameraManager(private val context: Context) {
                         takePictureDirect(capture)
                     }
                 }
+
+                if (shouldRecordMotion && savedUri != null && motionFrames.size >= 4) {
+                    try {
+                        onStatusUpdate("Embedding Motion Photo...")
+                        val tempMp4 = File(context.cacheDir, "motion_${System.currentTimeMillis()}.mp4")
+                        if (MotionPhotoEngine.encodeFramesToMp4(motionFrames, tempMp4)) {
+                            MotionPhotoEngine.attachMotionPhoto(context, savedUri, tempMp4)
+                            tempMp4.delete()
+                        }
+                    } catch (e: Exception) {
+                        Log.w(TAG, "Motion Photo attach warning: ${e.message}")
+                    }
+                }
+                savedUri
             }
             CameraMode.PORTRAIT -> {
+                val shouldRecordMotion = (topShotMode != TopShotMode.OFF)
+                val motionFrames = if (shouldRecordMotion) MotionPhotoEngine.snapshotFrames() else emptyList()
+
                 onStatusUpdate("Capturing portrait frame...")
                 val baseBitmap = runCatching { takeSingleBitmap(capture) }.getOrNull() ?: return@withContext null
                 onStatusUpdate("Computing progressive bokeh...")
@@ -551,7 +609,21 @@ class CameraManager(private val context: Context) {
                     blurIntensity = portraitBlurStrength
                 )
                 onStatusUpdate("Saving Portrait JPEG...")
-                saveBitmapToMediaStore(portraitBitmap)
+                val savedUri = saveBitmapToMediaStore(portraitBitmap)
+
+                if (shouldRecordMotion && savedUri != null && motionFrames.size >= 4) {
+                    try {
+                        onStatusUpdate("Embedding Motion Photo...")
+                        val tempMp4 = File(context.cacheDir, "motion_${System.currentTimeMillis()}.mp4")
+                        if (MotionPhotoEngine.encodeFramesToMp4(motionFrames, tempMp4)) {
+                            MotionPhotoEngine.attachMotionPhoto(context, savedUri, tempMp4)
+                            tempMp4.delete()
+                        }
+                    } catch (e: Exception) {
+                        Log.w(TAG, "Motion Photo attach warning: ${e.message}")
+                    }
+                }
+                savedUri
             }
             CameraMode.NIGHT_SIGHT -> {
                 if (isAstrophotographyActive) {
@@ -603,8 +675,14 @@ class CameraManager(private val context: Context) {
                 }
             }
             CameraMode.PANORAMA -> {
-                onStatusUpdate("Capturing wide panorama frame...")
-                takePictureDirect(capture)
+                if (panoramaEngine.isCapturing()) {
+                    onStatusUpdate("Stitching cylindrical panorama...")
+                    panoramaEngine.finishCapture()
+                } else {
+                    onStatusUpdate("Aligning panorama horizon...")
+                    panoramaEngine.startCapture()
+                    null
+                }
             }
             CameraMode.VIDEO -> {
                 // Video is handled by startRecording / stopRecording
@@ -612,6 +690,16 @@ class CameraManager(private val context: Context) {
             }
         }
     }
+
+    fun startPanoramaCapture() {
+        panoramaEngine.startCapture()
+    }
+
+    suspend fun stopPanoramaCapture(): Uri? {
+        return panoramaEngine.finishCapture()
+    }
+
+    fun isCapturingPanorama(): Boolean = panoramaEngine.isCapturing()
 
     /**
      * Direct CameraX output into MediaStore: Preserves hardware ISP demosaicing,
@@ -702,9 +790,11 @@ class CameraManager(private val context: Context) {
             if (event is VideoRecordEvent.Finalize) {
                 activeRecording = null
                 setTorchEnabled(false)
+                audioZoomManager.onRecordingStopped()
             }
             onVideoRecordEvent(event)
         }
+        audioZoomManager.onRecordingStarted()
 
         return true
     }
@@ -713,6 +803,7 @@ class CameraManager(private val context: Context) {
         activeRecording?.stop()
         activeRecording = null
         setTorchEnabled(false)
+        audioZoomManager.onRecordingStopped()
     }
 
     fun isRecordingVideo(): Boolean = activeRecording != null
@@ -753,6 +844,37 @@ class CameraManager(private val context: Context) {
             return Bitmap.createBitmap(bitmap, 0, 0, bitmap.width, bitmap.height, matrix, true)
         }
         return bitmap
+    }
+
+    private fun imageProxyRgbaToBitmap(image: ImageProxy): Bitmap? {
+        return try {
+            val width = image.width
+            val height = image.height
+            val plane = image.planes[0]
+            val buffer = plane.buffer
+            val pixelStride = plane.pixelStride
+            val rowStride = plane.rowStride
+            val rowPadding = rowStride - pixelStride * width
+
+            val bitmap = Bitmap.createBitmap(
+                width + (rowPadding / pixelStride).coerceAtLeast(0),
+                height,
+                Bitmap.Config.ARGB_8888
+            )
+            buffer.rewind()
+            bitmap.copyPixelsFromBuffer(buffer)
+
+            val rotation = image.imageInfo.rotationDegrees
+            val cropped = if (rowPadding == 0) bitmap else Bitmap.createBitmap(bitmap, 0, 0, width, height)
+            if (rotation != 0) {
+                val matrix = Matrix().apply { postRotate(rotation.toFloat()) }
+                Bitmap.createBitmap(cropped, 0, 0, cropped.width, cropped.height, matrix, true)
+            } else {
+                cropped
+            }
+        } catch (e: Exception) {
+            runCatching { image.toBitmap() }.getOrNull()
+        }
     }
 
     private fun saveBitmapToMediaStore(bitmap: Bitmap): Uri? {

@@ -45,9 +45,11 @@ import android.hardware.camera2.CaptureRequest
 import android.view.HapticFeedbackConstants
 import androidx.lifecycle.lifecycleScope
 import com.motorola.pixelcamera.R
+import com.motorola.pixelcamera.computational.MotionPhotoEngine
 import com.motorola.pixelcamera.core.CameraManager
 import com.motorola.pixelcamera.core.CameraMode
 import com.motorola.pixelcamera.databinding.ActivityMainBinding
+import java.io.File
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.withContext
@@ -324,6 +326,8 @@ class MainActivity : AppCompatActivity() {
         })
 
         setupListeners()
+        setupAudioZoom()
+        setupPanoramaEngine()
         initDefaultUiState()
 
         if (allPermissionsGranted()) {
@@ -365,6 +369,12 @@ class MainActivity : AppCompatActivity() {
     private fun syncSettings() {
         val rawPref = prefs.getBoolean(SettingsActivity.KEY_RAW_ENABLED, false)
         cameraManager.isRawEnabled = rawPref
+
+        cameraManager.topShotMode = when (topShotMode) {
+            0 -> CameraManager.TopShotMode.OFF
+            2 -> CameraManager.TopShotMode.ON
+            else -> CameraManager.TopShotMode.AUTO
+        }
 
         val remosaicPref = prefs.getBoolean(SettingsActivity.KEY_108MP_REMOSAIC, false)
         cameraManager.is108MpEnabled = remosaicPref
@@ -556,6 +566,12 @@ class MainActivity : AppCompatActivity() {
         binding.tvQsVideoTorchSubtitle.text = if (isTorch) "Torch on" else "Off"
         setQsButtonActive(binding.btnQsVideoTorchOff, !isTorch)
         setQsButtonActive(binding.btnQsVideoTorchOn, isTorch)
+
+        // Audio Zoom
+        val isAudioZoom = cameraManager.audioZoomEnabled
+        binding.tvQsAudioZoomSubtitle.text = if (isAudioZoom) "On • Focuses on subject" else "Off"
+        setQsPillActive(binding.btnQsAudioZoomOn, isAudioZoom)
+        setQsPillActive(binding.btnQsAudioZoomOff, !isAudioZoom)
 
         // Grid in Video
         binding.tvQsVideoGridSubtitle.text = when (gridMode) {
@@ -781,16 +797,55 @@ class MainActivity : AppCompatActivity() {
                     contentResolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it) }
                 }
 
+                val isMotion = MotionPhotoEngine.isMotionPhoto(this@MainActivity, uri)
+
                 if (bitmap != null) {
                     withContext(Dispatchers.Main) {
                         binding.ivPreviewPhoto.setImageBitmap(bitmap)
+                        binding.ivPreviewPhoto.visibility = View.VISIBLE
+                        binding.vvPreviewMotion.visibility = View.GONE
                         binding.ivPreviewPhoto.scaleX = 1.0f
                         binding.ivPreviewPhoto.scaleY = 1.0f
                         binding.ivPreviewPhoto.translationX = 0f
                         binding.ivPreviewPhoto.translationY = 0f
 
                         binding.tvPreviewTitle.text = uri.lastPathSegment ?: "Captured Photo"
-                        binding.tvPreviewDetails.text = "${bitmap.width} × ${bitmap.height} • Motorola Edge 20 Fusion"
+                        val motionTag = if (isMotion) " • Motion Photo" else ""
+                        binding.tvPreviewDetails.text = "${bitmap.width} × ${bitmap.height} • Motorola Edge 20 Fusion$motionTag"
+
+                        if (isMotion) {
+                            binding.btnPreviewMotionToggle.visibility = View.VISIBLE
+                            binding.tvPreviewMotionLabel.text = "Motion"
+                            binding.ivPreviewMotionIcon.setImageResource(R.drawable.ic_play_arrow)
+
+                            binding.btnPreviewMotionToggle.setOnClickListener {
+                                if (binding.vvPreviewMotion.isPlaying) {
+                                    binding.vvPreviewMotion.pause()
+                                    binding.vvPreviewMotion.visibility = View.GONE
+                                    binding.ivPreviewPhoto.visibility = View.VISIBLE
+                                    binding.tvPreviewMotionLabel.text = "Motion"
+                                    binding.ivPreviewMotionIcon.setImageResource(R.drawable.ic_play_arrow)
+                                } else {
+                                    lifecycleScope.launch(Dispatchers.IO) {
+                                        val tempPlay = File(cacheDir, "preview_motion.mp4")
+                                        if (MotionPhotoEngine.extractMotionVideo(this@MainActivity, uri, tempPlay)) {
+                                            withContext(Dispatchers.Main) {
+                                                binding.vvPreviewMotion.setVideoPath(tempPlay.absolutePath)
+                                                binding.vvPreviewMotion.setOnPreparedListener { mp ->
+                                                    mp.isLooping = true
+                                                    binding.vvPreviewMotion.visibility = View.VISIBLE
+                                                    binding.ivPreviewPhoto.visibility = View.INVISIBLE
+                                                    binding.vvPreviewMotion.start()
+                                                    binding.tvPreviewMotionLabel.text = "Pause"
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        } else {
+                            binding.btnPreviewMotionToggle.visibility = View.GONE
+                        }
 
                         binding.overlayPhotoPreview.alpha = 0f
                         binding.overlayPhotoPreview.visibility = View.VISIBLE
@@ -810,6 +865,13 @@ class MainActivity : AppCompatActivity() {
 
     private fun closeInAppPhotoPreview() {
         if (binding.overlayPhotoPreview.visibility == View.VISIBLE) {
+            try {
+                if (binding.vvPreviewMotion.isPlaying) {
+                    binding.vvPreviewMotion.stopPlayback()
+                }
+            } catch (ignored: Exception) {}
+            binding.vvPreviewMotion.visibility = View.GONE
+            binding.ivPreviewPhoto.visibility = View.VISIBLE
             binding.overlayPhotoPreview.animate()
                 .alpha(0f)
                 .setDuration(180)
@@ -1087,6 +1149,18 @@ class MainActivity : AppCompatActivity() {
         binding.btnQsVideoTorchOn.setOnClickListener {
             cameraManager.flashMode = ImageCapture.FLASH_MODE_ON
             updateVideoQsUi()
+        }
+
+        binding.btnQsAudioZoomOff.setOnClickListener {
+            cameraManager.audioZoomEnabled = false
+            updateVideoQsUi()
+            Toast.makeText(this, "Audio Zoom Off", Toast.LENGTH_SHORT).show()
+        }
+
+        binding.btnQsAudioZoomOn.setOnClickListener {
+            cameraManager.audioZoomEnabled = true
+            updateVideoQsUi()
+            Toast.makeText(this, "Audio Zoom On", Toast.LENGTH_SHORT).show()
         }
 
         binding.btnQsVideoGridOff.setOnClickListener {
@@ -1814,6 +1888,7 @@ class MainActivity : AppCompatActivity() {
                 binding.proControlPanel.visibility = View.GONE
                 binding.histogramView.visibility = View.GONE
                 binding.overlayPortraitAperture.visibility = View.GONE
+                binding.overlayPanoramaGuide.visibility = View.GONE
             }
             CameraMode.LONG_EXPOSURE -> {
                 binding.tvHdrBadge.text = "LONG EXPOSURE"
@@ -1821,6 +1896,7 @@ class MainActivity : AppCompatActivity() {
                 binding.proControlPanel.visibility = View.GONE
                 binding.histogramView.visibility = View.GONE
                 binding.overlayPortraitAperture.visibility = View.GONE
+                binding.overlayPanoramaGuide.visibility = View.GONE
             }
             CameraMode.PORTRAIT -> {
                 binding.tvHdrBadge.text = "PORTRAIT DEPTH"
@@ -1828,6 +1904,7 @@ class MainActivity : AppCompatActivity() {
                 binding.proControlPanel.visibility = View.GONE
                 binding.histogramView.visibility = View.GONE
                 binding.overlayPortraitAperture.visibility = View.VISIBLE
+                binding.overlayPanoramaGuide.visibility = View.GONE
             }
             CameraMode.PRO -> {
                 binding.tvHdrBadge.text = "PRO MANUAL"
@@ -1835,12 +1912,14 @@ class MainActivity : AppCompatActivity() {
                 binding.proControlPanel.visibility = View.VISIBLE
                 binding.histogramView.visibility = View.VISIBLE
                 binding.overlayPortraitAperture.visibility = View.GONE
+                binding.overlayPanoramaGuide.visibility = View.GONE
             }
             CameraMode.VIDEO -> {
                 updateVideoBadgeText()
                 binding.proControlPanel.visibility = View.GONE
                 binding.histogramView.visibility = View.GONE
                 binding.overlayPortraitAperture.visibility = View.GONE
+                binding.overlayPanoramaGuide.visibility = View.GONE
             }
             CameraMode.CAMERA -> {
                 binding.tvHdrBadge.text = "HDR+ ON"
@@ -1848,6 +1927,7 @@ class MainActivity : AppCompatActivity() {
                 binding.proControlPanel.visibility = View.GONE
                 binding.histogramView.visibility = View.GONE
                 binding.overlayPortraitAperture.visibility = View.GONE
+                binding.overlayPanoramaGuide.visibility = View.GONE
             }
             CameraMode.PANORAMA -> {
                 binding.tvHdrBadge.text = "PANORAMA"
@@ -1855,6 +1935,10 @@ class MainActivity : AppCompatActivity() {
                 binding.proControlPanel.visibility = View.GONE
                 binding.histogramView.visibility = View.GONE
                 binding.overlayPortraitAperture.visibility = View.GONE
+                binding.overlayPanoramaGuide.visibility = View.VISIBLE
+                binding.tvPanoramaPrompt.text = "Pan steadily along the line"
+                binding.tvPanoramaAngle.text = "0° / 180°"
+                binding.pbPanoramaProgress.progress = 0
             }
         }
 
@@ -1969,6 +2053,11 @@ class MainActivity : AppCompatActivity() {
             return
         }
 
+        if (currentMode == CameraMode.PANORAMA) {
+            handlePanoramaShutter()
+            return
+        }
+
         if (isCapturing) return
 
         if (timerDuration > 0) {
@@ -2077,6 +2166,63 @@ class MainActivity : AppCompatActivity() {
                 startVideoRecordingUi()
             } else {
                 Toast.makeText(this, "Failed to start recording", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
+    private fun handlePanoramaShutter() {
+        if (!cameraManager.isCapturingPanorama()) {
+            cameraManager.startPanoramaCapture()
+            binding.btnShutter.setBackgroundResource(R.drawable.bg_shutter_video_recording)
+            binding.tvPanoramaPrompt.text = "Pan steadily along the line →"
+            binding.tvPanoramaAngle.text = "0° / 180°"
+            binding.pbPanoramaProgress.progress = 0
+            Toast.makeText(this, "Panorama capture started. Pan right steadily.", Toast.LENGTH_SHORT).show()
+        } else {
+            binding.tvPanoramaPrompt.text = "Finalizing panorama..."
+            binding.btnShutter.setBackgroundResource(R.drawable.bg_shutter_button)
+            lifecycleScope.launch {
+                binding.processingPill.visibility = View.VISIBLE
+                binding.tvProcessingStatus.text = "Stitching panorama..."
+                val uri = cameraManager.stopPanoramaCapture()
+                binding.processingPill.visibility = View.GONE
+                if (uri != null) {
+                    latestCapturedUri = uri
+                    loadLatestGalleryThumbnail()
+                    updateStorageBadge()
+                    Toast.makeText(this@MainActivity, "Panorama saved successfully", Toast.LENGTH_SHORT).show()
+                } else {
+                    Toast.makeText(this@MainActivity, "Panorama capture ended", Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
+    }
+
+    private fun setupAudioZoom() {
+        cameraManager.audioZoomManager.onAudioZoomStateChanged = { isActive, zoomRatio, _ ->
+            runOnUiThread {
+                if (isActive) {
+                    binding.tvAudioZoomIndicator.visibility = View.VISIBLE
+                    binding.tvAudioZoomIndicator.text = "AUDIO ZOOM ${String.format(Locale.US, "%.1f", zoomRatio)}×"
+                } else {
+                    binding.tvAudioZoomIndicator.visibility = View.GONE
+                }
+            }
+        }
+    }
+
+    private fun setupPanoramaEngine() {
+        cameraManager.panoramaEngine.onPanoramaProgress = { degrees, progressPercent, stripPreview ->
+            runOnUiThread {
+                binding.tvPanoramaAngle.text = "${degrees.toInt()}° / 180°"
+                binding.pbPanoramaProgress.progress = progressPercent
+                if (stripPreview != null) {
+                    binding.ivPanoramaStrip.setImageBitmap(stripPreview)
+                }
+                binding.ivPanoramaArrow.translationX = (progressPercent * 1.5f).coerceAtMost(160f)
+                if (progressPercent >= 100 && cameraManager.isCapturingPanorama()) {
+                    handlePanoramaShutter()
+                }
             }
         }
     }
