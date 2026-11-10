@@ -356,7 +356,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun initDefaultUiState() {
         // Ensure Photo mode is default with warm sand pill
-        selectModeUi(binding.modeCamera)
+        selectModeUi(binding.modeCamera, smoothScroll = false)
         updatePhotoVideoToggle(isVideo = false)
         selectZoomPill(binding.btnZoom1x)
         binding.overlayPortraitAperture.visibility = View.GONE
@@ -1280,6 +1280,7 @@ class MainActivity : AppCompatActivity() {
             Toast.makeText(this, "Panorama Mode", Toast.LENGTH_SHORT).show()
         }
         binding.modePro.setOnClickListener { setMode(CameraMode.PRO, binding.modePro) }
+        setupModeCarousel()
 
         // Portrait Aperture Slider (f/1.4 - f/16)
         binding.sbAperture.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
@@ -1833,7 +1834,129 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun selectModeUi(selectedView: TextView) {
+    private var isUserScrollingCarousel = false
+    private var lastCarouselScrollX = -1
+    private val carouselFlingChecker = object : Runnable {
+        override fun run() {
+            val currentScrollX = binding.modeCarousel.scrollX
+            if (lastCarouselScrollX == currentScrollX) {
+                snapCarouselToNearestMode()
+            } else {
+                lastCarouselScrollX = currentScrollX
+                binding.modeCarousel.postDelayed(this, 50)
+            }
+        }
+    }
+
+    private fun setupModeCarousel() {
+        binding.modeCarousel.clipToPadding = false
+        binding.modeCarousel.overScrollMode = View.OVER_SCROLL_NEVER
+
+        binding.modeCarousel.viewTreeObserver.addOnGlobalLayoutListener(object : android.view.ViewTreeObserver.OnGlobalLayoutListener {
+            override fun onGlobalLayout() {
+                val halfScreen = binding.modeCarousel.width / 2
+                if (halfScreen > 0 && binding.modeLongExposure.width > 0 && binding.modePro.width > 0) {
+                    binding.modeCarousel.viewTreeObserver.removeOnGlobalLayoutListener(this)
+                    val padStart = (halfScreen - binding.modeLongExposure.width / 2).coerceAtLeast(0)
+                    val padEnd = (halfScreen - binding.modePro.width / 2).coerceAtLeast(0)
+                    binding.modeCarouselContent.setPadding(padStart, 0, padEnd, 0)
+
+                    // Immediately center current active mode (Photo) on start
+                    binding.modeCarouselContent.post {
+                        centerModeView(getCurrentActiveModeView(), smooth = false)
+                    }
+                }
+            }
+        })
+
+        // Touch & fling snapping for tactile Pixel swipe interaction
+        binding.modeCarousel.setOnTouchListener { _, event ->
+            when (event.actionMasked) {
+                MotionEvent.ACTION_DOWN -> {
+                    isUserScrollingCarousel = true
+                    binding.modeCarousel.removeCallbacks(carouselFlingChecker)
+                }
+                MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                    isUserScrollingCarousel = false
+                    lastCarouselScrollX = binding.modeCarousel.scrollX
+                    binding.modeCarousel.postDelayed(carouselFlingChecker, 50)
+                }
+            }
+            false
+        }
+
+        binding.modeCarousel.setOnScrollChangeListener { _, _, _, _, _ ->
+            if (!isUserScrollingCarousel) {
+                binding.modeCarousel.removeCallbacks(carouselFlingChecker)
+                lastCarouselScrollX = binding.modeCarousel.scrollX
+                binding.modeCarousel.postDelayed(carouselFlingChecker, 50)
+            }
+        }
+    }
+
+    private fun getCurrentActiveModeView(): TextView {
+        return when (currentMode) {
+            CameraMode.LONG_EXPOSURE -> binding.modeLongExposure
+            CameraMode.PORTRAIT -> binding.modePortrait
+            CameraMode.CAMERA -> binding.modeCamera
+            CameraMode.NIGHT_SIGHT -> binding.modeNightSight
+            CameraMode.PANORAMA -> binding.modePanorama
+            CameraMode.PRO -> binding.modePro
+            else -> binding.modeCamera
+        }
+    }
+
+    private fun centerModeView(view: TextView, smooth: Boolean = true) {
+        view.post {
+            val halfScreen = binding.modeCarousel.width / 2
+            if (halfScreen <= 0 || view.width <= 0) return@post
+            val viewCenter = view.left + view.width / 2
+            val targetScrollX = viewCenter - halfScreen
+            if (smooth) {
+                binding.modeCarousel.smoothScrollTo(targetScrollX, 0)
+            } else {
+                binding.modeCarousel.scrollTo(targetScrollX, 0)
+            }
+        }
+    }
+
+    private fun snapCarouselToNearestMode() {
+        val halfScreen = binding.modeCarousel.width / 2
+        if (halfScreen <= 0) return
+        val currentCenter = binding.modeCarousel.scrollX + halfScreen
+
+        val modeItems = listOf(
+            Pair(binding.modeLongExposure, CameraMode.LONG_EXPOSURE),
+            Pair(binding.modePortrait, CameraMode.PORTRAIT),
+            Pair(binding.modeCamera, CameraMode.CAMERA),
+            Pair(binding.modeNightSight, CameraMode.NIGHT_SIGHT),
+            Pair(binding.modePanorama, CameraMode.PANORAMA),
+            Pair(binding.modePro, CameraMode.PRO)
+        )
+
+        var closestView = binding.modeCamera
+        var closestMode = CameraMode.CAMERA
+        var minDistance = Int.MAX_VALUE
+
+        for ((view, mode) in modeItems) {
+            if (view.width <= 0) continue
+            val viewCenter = view.left + view.width / 2
+            val distance = kotlin.math.abs(viewCenter - currentCenter)
+            if (distance < minDistance) {
+                minDistance = distance
+                closestView = view
+                closestMode = mode
+            }
+        }
+
+        centerModeView(closestView, smooth = true)
+        if (currentMode != closestMode) {
+            setMode(closestMode, closestView)
+            binding.modeCarousel.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK)
+        }
+    }
+
+    private fun selectModeUi(selectedView: TextView, smoothScroll: Boolean = true) {
         val modeViews = listOf(
             binding.modeLongExposure,
             binding.modePortrait,
@@ -1854,9 +1977,11 @@ class MainActivity : AppCompatActivity() {
                 v.paint.isFakeBoldText = false
             }
         }
+        centerModeView(selectedView, smooth = smoothScroll)
     }
 
     private fun setMode(mode: CameraMode, selectedView: TextView) {
+        selectModeUi(selectedView, smoothScroll = true)
         if (currentMode == mode) return
 
         // If recording video when switching modes, stop it first
@@ -1867,8 +1992,6 @@ class MainActivity : AppCompatActivity() {
 
         currentMode = mode
         cameraManager.currentCameraMode = mode
-
-        selectModeUi(selectedView)
 
         // Update Tier 3 Toggle Pill
         updatePhotoVideoToggle(isVideo = (mode == CameraMode.VIDEO))

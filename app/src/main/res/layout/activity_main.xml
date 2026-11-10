@@ -2211,14 +2211,16 @@
             android:layout_width="match_parent"
             android:layout_height="44dp"
             android:layout_marginTop="2dp"
+            android:clipToPadding="false"
+            android:overScrollMode="never"
             android:scrollbars="none">
 
             <LinearLayout
+                android:id="@+id/modeCarouselContent"
                 android:layout_width="wrap_content"
                 android:layout_height="match_parent"
                 android:gravity="center_vertical"
-                android:orientation="horizontal"
-                android:paddingHorizontal="24dp">
+                android:orientation="horizontal">
 
                 <TextView
                     android:id="@+id/modeLongExposure"
