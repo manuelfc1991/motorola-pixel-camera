@@ -117,6 +117,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var scaleGestureDetector: ScaleGestureDetector
     private lateinit var gestureDetector: GestureDetector
     private var gridMode: Int = 1 // 0: Off, 1: 3x3, 2: Golden Ratio
+    private var isProTabActive: Boolean = false
 
     private val sensorListener = object : SensorEventListener {
         override fun onSensorChanged(event: SensorEvent?) {
@@ -337,12 +338,40 @@ class MainActivity : AppCompatActivity() {
             ImageCapture.FLASH_MODE_AUTO -> 1
             else -> 0
         }
+
+        val videoQualityPref = prefs.getString(SettingsActivity.KEY_VIDEO_QUALITY, "1080p")
+        val videoFpsPref = prefs.getInt(SettingsActivity.KEY_VIDEO_FPS, 30)
+        cameraManager.currentVideoResolution = if (videoQualityPref == "4k") CameraManager.VideoResolution.UHD else CameraManager.VideoResolution.FHD
+        cameraManager.currentVideoFps = if (videoFpsPref == 60) CameraManager.VideoFps.FPS_60 else CameraManager.VideoFps.FPS_30
+
         updateFlashUi(flashPref)
         updateQuickSettingsUi()
     }
 
     private fun updateQuickSettingsUi() {
         updateStorageBadge()
+
+        if (currentMode == CameraMode.VIDEO) {
+            binding.tvQsTitle.text = "Video settings"
+            binding.segmentedTabsContainer.visibility = View.GONE
+            binding.containerQsGeneral.visibility = View.GONE
+            binding.containerQsPro.visibility = View.GONE
+            binding.containerQsVideo.visibility = View.VISIBLE
+            updateVideoQsUi()
+            return
+        }
+
+        binding.tvQsTitle.text = if (currentMode == CameraMode.NIGHT_SIGHT) "Night Sight settings" else "Photo settings"
+        binding.segmentedTabsContainer.visibility = View.VISIBLE
+        binding.containerQsVideo.visibility = View.GONE
+        if (isProTabActive) {
+            binding.containerQsGeneral.visibility = View.GONE
+            binding.containerQsPro.visibility = View.VISIBLE
+        } else {
+            binding.containerQsGeneral.visibility = View.VISIBLE
+            binding.containerQsPro.visibility = View.GONE
+        }
+
         // 1. More light row
         when (moreLightMode) {
             0 -> {
@@ -447,6 +476,80 @@ class MainActivity : AppCompatActivity() {
 
         binding.btnQsGridGolden.setBackgroundResource(if (gridMode == 2) activeBg else inactiveBg)
         binding.btnQsGridGolden.setTextColor(if (gridMode == 2) activeTextColor else inactiveTextColor)
+    }
+
+    private fun updateVideoQsUi() {
+        val isUhd = cameraManager.currentVideoResolution == CameraManager.VideoResolution.UHD
+        val is60 = cameraManager.currentVideoFps == CameraManager.VideoFps.FPS_60
+
+        // Subtitles
+        val presetText = if (isUhd) {
+            "4K Ultra HD • 30 fps"
+        } else if (is60) {
+            "Full HD • 60 fps"
+        } else {
+            "Full HD • 30 fps"
+        }
+        binding.tvQsVideoPresetSubtitle.text = presetText
+        binding.tvQsVideoResSubtitle.text = if (isUhd) "4K Ultra HD (2160p)" else "Full HD (1080p)"
+        binding.tvQsVideoFpsSubtitle.text = if (isUhd) "30 fps (4K)" else if (is60) "60 fps" else "30 fps"
+
+        // Preset Pills
+        setQsPillActive(binding.btnQsPreset1080p30, !isUhd && !is60)
+        setQsPillActive(binding.btnQsPreset1080p60, !isUhd && is60)
+        setQsPillActive(binding.btnQsPreset4k30, isUhd)
+
+        // Res Pills
+        setQsPillActive(binding.btnQsVideoResFhd, !isUhd)
+        setQsPillActive(binding.btnQsVideoRes4k, isUhd)
+
+        // FPS Pills
+        setQsPillActive(binding.btnQsVideoFps30, !is60)
+        setQsPillActive(binding.btnQsVideoFps60, is60)
+        binding.btnQsVideoFps60.alpha = if (isUhd) 0.4f else 1.0f
+
+        // Torch
+        val isTorch = cameraManager.flashMode == ImageCapture.FLASH_MODE_ON
+        binding.tvQsVideoTorchSubtitle.text = if (isTorch) "Torch on" else "Off"
+        setQsButtonActive(binding.btnQsVideoTorchOff, !isTorch)
+        setQsButtonActive(binding.btnQsVideoTorchOn, isTorch)
+
+        // Grid in Video
+        binding.tvQsVideoGridSubtitle.text = when (gridMode) {
+            1 -> "3×3 standard"
+            2 -> "Golden ratio (Phi)"
+            else -> "Off"
+        }
+        val activeBg = R.drawable.bg_qs_btn_active
+        val inactiveBg = R.drawable.bg_qs_btn_inactive
+        val activeTextColor = ContextCompat.getColor(this, R.color.pixel_pill_text_active)
+        val inactiveTextColor = ContextCompat.getColor(this, R.color.pixel_text_white)
+        binding.btnQsVideoGridOff.setBackgroundResource(if (gridMode == 0) activeBg else inactiveBg)
+        binding.btnQsVideoGridOff.setTextColor(if (gridMode == 0) activeTextColor else inactiveTextColor)
+        binding.btnQsVideoGrid3x3.setBackgroundResource(if (gridMode == 1) activeBg else inactiveBg)
+        binding.btnQsVideoGrid3x3.setTextColor(if (gridMode == 1) activeTextColor else inactiveTextColor)
+        binding.btnQsVideoGridGolden.setBackgroundResource(if (gridMode == 2) activeBg else inactiveBg)
+        binding.btnQsVideoGridGolden.setTextColor(if (gridMode == 2) activeTextColor else inactiveTextColor)
+    }
+
+    private fun setQsPillActive(view: TextView, active: Boolean) {
+        if (active) {
+            view.setBackgroundResource(R.drawable.bg_segmented_pill_active)
+            view.setTextColor(ContextCompat.getColor(this, R.color.pixel_pill_text_active))
+            view.paint.isFakeBoldText = true
+        } else {
+            view.background = null
+            view.setTextColor(ContextCompat.getColor(this, R.color.pixel_text_white))
+            view.paint.isFakeBoldText = false
+        }
+    }
+
+    private fun updateVideoBadgeText() {
+        if (currentMode != CameraMode.VIDEO) return
+        val isUhd = cameraManager.currentVideoResolution == CameraManager.VideoResolution.UHD
+        val is60 = cameraManager.currentVideoFps == CameraManager.VideoFps.FPS_60
+        val text = if (isUhd) "4K UHD • 30 FPS" else if (is60) "FHD • 60 FPS" else "FHD • 30 FPS"
+        binding.tvHdrBadge.text = text
     }
 
     private fun setQsButtonActive(button: ImageView, active: Boolean) {
@@ -620,6 +723,7 @@ class MainActivity : AppCompatActivity() {
 
         // MGC 9.7 Segmented Tabs: [ General | Pro ]
         binding.tabQsGeneral.setOnClickListener {
+            isProTabActive = false
             binding.tabQsGeneral.setBackgroundResource(R.drawable.bg_segmented_pill_active)
             binding.tabQsGeneral.setTextColor(ContextCompat.getColor(this, R.color.pixel_pill_text_active))
             binding.tabQsGeneral.paint.isFakeBoldText = true
@@ -633,6 +737,7 @@ class MainActivity : AppCompatActivity() {
         }
 
         binding.tabQsPro.setOnClickListener {
+            isProTabActive = true
             binding.tabQsPro.setBackgroundResource(R.drawable.bg_segmented_pill_active)
             binding.tabQsPro.setTextColor(ContextCompat.getColor(this, R.color.pixel_pill_text_active))
             binding.tabQsPro.paint.isFakeBoldText = true
@@ -697,6 +802,118 @@ class MainActivity : AppCompatActivity() {
         // Quick Settings - Floating "More settings" Pill
         binding.btnMoreSettings.setOnClickListener {
             startActivity(Intent(this, SettingsActivity::class.java))
+        }
+
+        // Quick Settings - Video Mode Listeners
+        binding.btnQsPreset1080p30.setOnClickListener {
+            if (cameraManager.isRecordingVideo()) return@setOnClickListener
+            cameraManager.setVideoProfile(CameraManager.VideoResolution.FHD, CameraManager.VideoFps.FPS_30)
+            prefs.edit().putString(SettingsActivity.KEY_VIDEO_QUALITY, "1080p")
+                .putInt(SettingsActivity.KEY_VIDEO_FPS, 30).apply()
+            updateVideoQsUi()
+            updateVideoBadgeText()
+            updateStorageBadge()
+            Toast.makeText(this, "Video: 1080p 30 fps", Toast.LENGTH_SHORT).show()
+        }
+
+        binding.btnQsPreset1080p60.setOnClickListener {
+            if (cameraManager.isRecordingVideo()) return@setOnClickListener
+            cameraManager.setVideoProfile(CameraManager.VideoResolution.FHD, CameraManager.VideoFps.FPS_60)
+            prefs.edit().putString(SettingsActivity.KEY_VIDEO_QUALITY, "1080p")
+                .putInt(SettingsActivity.KEY_VIDEO_FPS, 60).apply()
+            updateVideoQsUi()
+            updateVideoBadgeText()
+            updateStorageBadge()
+            Toast.makeText(this, "Video: 1080p 60 fps", Toast.LENGTH_SHORT).show()
+        }
+
+        binding.btnQsPreset4k30.setOnClickListener {
+            if (cameraManager.isRecordingVideo()) return@setOnClickListener
+            if (cameraManager.isFrontCamera()) {
+                Toast.makeText(this, "4K UHD is available on rear camera", Toast.LENGTH_SHORT).show()
+                return@setOnClickListener
+            }
+            cameraManager.setVideoProfile(CameraManager.VideoResolution.UHD, CameraManager.VideoFps.FPS_30)
+            prefs.edit().putString(SettingsActivity.KEY_VIDEO_QUALITY, "4k")
+                .putInt(SettingsActivity.KEY_VIDEO_FPS, 30).apply()
+            updateVideoQsUi()
+            updateVideoBadgeText()
+            updateStorageBadge()
+            Toast.makeText(this, "Video: 4K UHD 30 fps", Toast.LENGTH_SHORT).show()
+        }
+
+        binding.btnQsVideoResFhd.setOnClickListener {
+            if (cameraManager.isRecordingVideo()) return@setOnClickListener
+            cameraManager.setVideoResolution(CameraManager.VideoResolution.FHD)
+            prefs.edit().putString(SettingsActivity.KEY_VIDEO_QUALITY, "1080p").apply()
+            updateVideoQsUi()
+            updateVideoBadgeText()
+            updateStorageBadge()
+        }
+
+        binding.btnQsVideoRes4k.setOnClickListener {
+            if (cameraManager.isRecordingVideo()) return@setOnClickListener
+            if (cameraManager.isFrontCamera()) {
+                Toast.makeText(this, "4K UHD is available on rear camera", Toast.LENGTH_SHORT).show()
+                return@setOnClickListener
+            }
+            cameraManager.setVideoResolution(CameraManager.VideoResolution.UHD)
+            prefs.edit().putString(SettingsActivity.KEY_VIDEO_QUALITY, "4k")
+                .putInt(SettingsActivity.KEY_VIDEO_FPS, 30).apply()
+            updateVideoQsUi()
+            updateVideoBadgeText()
+            updateStorageBadge()
+            Toast.makeText(this, "Video: 4K UHD 30 fps", Toast.LENGTH_SHORT).show()
+        }
+
+        binding.btnQsVideoFps30.setOnClickListener {
+            if (cameraManager.isRecordingVideo()) return@setOnClickListener
+            cameraManager.setVideoFps(CameraManager.VideoFps.FPS_30)
+            prefs.edit().putInt(SettingsActivity.KEY_VIDEO_FPS, 30).apply()
+            updateVideoQsUi()
+            updateVideoBadgeText()
+        }
+
+        binding.btnQsVideoFps60.setOnClickListener {
+            if (cameraManager.isRecordingVideo()) return@setOnClickListener
+            if (cameraManager.currentVideoResolution == CameraManager.VideoResolution.UHD) {
+                // Dimensity 800U supports 60fps at 1080p, automatically switch to 1080p
+                cameraManager.setVideoProfile(CameraManager.VideoResolution.FHD, CameraManager.VideoFps.FPS_60)
+                prefs.edit().putString(SettingsActivity.KEY_VIDEO_QUALITY, "1080p")
+                    .putInt(SettingsActivity.KEY_VIDEO_FPS, 60).apply()
+                Toast.makeText(this, "60 fps active (switched to 1080p)", Toast.LENGTH_SHORT).show()
+            } else {
+                cameraManager.setVideoFps(CameraManager.VideoFps.FPS_60)
+                prefs.edit().putInt(SettingsActivity.KEY_VIDEO_FPS, 60).apply()
+                Toast.makeText(this, "Video: 60 fps", Toast.LENGTH_SHORT).show()
+            }
+            updateVideoQsUi()
+            updateVideoBadgeText()
+        }
+
+        binding.btnQsVideoTorchOff.setOnClickListener {
+            cameraManager.flashMode = ImageCapture.FLASH_MODE_OFF
+            updateVideoQsUi()
+        }
+
+        binding.btnQsVideoTorchOn.setOnClickListener {
+            cameraManager.flashMode = ImageCapture.FLASH_MODE_ON
+            updateVideoQsUi()
+        }
+
+        binding.btnQsVideoGridOff.setOnClickListener {
+            setGridType(0)
+            updateVideoQsUi()
+        }
+
+        binding.btnQsVideoGrid3x3.setOnClickListener {
+            setGridType(1)
+            updateVideoQsUi()
+        }
+
+        binding.btnQsVideoGridGolden.setOnClickListener {
+            setGridType(2)
+            updateVideoQsUi()
         }
 
         // Flash Button Quick Toggle in Top Bar (Off -> Auto -> On -> Off)
@@ -1167,6 +1384,21 @@ class MainActivity : AppCompatActivity() {
         binding.btnQsGridGolden.setBackgroundResource(if (mode == 2) activeBg else inactiveBg)
         binding.btnQsGridGolden.setTextColor(if (mode == 2) activeTextColor else inactiveTextColor)
 
+        binding.btnQsVideoGridOff.setBackgroundResource(if (mode == 0) activeBg else inactiveBg)
+        binding.btnQsVideoGridOff.setTextColor(if (mode == 0) activeTextColor else inactiveTextColor)
+
+        binding.btnQsVideoGrid3x3.setBackgroundResource(if (mode == 1) activeBg else inactiveBg)
+        binding.btnQsVideoGrid3x3.setTextColor(if (mode == 1) activeTextColor else inactiveTextColor)
+
+        binding.btnQsVideoGridGolden.setBackgroundResource(if (mode == 2) activeBg else inactiveBg)
+        binding.btnQsVideoGridGolden.setTextColor(if (mode == 2) activeTextColor else inactiveTextColor)
+
+        binding.tvQsVideoGridSubtitle.text = when (mode) {
+            1 -> "3 × 3"
+            2 -> "Golden Ratio"
+            else -> "Off"
+        }
+
         when (mode) {
             0 -> {
                 binding.gridOverlay.visibility = View.GONE
@@ -1277,7 +1509,8 @@ class MainActivity : AppCompatActivity() {
             val gbAvailable = bytesAvailable / (1024.0 * 1024.0 * 1024.0)
 
             if (currentMode == CameraMode.VIDEO) {
-                val minutesLeft = (bytesAvailable / (12L * 1024 * 1024 * 60)).toInt()
+                val mbPerMin = if (cameraManager.currentVideoResolution == CameraManager.VideoResolution.UHD) 380L * 1024 * 1024 else 130L * 1024 * 1024
+                val minutesLeft = (bytesAvailable / mbPerMin).toInt()
                 binding.tvStorageInfo.text = String.format(Locale.US, "%.1f GB • ~%d min video", gbAvailable, minutesLeft)
             } else {
                 val photosLeft = (bytesAvailable / (4L * 1024 * 1024)).toInt()
@@ -1408,7 +1641,7 @@ class MainActivity : AppCompatActivity() {
                 binding.overlayPortraitAperture.visibility = View.GONE
             }
             CameraMode.VIDEO -> {
-                binding.tvHdrBadge.text = "FHD VIDEO"
+                updateVideoBadgeText()
                 binding.proControlPanel.visibility = View.GONE
                 binding.histogramView.visibility = View.GONE
                 binding.overlayPortraitAperture.visibility = View.GONE
@@ -1423,6 +1656,7 @@ class MainActivity : AppCompatActivity() {
 
         // Rebind use cases for optimal performance in active mode
         cameraManager.bindCameraUseCases()
+        updateQuickSettingsUi()
     }
 
     private fun showFocusReticleAndSlider(x: Float, y: Float) {

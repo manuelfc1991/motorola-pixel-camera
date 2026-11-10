@@ -64,6 +64,19 @@ class CameraManager(private val context: Context) {
 
     var currentCameraMode: CameraMode = CameraMode.CAMERA
 
+    enum class VideoResolution(val label: String, val quality: Quality) {
+        FHD("1080p", Quality.FHD),
+        UHD("4K", Quality.UHD)
+    }
+
+    enum class VideoFps(val label: String, val fps: Int) {
+        FPS_30("30 fps", 30),
+        FPS_60("60 fps", 60)
+    }
+
+    var currentVideoResolution: VideoResolution = VideoResolution.FHD
+    var currentVideoFps: VideoFps = VideoFps.FPS_30
+
     var isRawEnabled: Boolean = false
     var is108MpEnabled: Boolean = false
     var aspectRatio: Int = AspectRatio.RATIO_4_3
@@ -124,7 +137,7 @@ class CameraManager(private val context: Context) {
 
         val cameraSelector = getCameraSelectorForId(currentCameraId)
 
-        val aspectStrategy = if (aspectRatio == AspectRatio.RATIO_16_9) {
+        val aspectStrategy = if (aspectRatio == AspectRatio.RATIO_16_9 || currentCameraMode == CameraMode.VIDEO) {
             AspectRatioStrategy.RATIO_16_9_FALLBACK_AUTO_STRATEGY
         } else {
             AspectRatioStrategy.RATIO_4_3_FALLBACK_AUTO_STRATEGY
@@ -135,7 +148,7 @@ class CameraManager(private val context: Context) {
             .setAspectRatioStrategy(aspectStrategy)
             .setResolutionStrategy(
                 ResolutionStrategy(
-                    if (aspectRatio == AspectRatio.RATIO_16_9) Size(1920, 1080) else Size(1920, 1440),
+                    if (aspectRatio == AspectRatio.RATIO_16_9 || currentCameraMode == CameraMode.VIDEO) Size(1920, 1080) else Size(1920, 1440),
                     ResolutionStrategy.FALLBACK_RULE_CLOSEST_HIGHER_THEN_LOWER
                 )
             )
@@ -153,6 +166,14 @@ class CameraManager(private val context: Context) {
         if (currentCameraMode == CameraMode.NIGHT_SIGHT) {
             previewExtender.setCaptureRequestOption(CaptureRequest.CONTROL_MODE, CaptureRequest.CONTROL_MODE_USE_SCENE_MODE)
             previewExtender.setCaptureRequestOption(CaptureRequest.CONTROL_SCENE_MODE, CaptureRequest.CONTROL_SCENE_MODE_NIGHT)
+        }
+        if (currentCameraMode == CameraMode.VIDEO) {
+            val targetFps = if (currentVideoFps == VideoFps.FPS_60 && currentVideoResolution != VideoResolution.UHD) {
+                android.util.Range(60, 60)
+            } else {
+                android.util.Range(30, 30)
+            }
+            previewExtender.setCaptureRequestOption(CaptureRequest.CONTROL_AE_TARGET_FPS_RANGE, targetFps)
         }
 
         preview = previewBuilder.build().also {
@@ -203,8 +224,18 @@ class CameraManager(private val context: Context) {
         imageCapture = captureBuilder.build()
 
         // 3. Video Capture Use Case (Full HD 1080p / 4K recording)
+        val targetQuality = if (currentVideoResolution == VideoResolution.UHD && currentCameraId != CAMERA_FRONT) {
+            Quality.UHD
+        } else {
+            Quality.FHD
+        }
         val recorder = Recorder.Builder()
-            .setQualitySelector(QualitySelector.from(Quality.FHD, FallbackStrategy.higherQualityOrLowerThan(Quality.FHD)))
+            .setQualitySelector(
+                QualitySelector.from(
+                    targetQuality,
+                    FallbackStrategy.lowerQualityOrHigherThan(Quality.FHD)
+                )
+            )
             .build()
         videoCapture = VideoCapture.withOutput(recorder)
 
@@ -263,6 +294,9 @@ class CameraManager(private val context: Context) {
             val zState = camera?.cameraInfo?.zoomState?.value
             Log.i(TAG, "Active camera zoom range: min=${zState?.minZoomRatio}, max=${zState?.maxZoomRatio}, current=${zState?.zoomRatio}")
             setZoom(currentZoomRatio)
+            if (currentCameraMode == CameraMode.VIDEO) {
+                applyVideoFps()
+            }
         } catch (exc: Exception) {
             Log.e(TAG, "Use case binding failed, falling back to minimal", exc)
             try {
@@ -344,6 +378,46 @@ class CameraManager(private val context: Context) {
 
     fun getExposureCompensationIndex(): Int {
         return camera?.cameraInfo?.exposureState?.exposureCompensationIndex ?: 0
+    }
+
+    @OptIn(ExperimentalCamera2Interop::class)
+    fun applyVideoFps() {
+        val cam = camera ?: return
+        val c2Control = Camera2CameraControl.from(cam.cameraControl)
+        val targetFps = if (currentVideoFps == VideoFps.FPS_60 && currentVideoResolution != VideoResolution.UHD) {
+            android.util.Range(60, 60)
+        } else {
+            android.util.Range(30, 30)
+        }
+        val options = CaptureRequestOptions.Builder()
+            .setCaptureRequestOption(CaptureRequest.CONTROL_AE_TARGET_FPS_RANGE, targetFps)
+            .build()
+        c2Control.setCaptureRequestOptions(options)
+        Log.i(TAG, "Applied video FPS range: $targetFps (Res: $currentVideoResolution, FPS: $currentVideoFps)")
+    }
+
+    fun setVideoProfile(resolution: VideoResolution, fps: VideoFps) {
+        val resolutionChanged = (currentVideoResolution != resolution)
+        val fpsChanged = (currentVideoFps != fps)
+
+        currentVideoResolution = resolution
+        currentVideoFps = if (resolution == VideoResolution.UHD) VideoFps.FPS_30 else fps
+
+        if (currentCameraMode == CameraMode.VIDEO) {
+            if (resolutionChanged) {
+                bindCameraUseCases()
+            } else if (fpsChanged) {
+                applyVideoFps()
+            }
+        }
+    }
+
+    fun setVideoResolution(resolution: VideoResolution) {
+        setVideoProfile(resolution, currentVideoFps)
+    }
+
+    fun setVideoFps(fps: VideoFps) {
+        setVideoProfile(currentVideoResolution, fps)
     }
 
     var currentManualIso: Int = 0 // 0 = Auto
