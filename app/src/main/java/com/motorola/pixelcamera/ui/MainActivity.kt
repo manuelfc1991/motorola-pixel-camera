@@ -12,6 +12,8 @@ import android.graphics.Rect
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.os.Environment
+import android.os.StatFs
 import android.provider.MediaStore
 import android.util.Size
 import android.view.GestureDetector
@@ -19,6 +21,8 @@ import android.view.KeyEvent
 import android.view.MotionEvent
 import android.view.ScaleGestureDetector
 import android.view.View
+import android.view.WindowManager
+import java.util.Locale
 import android.widget.ImageView
 import android.widget.SeekBar
 import android.widget.TextView
@@ -80,6 +84,7 @@ class MainActivity : AppCompatActivity() {
     // Aperture blur strength for Portrait mode (progress 0..100)
     private var portraitBlurProgress = 50
     private var latestCapturedUri: Uri? = null
+    private var isSelfieWarmLightActive = false
 
     // Gyroscope / Accelerometer Horizon Level Indicator
     private var sensorManager: SensorManager? = null
@@ -337,6 +342,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun updateQuickSettingsUi() {
+        updateStorageBadge()
         // 1. More light row
         when (moreLightMode) {
             0 -> {
@@ -1133,6 +1139,7 @@ class MainActivity : AppCompatActivity() {
         if (!isFront) {
             selectZoomPill(binding.btnZoom1x)
         }
+        checkSelfieRingLight()
     }
 
     private fun updateZoomUiForRatio(zoom: Float) {
@@ -1235,6 +1242,51 @@ class MainActivity : AppCompatActivity() {
         prefs.edit().putInt(SettingsActivity.KEY_FLASH_MODE, mode).apply()
         updateFlashUi(mode)
         updateQuickSettingsUi()
+        checkSelfieRingLight()
+    }
+
+    private fun checkSelfieRingLight() {
+        val isFront = cameraManager.isFrontCamera()
+        val shouldLight = isFront && (cameraManager.flashMode == ImageCapture.FLASH_MODE_ON)
+
+        if (shouldLight) {
+            if (!isSelfieWarmLightActive) {
+                isSelfieWarmLightActive = true
+                binding.overlaySelfieRing.visibility = View.VISIBLE
+                setScreenBrightness(1.0f)
+            }
+        } else {
+            if (isSelfieWarmLightActive) {
+                isSelfieWarmLightActive = false
+                binding.overlaySelfieRing.visibility = View.GONE
+                setScreenBrightness(WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_NONE)
+            }
+        }
+    }
+
+    private fun setScreenBrightness(brightness: Float) {
+        val lp = window.attributes
+        lp.screenBrightness = brightness
+        window.attributes = lp
+    }
+
+    private fun updateStorageBadge() {
+        try {
+            val stat = StatFs(Environment.getExternalStorageDirectory().path)
+            val bytesAvailable = stat.availableBytes
+            val gbAvailable = bytesAvailable / (1024.0 * 1024.0 * 1024.0)
+
+            if (currentMode == CameraMode.VIDEO) {
+                val minutesLeft = (bytesAvailable / (12L * 1024 * 1024 * 60)).toInt()
+                binding.tvStorageInfo.text = String.format(Locale.US, "%.1f GB • ~%d min video", gbAvailable, minutesLeft)
+            } else {
+                val photosLeft = (bytesAvailable / (4L * 1024 * 1024)).toInt()
+                val photosFormatted = if (photosLeft >= 1000) String.format(Locale.US, "%,d", photosLeft) else photosLeft.toString()
+                binding.tvStorageInfo.text = String.format(Locale.US, "%.1f GB • ~%s photos", gbAvailable, photosFormatted)
+            }
+        } catch (e: Exception) {
+            binding.tvStorageInfo.text = "Storage OK"
+        }
     }
 
     private fun setQuickRaw(enabled: Boolean) {
@@ -1512,12 +1564,26 @@ class MainActivity : AppCompatActivity() {
         }
         binding.progressThumbnailSpin.visibility = View.VISIBLE
 
+        val isFrontFlash = cameraManager.isFrontCamera() && cameraManager.flashMode != ImageCapture.FLASH_MODE_OFF
+        if (isFrontFlash) {
+            binding.overlaySelfieBurst.visibility = View.VISIBLE
+            setScreenBrightness(1.0f)
+        }
+
         lifecycleScope.launch {
+            if (isFrontFlash) {
+                delay(120)
+            }
             val blurStrength = 2f + (portraitBlurProgress / 100f) * 24f
             val uri: Uri? = cameraManager.capturePhoto(currentMode, blurStrength) { status ->
                 runOnUiThread {
                     binding.tvProcessingStatus.text = status
                 }
+            }
+
+            if (isFrontFlash) {
+                binding.overlaySelfieBurst.visibility = View.GONE
+                checkSelfieRingLight()
             }
 
             binding.processingPill.visibility = View.GONE
