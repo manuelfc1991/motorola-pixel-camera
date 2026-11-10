@@ -2,11 +2,11 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Google Pixel Camera UI Mockup</title>
+  <title>Google Pixel Camera UI (GCam 9.x) — Interactive Mockup</title>
   <script src="https://www.gstatic.com/antigravity/web/dev/tailwindcss.min.js"></script>
   <style>
     @keyframes pulse-ring {
-      0% { transform: scale(1.3); opacity: 0.9; }
+      0% { transform: scale(1.2); opacity: 0.9; }
       100% { transform: scale(1.0); opacity: 1; }
     }
     .animate-focus {
@@ -15,363 +15,394 @@
     .pixel-font {
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Google Sans", sans-serif;
     }
+    .sand-pill {
+      background-color: #E8D099;
+      color: #2E1E00;
+    }
   </style>
 </head>
-<body class="bg-transparent text-[var(--foreground)] antialiased p-2 flex flex-col items-center justify-center pixel-font">
+<body class="bg-zinc-950 text-zinc-100 antialiased p-4 flex flex-col items-center justify-center pixel-font min-h-screen">
 
-  <!-- Main Card Container -->
-  <div class="bg-[var(--card)] text-[var(--foreground)] border border-[var(--border)] rounded-2xl p-4 shadow-xl max-w-4xl w-full">
+  <!-- Container Card -->
+  <div class="bg-zinc-900 border border-zinc-800 rounded-3xl p-5 shadow-2xl max-w-5xl w-full">
     
-    <!-- Header with Screen Selector Pills -->
-    <div class="flex flex-col sm:flex-row items-center justify-between pb-3 border-b border-[var(--border)] mb-4 gap-2">
+    <!-- Top Header -->
+    <div class="flex flex-col md:flex-row items-center justify-between pb-4 border-b border-zinc-800 mb-5 gap-3">
       <div>
-        <h2 class="text-base font-bold text-[var(--foreground)] flex items-center gap-2">
-          <span class="inline-block w-3 h-3 rounded-full bg-blue-500"></span>
-          Google Pixel Camera UI — Screen Mockups
-        </h2>
-        <p class="text-xs text-[var(--muted-foreground)]">Motorola Edge 20 Fusion (108 MP HM2 + MT6853)</p>
+        <div class="flex items-center gap-2">
+          <span class="inline-block w-3 h-3 rounded-full bg-[#E8D099]"></span>
+          <h1 class="text-lg font-bold text-white tracking-tight">Google Pixel Camera UI (GCam 9.x)</h1>
+          <span class="bg-[#E8D099]/20 text-[#E8D099] text-[10px] font-bold px-2 py-0.5 rounded-full border border-[#E8D099]/30">Pixel 8 / 9 Layout</span>
+        </div>
+        <p class="text-xs text-zinc-400 mt-0.5">Motorola Edge 20 Fusion (108 MP ISOCELL HM2 • Dimensity 800U MT6853)</p>
       </div>
 
-      <!-- Mode Selector Tabs -->
-      <div class="flex flex-wrap gap-1 bg-black/20 p-1 rounded-xl border border-[var(--border)]">
-        <button onclick="switchScreen('photo')" id="tab-photo" class="px-2.5 py-1 text-xs font-semibold rounded-lg bg-blue-500 text-white shadow transition-all">1. Camera (HDR+)</button>
-        <button onclick="switchScreen('night')" id="tab-night" class="px-2.5 py-1 text-xs font-medium rounded-lg text-[var(--muted-foreground)] hover:text-[var(--foreground)] transition-all">2. Night Sight</button>
-        <button onclick="switchScreen('portrait')" id="tab-portrait" class="px-2.5 py-1 text-xs font-medium rounded-lg text-[var(--muted-foreground)] hover:text-[var(--foreground)] transition-all">3. Portrait</button>
-        <button onclick="switchScreen('pro')" id="tab-pro" class="px-2.5 py-1 text-xs font-medium rounded-lg text-[var(--muted-foreground)] hover:text-[var(--foreground)] transition-all">4. Pro Controls</button>
-        <button onclick="switchScreen('settings')" id="tab-settings" class="px-2.5 py-1 text-xs font-medium rounded-lg text-[var(--muted-foreground)] hover:text-[var(--foreground)] transition-all">5. Quick Settings</button>
+      <!-- State Selector Pills -->
+      <div class="flex flex-wrap gap-1.5 bg-black/40 p-1.5 rounded-2xl border border-zinc-800">
+        <button onclick="setScreen('photo')" id="tab-photo" class="px-3 py-1.5 text-xs font-bold rounded-xl sand-pill transition-all">1. Viewfinder (Photo)</button>
+        <button onclick="setScreen('qs')" id="tab-qs" class="px-3 py-1.5 text-xs font-medium rounded-xl text-zinc-400 hover:text-white transition-all">2. Quick Settings Card</button>
+        <button onclick="setScreen('night')" id="tab-night" class="px-3 py-1.5 text-xs font-medium rounded-xl text-zinc-400 hover:text-white transition-all">3. Night Sight</button>
+        <button onclick="setScreen('video')" id="tab-video" class="px-3 py-1.5 text-xs font-medium rounded-xl text-zinc-400 hover:text-white transition-all">4. FHD Video</button>
       </div>
     </div>
 
     <!-- Phone Screen Mockup Frame -->
-    <div class="flex justify-center">
-      <div class="w-[340px] h-[670px] bg-black rounded-[42px] border-[5px] border-zinc-800 shadow-2xl relative overflow-hidden flex flex-col select-none">
+    <div class="flex justify-center items-center py-2">
+      <div class="w-[360px] h-[740px] bg-black rounded-[46px] border-[6px] border-zinc-800 shadow-2xl relative overflow-hidden flex flex-col select-none">
         
-        <!-- Screen Punch Hole Camera -->
-        <div class="absolute top-3 left-1/2 -translate-x-1/2 w-3.5 h-3.5 bg-zinc-900 rounded-full border border-zinc-800 z-50 flex items-center justify-center">
-          <div class="w-1.5 h-1.5 rounded-full bg-blue-900/60"></div>
-        </div>
-
-        <!-- TOP BAR (Material You Pixel Status Pills) -->
-        <div class="pt-8 px-4 pb-2 flex items-center justify-between z-30 bg-gradient-to-b from-black/80 to-transparent">
-          <div class="flex items-center gap-1.5">
-            <!-- Settings Gear / Dropdown Pill -->
-            <button onclick="switchScreen('settings')" class="bg-zinc-800/80 hover:bg-zinc-700/80 text-white px-2.5 py-1 rounded-full text-xs font-medium flex items-center gap-1 backdrop-blur-md border border-white/10">
-              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/><circle cx="12" cy="12" r="3" stroke-width="2"/></svg>
-            </button>
-            
-            <div id="badge-hdr" class="bg-blue-500/20 text-blue-300 px-2.5 py-1 rounded-full text-[11px] font-bold border border-blue-500/30">
-              HDR+ ON
-            </div>
-            <div id="badge-raw" class="bg-zinc-800/80 text-zinc-300 px-2 py-1 rounded-full text-[11px] border border-white/10 font-mono">
-              RAW
-            </div>
+        <!-- Status Bar with Punch Hole -->
+        <div class="pt-2 px-6 pb-1 flex items-center justify-between z-40 text-[11px] text-zinc-300 font-medium">
+          <span>5:57</span>
+          <div class="w-3.5 h-3.5 bg-zinc-950 rounded-full border border-zinc-800 flex items-center justify-center">
+            <div class="w-1.5 h-1.5 rounded-full bg-blue-900/60"></div>
           </div>
-
-          <div class="text-[11px] font-semibold text-zinc-400 bg-black/40 px-2 py-0.5 rounded-md backdrop-blur">
-            108MP HM2
+          <div class="flex items-center gap-1.5 text-[10px]">
+            <span>5G+</span>
+            <span>80%</span>
           </div>
         </div>
 
-        <!-- VIEWFINDER AREA -->
-        <div class="relative flex-1 bg-gradient-to-b from-zinc-900 via-zinc-800 to-zinc-950 flex items-center justify-center overflow-hidden">
+        <!-- VIEWFINDER CARD (Signature Pixel Rounded Corners) -->
+        <div class="relative flex-1 mx-1.5 mb-1 bg-zinc-950 rounded-[28px] overflow-hidden border border-white/5 flex flex-col justify-between">
           
-          <!-- Background Scene Simulation -->
-          <div id="scene-bg" class="absolute inset-0 bg-cover bg-center transition-all duration-500" style="background-image: radial-gradient(circle at 50% 40%, #3a3f4a 0%, #17191d 70%, #0d0e10 100%);">
-            <!-- Simulated subject texture -->
-            <div class="w-full h-full opacity-40 flex items-center justify-center">
-              <div class="w-44 h-56 rounded-3xl border border-white/10 bg-white/5 backdrop-blur-sm flex flex-col items-center justify-center">
-                <div class="w-20 h-20 rounded-full border border-white/20 bg-white/10 mb-2"></div>
-                <div class="w-28 h-10 rounded-xl border border-white/15 bg-white/5"></div>
+          <!-- Viewfinder Background Simulation -->
+          <div id="viewfinder-bg" class="absolute inset-0 bg-cover bg-center transition-all duration-300" style="background-image: radial-gradient(circle at 50% 45%, #2a2e36 0%, #15171b 60%, #0d0e10 100%);">
+            <!-- Simulated desk scene -->
+            <div class="w-full h-full opacity-35 flex items-center justify-center">
+              <div class="w-48 h-56 rounded-3xl border border-white/10 bg-white/5 backdrop-blur-sm flex flex-col items-center justify-center p-3">
+                <div class="w-20 h-20 rounded-full border border-white/20 bg-white/10 mb-2 flex items-center justify-center text-xs text-white/60 font-mono">108MP</div>
+                <div class="text-[11px] text-white/50">HM2 Sensor Focal Plane</div>
               </div>
             </div>
           </div>
 
-          <!-- Horizon Level Indicator Line (Pixel Style) -->
-          <div class="absolute inset-x-8 top-1/2 -translate-y-1/2 flex items-center justify-between opacity-60 pointer-events-none">
-            <div class="w-10 h-0.5 bg-yellow-400/80"></div>
-            <div class="w-2.5 h-2.5 rounded-full border border-yellow-400/80"></div>
-            <div class="w-10 h-0.5 bg-yellow-400/80"></div>
+          <!-- 3x3 Framing Rule of Thirds Grid -->
+          <div class="absolute inset-0 pointer-events-none">
+            <div class="absolute left-1/3 top-0 bottom-0 w-[0.8px] bg-white/15"></div>
+            <div class="absolute left-2/3 top-0 bottom-0 w-[0.8px] bg-white/15"></div>
+            <div class="absolute top-1/3 left-0 right-0 h-[0.8px] bg-white/15"></div>
+            <div class="absolute top-2/3 left-0 right-0 h-[0.8px] bg-white/15"></div>
           </div>
 
-          <!-- Tap to Focus Animated Yellow Ring (Screen 1 & 4) -->
-          <div id="focus-reticle" class="absolute top-[38%] left-[46%] w-14 h-14 rounded-full border-2 border-yellow-400 flex items-center justify-center animate-focus shadow-lg shadow-yellow-400/20">
-            <div class="w-1.5 h-1.5 bg-yellow-400 rounded-full"></div>
-            <!-- Exposure slider bar beside focus ring -->
-            <div class="absolute -right-5 top-1/2 -translate-y-1/2 flex flex-col items-center gap-1 bg-black/50 p-1 rounded-full">
-              <svg class="w-2.5 h-2.5 text-yellow-400" fill="currentColor" viewBox="0 0 20 20"><path d="M10 2a1 1 0 011 1v1a1 1 0 11-2 0V3a1 1 0 011-1zm4 8a4 4 0 11-8 0 4 4 0 018 0zm-.464 4.95l.707.707a1 1 0 001.414-1.414l-.707-.707a1 1 0 00-1.414 1.414zm2.12-10.607a1 1 0 010 1.414l-.706.707a1 1 0 11-1.414-1.414l.707-.707a1 1 0 011.414 0zM17 11a1 1 0 100-2h-1a1 1 0 100 2h1zm-7 4a1 1 0 011 1v1a1 1 0 11-2 0v-1a1 1 0 011-1zM5.05 6.464A1 1 0 106.465 5.05l-.708-.707a1 1 0 00-1.414 1.414l.707.707zm1.414 8.486l-.707.707a1 1 0 01-1.414-1.414l.707-.707a1 1 0 011.414 1.414zM4 11a1 1 0 100-2H3a1 1 0 000 2h1z"/></svg>
-              <div class="w-0.5 h-8 bg-white/40 rounded-full"></div>
+          <!-- Horizon Level Indicator Line -->
+          <div class="absolute inset-x-12 top-1/2 -translate-y-1/2 flex items-center justify-between opacity-65 pointer-events-none z-10">
+            <div class="w-10 h-0.5 bg-[#E8D099]"></div>
+            <div class="w-2.5 h-2.5 rounded-full border border-[#E8D099]"></div>
+            <div class="w-10 h-0.5 bg-[#E8D099]"></div>
+          </div>
+
+          <!-- Top Viewfinder Header: Minimal Sensor Badge -->
+          <div class="relative pt-3 px-4 flex items-center justify-end z-20">
+            <div class="bg-black/50 backdrop-blur-md px-2.5 py-1 rounded-full text-[11px] font-bold text-zinc-300 border border-white/10">
+              108MP HM2
             </div>
           </div>
 
-          <!-- SCREEN OVERLAY 2: Night Sight Hold Still -->
-          <div id="overlay-night" class="hidden absolute inset-0 bg-black/50 backdrop-blur-xs flex flex-col items-center justify-center z-20">
-            <div class="relative w-28 h-28 flex items-center justify-center">
-              <svg class="w-full h-full transform -rotate-90" viewBox="0 0 100 100">
-                <circle cx="50" cy="50" r="42" stroke="rgba(255,255,255,0.2)" stroke-width="4" fill="transparent" />
-                <circle cx="50" cy="50" r="42" stroke="#FDD663" stroke-width="4" stroke-dasharray="264" stroke-dashoffset="80" stroke-linecap="round" fill="transparent" />
-              </svg>
-              <div class="absolute flex flex-col items-center">
-                <span class="text-xl font-bold text-yellow-300 font-mono">1.8s</span>
-                <span class="text-[10px] text-zinc-300">Hold still</span>
-              </div>
-            </div>
-            <p class="text-xs text-zinc-200 mt-4 bg-black/60 px-3 py-1 rounded-full border border-white/10">Capturing light • Multi-frame stack</p>
-          </div>
-
-          <!-- SCREEN OVERLAY 3: Portrait Aperture Slider -->
-          <div id="overlay-portrait" class="hidden absolute bottom-4 inset-x-4 z-20 flex flex-col items-center gap-2">
-            <div class="bg-black/70 backdrop-blur-md px-3 py-1.5 rounded-full border border-white/15 flex items-center gap-3 text-xs">
-              <span class="text-yellow-400 font-bold">f / 1.8</span>
-              <div class="w-32 h-1 bg-white/20 rounded-full relative">
-                <div class="absolute left-1/3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 rounded-full bg-yellow-400 shadow"></div>
-              </div>
-              <span class="text-zinc-400 font-mono">Depth 75%</span>
-            </div>
-          </div>
-
-          <!-- SCREEN OVERLAY 4: Pro Controls Drawer & RGB Histogram -->
-          <div id="overlay-pro" class="hidden absolute inset-x-0 bottom-0 top-0 z-20 flex flex-col justify-between p-3 pointer-events-none">
-            <!-- Floating Mini Histogram -->
-            <div class="self-end bg-black/80 backdrop-blur border border-white/15 rounded-xl p-2 w-32 h-16 flex flex-col justify-between pointer-events-auto">
-              <div class="flex justify-between text-[10px] text-zinc-400 font-mono">
-                <span>RGB HIST</span>
-                <span class="text-yellow-400">108MP</span>
-              </div>
-              <!-- Simulated Waveform -->
-              <div class="h-8 flex items-end gap-0.5">
-                <div class="flex-1 bg-red-500/60 h-3 rounded-t-sm"></div>
-                <div class="flex-1 bg-green-500/60 h-6 rounded-t-sm"></div>
-                <div class="flex-1 bg-blue-500/60 h-8 rounded-t-sm"></div>
-                <div class="flex-1 bg-yellow-400/80 h-5 rounded-t-sm"></div>
-                <div class="flex-1 bg-white/60 h-4 rounded-t-sm"></div>
-                <div class="flex-1 bg-blue-400/70 h-7 rounded-t-sm"></div>
-                <div class="flex-1 bg-green-400/60 h-3 rounded-t-sm"></div>
-              </div>
-            </div>
-
-            <!-- Pro Slider Controls -->
-            <div class="bg-black/90 backdrop-blur-md border border-white/15 rounded-2xl p-3 flex flex-col gap-2 pointer-events-auto shadow-2xl">
-              <div class="flex items-center justify-between text-[11px]">
-                <span class="text-yellow-400 font-bold">ISO 400</span>
-                <span class="text-zinc-300 font-mono">1/250s</span>
-                <span class="text-blue-400 font-mono">5400K WB</span>
-                <span class="text-green-400 font-mono">EV +0.3</span>
-              </div>
-              <!-- Sliders -->
-              <div class="flex flex-col gap-1.5 pt-1 border-t border-white/10">
-                <div class="flex items-center gap-2 text-[10px]">
-                  <span class="w-8 text-zinc-400">ISO</span>
-                  <div class="flex-1 h-1 bg-zinc-700 rounded-full relative">
-                    <div class="w-1/4 h-full bg-yellow-400 rounded-full"></div>
-                    <div class="absolute left-1/4 top-1/2 -translate-y-1/2 w-3 h-3 bg-yellow-400 rounded-full"></div>
-                  </div>
-                </div>
-                <div class="flex items-center gap-2 text-[10px]">
-                  <span class="w-8 text-zinc-400">SPEED</span>
-                  <div class="flex-1 h-1 bg-zinc-700 rounded-full relative">
-                    <div class="w-1/2 h-full bg-blue-400 rounded-full"></div>
-                    <div class="absolute left-1/2 top-1/2 -translate-y-1/2 w-3 h-3 bg-blue-400 rounded-full"></div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <!-- SCREEN OVERLAY 5: Quick Settings Sheet (Material You) -->
-          <div id="overlay-settings" class="hidden absolute inset-0 bg-black/60 backdrop-blur-sm z-40 flex flex-col justify-end">
-            <div class="bg-zinc-900 border-t border-white/15 rounded-t-3xl p-4 flex flex-col gap-3 shadow-2xl">
-              <div class="w-10 h-1 bg-zinc-700 rounded-full self-center mb-1"></div>
+          <!-- QUICK SETTINGS SHEET OVERLAY (GCam 9 Card) -->
+          <div id="quick-settings-overlay" class="absolute inset-x-3 top-4 z-40 transition-all duration-300 opacity-0 pointer-events-none translate-y-[-10px]">
+            <div class="bg-[#282A2D] rounded-[28px] p-5 shadow-2xl border border-white/10 text-white flex flex-col gap-4">
+              
+              <!-- Row 1: More light -->
               <div class="flex items-center justify-between">
-                <span class="text-xs font-bold text-white">Camera Settings</span>
-                <button onclick="switchScreen('photo')" class="text-xs text-blue-400 font-semibold">Done</button>
+                <div>
+                  <div class="text-xs text-zinc-300">More light</div>
+                  <div id="qs-light-sub" class="text-sm font-bold text-[#E8D099]">None</div>
+                </div>
+                <div class="flex items-center gap-2">
+                  <button onclick="setQsLight('none')" id="qs-btn-light-none" class="w-10 h-10 rounded-full flex items-center justify-center sand-pill font-bold shadow">⊘</button>
+                  <button onclick="setQsLight('night')" id="qs-btn-light-night" class="w-10 h-10 rounded-full flex items-center justify-center bg-[#383A3D] text-white">🌙ᴬ</button>
+                  <button onclick="setQsLight('flash')" id="qs-btn-light-flash" class="w-10 h-10 rounded-full flex items-center justify-center bg-[#383A3D] text-white">⚡</button>
+                </div>
               </div>
 
-              <!-- Quick Toggles Grid -->
-              <div class="grid grid-cols-3 gap-2">
-                <div class="bg-zinc-800/90 p-2.5 rounded-xl border border-white/10 flex flex-col items-center gap-1">
-                  <span class="text-[10px] text-zinc-400">HDR+</span>
-                  <span class="text-xs font-bold text-blue-400">Enhanced</span>
+              <!-- Row 2: RAW/JPEG -->
+              <div class="flex items-center justify-between">
+                <div>
+                  <div class="text-xs text-zinc-300">RAW/JPEG</div>
+                  <div id="qs-raw-sub" class="text-sm font-bold text-[#E8D099]">RAW + JPEG</div>
                 </div>
-                <div class="bg-zinc-800/90 p-2.5 rounded-xl border border-white/10 flex flex-col items-center gap-1">
-                  <span class="text-[10px] text-zinc-400">RAW Format</span>
-                  <span class="text-xs font-bold text-yellow-400">RAW + JPG</span>
-                </div>
-                <div class="bg-zinc-800/90 p-2.5 rounded-xl border border-white/10 flex flex-col items-center gap-1">
-                  <span class="text-[10px] text-zinc-400">Resolution</span>
-                  <span class="text-xs font-bold text-white">108MP Binned</span>
-                </div>
-                <div class="bg-zinc-800/90 p-2.5 rounded-xl border border-white/10 flex flex-col items-center gap-1">
-                  <span class="text-[10px] text-zinc-400">Ratio</span>
-                  <span class="text-xs font-bold text-white">4:3 Native</span>
-                </div>
-                <div class="bg-zinc-800/90 p-2.5 rounded-xl border border-white/10 flex flex-col items-center gap-1">
-                  <span class="text-[10px] text-zinc-400">Timer</span>
-                  <span class="text-xs font-bold text-zinc-500">Off</span>
-                </div>
-                <div class="bg-zinc-800/90 p-2.5 rounded-xl border border-white/10 flex flex-col items-center gap-1">
-                  <span class="text-[10px] text-zinc-400">Grid</span>
-                  <span class="text-xs font-bold text-white">3 x 3</span>
+                <div class="flex items-center gap-2">
+                  <button onclick="setQsRaw(false)" id="qs-btn-raw-off" class="w-10 h-10 rounded-full flex items-center justify-center bg-[#383A3D] text-white text-xs">RAW̸</button>
+                  <button onclick="setQsRaw(true)" id="qs-btn-raw-on" class="w-10 h-10 rounded-full flex items-center justify-center sand-pill text-xs font-bold shadow">RAW</button>
                 </div>
               </div>
+
+              <!-- Row 3: Top Shot -->
+              <div class="flex items-center justify-between">
+                <div>
+                  <div class="text-xs text-zinc-300">Top Shot</div>
+                  <div class="text-sm font-bold text-[#E8D099]">Auto ⓘ</div>
+                </div>
+                <div class="flex items-center gap-2">
+                  <button class="w-10 h-10 rounded-full flex items-center justify-center bg-[#383A3D] text-white">⊘</button>
+                  <button class="w-10 h-10 rounded-full flex items-center justify-center sand-pill font-bold shadow">Ⓐ</button>
+                  <button class="w-10 h-10 rounded-full flex items-center justify-center bg-[#383A3D] text-white">◎</button>
+                </div>
+              </div>
+
+              <!-- Row 4: Timer -->
+              <div class="flex items-center justify-between">
+                <div>
+                  <div class="text-xs text-zinc-300">Timer</div>
+                  <div id="qs-timer-sub" class="text-sm font-bold text-[#E8D099]">Off</div>
+                </div>
+                <div class="flex items-center gap-2">
+                  <button onclick="setQsTimer(0)" id="qs-btn-timer-0" class="w-10 h-10 rounded-full flex items-center justify-center sand-pill font-bold shadow">⏱̸</button>
+                  <button onclick="setQsTimer(3)" id="qs-btn-timer-3" class="w-10 h-10 rounded-full flex items-center justify-center bg-[#383A3D] text-white text-xs font-bold">3s</button>
+                  <button onclick="setQsTimer(10)" id="qs-btn-timer-10" class="w-10 h-10 rounded-full flex items-center justify-center bg-[#383A3D] text-white text-xs font-bold">10s</button>
+                </div>
+              </div>
+
+              <!-- Row 5: Resolution -->
+              <div class="flex items-center justify-between">
+                <div>
+                  <div class="text-xs text-zinc-300">Resolution</div>
+                  <div id="qs-res-sub" class="text-sm font-bold text-[#E8D099]">108 MP Ultra</div>
+                </div>
+                <div class="flex items-center gap-2">
+                  <button onclick="setQsRes(false)" id="qs-btn-res-12" class="w-10 h-10 rounded-full flex items-center justify-center bg-[#383A3D] text-white text-[11px] font-bold">12M</button>
+                  <button onclick="setQsRes(true)" id="qs-btn-res-108" class="w-10 h-10 rounded-full flex items-center justify-center sand-pill text-[11px] font-bold shadow">108</button>
+                </div>
+              </div>
+
+            </div>
+
+            <!-- Floating "More settings" Pill Button below Card -->
+            <div class="flex justify-end mt-2">
+              <button class="bg-[#282A2D] hover:bg-[#383A3D] text-white px-5 py-2 rounded-full text-xs font-medium shadow-xl border border-white/10 transition-all">
+                More settings
+              </button>
             </div>
           </div>
 
-          <!-- FLOATING ZOOM PILL (.6x, 1x, 2x) -->
-          <div class="absolute bottom-3 left-1/2 -translate-x-1/2 z-30 bg-black/60 backdrop-blur-md px-1.5 py-1 rounded-full border border-white/10 flex items-center gap-1 shadow-lg">
-            <button onclick="setZoom(0.6)" id="zoom-06" class="w-7 h-7 rounded-full text-[11px] font-bold text-zinc-400 flex items-center justify-center hover:text-white transition">.6</button>
-            <button onclick="setZoom(1.0)" id="zoom-10" class="w-7 h-7 rounded-full text-[11px] font-bold bg-[#D3E3FD] text-[#041E49] flex items-center justify-center shadow">1x</button>
-            <button onclick="setZoom(2.0)" id="zoom-20" class="w-7 h-7 rounded-full text-[11px] font-bold text-zinc-400 flex items-center justify-center hover:text-white transition">2</button>
+          <!-- Video Recording Banner Overlay -->
+          <div id="video-recording-banner" class="absolute top-4 left-1/2 -translate-x-1/2 bg-black/75 backdrop-blur-md px-4 py-1.5 rounded-full border border-red-500/30 items-center gap-2 z-30 hidden">
+            <span class="w-2.5 h-2.5 rounded-full bg-red-500 animate-ping"></span>
+            <span class="text-xs font-mono font-bold text-white">00:04</span>
           </div>
 
+          <!-- Floating Zoom Pill (.5 | 1x | 2 | 5) -->
+          <div class="relative pb-4 flex justify-center z-20">
+            <div class="bg-black/60 backdrop-blur-md px-1.5 py-1 rounded-full flex items-center gap-1 border border-white/10">
+              <button onclick="setZoom('.5')" id="zoom-05" class="w-7 h-7 rounded-full text-xs text-zinc-400 font-bold flex items-center justify-center">.5</button>
+              <button onclick="setZoom('1x')" id="zoom-1x" class="w-7 h-7 rounded-full text-xs sand-pill font-bold flex items-center justify-center shadow">1x</button>
+              <button onclick="setZoom('2')" id="zoom-2" class="w-7 h-7 rounded-full text-xs text-zinc-400 font-bold flex items-center justify-center">2</button>
+              <button onclick="setZoom('5')" id="zoom-5" class="w-7 h-7 rounded-full text-xs text-zinc-400 font-bold flex items-center justify-center">5</button>
+            </div>
+          </div>
         </div>
 
-        <!-- BOTTOM CONTROLS & CAROUSEL (Pixel 9 Style) -->
-        <div class="bg-black pt-2 pb-5 px-4 flex flex-col gap-3 z-30">
+        <!-- THE ICONIC 3-TIER BOTTOM CONTROL DECK -->
+        <div class="bg-black pt-1 pb-4 flex flex-col z-30">
           
-          <!-- Mode Carousel Slider -->
-          <div class="flex items-center justify-center gap-4 text-xs font-medium overflow-x-auto py-1 text-zinc-400 no-scrollbar">
-            <button onclick="switchScreen('night')" id="mode-night" class="hover:text-white transition whitespace-nowrap">Night Sight</button>
-            <button onclick="switchScreen('portrait')" id="mode-portrait" class="hover:text-white transition whitespace-nowrap">Portrait</button>
-            <button onclick="switchScreen('photo')" id="mode-photo" class="bg-[#D3E3FD] text-[#041E49] font-bold px-3 py-1 rounded-full shadow transition whitespace-nowrap">Camera</button>
-            <button onclick="switchScreen('pro')" id="mode-pro" class="hover:text-white transition whitespace-nowrap">Pro</button>
-            <button class="hover:text-white transition whitespace-nowrap opacity-60">Video</button>
-          </div>
-
-          <!-- Bottom Control Bar (Thumbnail, Shutter, Switcher) -->
-          <div class="flex items-center justify-between px-3 pt-1">
-            
-            <!-- Gallery Thumbnail Button -->
-            <div class="w-12 h-12 rounded-full border-2 border-zinc-700 bg-zinc-800 overflow-hidden flex items-center justify-center cursor-pointer hover:border-zinc-500 transition shadow">
-              <div class="w-full h-full bg-gradient-to-tr from-amber-700 to-indigo-900 opacity-80"></div>
-            </div>
-
-            <!-- PIXEL CONCENTRIC SHUTTER BUTTON -->
-            <div class="relative cursor-pointer group" onclick="triggerShutter()">
-              <!-- Outer Ring -->
-              <div class="w-20 h-20 rounded-full border-4 border-white flex items-center justify-center group-active:scale-95 transition-all duration-150">
-                <!-- Inner Solid Button -->
-                <div id="shutter-inner" class="w-16 h-16 rounded-full bg-zinc-100 group-active:bg-zinc-300 transition-colors shadow-inner"></div>
-              </div>
-            </div>
-
-            <!-- Front/Rear Camera Switcher -->
-            <button onclick="flipCamera()" id="btn-flip" class="w-12 h-12 rounded-full bg-zinc-800/90 hover:bg-zinc-700/90 text-white flex items-center justify-center transition border border-white/10 shadow active:rotate-180 duration-300">
-              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+          <!-- TIER 1: SHUTTER DECK (Gallery Circle, Concentric Shutter, Camera Switcher) -->
+          <div class="h-24 px-8 flex items-center justify-between">
+            <!-- Gallery Circle Button (56dp) -->
+            <button class="w-14 h-14 rounded-full bg-zinc-800 border-2 border-white/20 overflow-hidden flex items-center justify-center shadow-lg">
+              <div class="w-full h-full bg-gradient-to-tr from-sky-600 via-indigo-700 to-amber-500"></div>
             </button>
 
+            <!-- Iconic Concentric Shutter Button (86dp) -->
+            <button id="shutter-button" class="w-[84px] h-[84px] rounded-full border-[3.5px] border-white p-1.5 flex items-center justify-center transition-all active:scale-95">
+              <div id="shutter-inner" class="w-full h-full rounded-full bg-white transition-all duration-300"></div>
+            </button>
+
+            <!-- Camera Switcher Circle (56dp) -->
+            <button class="w-14 h-14 rounded-full border-2 border-white flex items-center justify-center text-white active:rotate-180 transition-all duration-300">
+              <svg class="w-7 h-7" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+              </svg>
+            </button>
           </div>
 
-          <!-- Android Gesture Home Indicator Bar -->
-          <div class="w-32 h-1 bg-white/40 rounded-full self-center mt-1"></div>
+          <!-- TIER 2: MODE RIBBON CAROUSEL -->
+          <div class="h-10 overflow-x-auto flex items-center justify-center gap-1 px-4 text-xs font-medium no-scrollbar">
+            <button class="px-3 py-1.5 text-zinc-400 hover:text-white transition-all whitespace-nowrap">Long Exposure</button>
+            <button onclick="setMode('portrait')" id="mode-btn-portrait" class="px-3 py-1.5 text-zinc-400 hover:text-white transition-all whitespace-nowrap">Portrait</button>
+            <button onclick="setMode('photo')" id="mode-btn-photo" class="px-4 py-1.5 sand-pill font-bold rounded-full transition-all whitespace-nowrap shadow">Photo</button>
+            <button onclick="setMode('night')" id="mode-btn-night" class="px-3 py-1.5 text-zinc-400 hover:text-white transition-all whitespace-nowrap">Night Sight</button>
+            <button class="px-3 py-1.5 text-zinc-400 hover:text-white transition-all whitespace-nowrap">Panorama</button>
+            <button class="px-3 py-1.5 text-zinc-400 hover:text-white transition-all whitespace-nowrap">Pro</button>
+          </div>
+
+          <!-- TIER 3: BOTTOM NAVIGATION BAR (Settings Gear + Photo/Video Pill Toggle) -->
+          <div class="h-12 px-6 flex items-center justify-between">
+            <!-- Settings Gear Button -->
+            <button onclick="toggleQuickSettings()" class="w-11 h-11 rounded-full bg-[#282A2D] hover:bg-[#383A3D] flex items-center justify-center text-white shadow transition-all">
+              <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path>
+                <circle cx="12" cy="12" r="3"></circle>
+              </svg>
+            </button>
+
+            <!-- Material You Photo/Video Pill Toggle -->
+            <div class="bg-[#282A2D] p-1 rounded-full flex items-center gap-1 shadow">
+              <button onclick="setPhotoVideo(false)" id="toggle-camera-btn" class="w-9 h-8 rounded-full sand-pill flex items-center justify-center transition-all shadow">
+                <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M12 12m-3.2 0a3.2 3.2 0 1 1 6.4 0a3.2 3.2 0 1 1-6.4 0M9 2L7.17 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2h-3.17L15 2H9zm3 15c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5z"/></svg>
+              </button>
+              <button onclick="setPhotoVideo(true)" id="toggle-video-btn" class="w-9 h-8 rounded-full text-white hover:text-zinc-300 flex items-center justify-center transition-all">
+                <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M17 10.5V7c0-.55-.45-1-1-1H4c-.55 0-1 .45-1 1v10c0 .55.45 1 1 1h12c0.55 0 1-.45 1-1v-3.5l4 4v-11l-4 4z"/></svg>
+              </button>
+            </div>
+
+            <!-- Balanced spacer -->
+            <div class="w-11 h-11"></div>
+          </div>
 
         </div>
 
       </div>
-    </div>
-
-    <!-- Feature Description Footer -->
-    <div class="mt-4 pt-3 border-t border-[var(--border)] text-xs text-[var(--muted-foreground)] flex flex-wrap justify-between gap-2">
-      <div id="info-mode" class="flex items-center gap-2 text-[var(--foreground)] font-semibold">
-        <span>📸 Mode: <strong>Camera (HDR+ Enhanced)</strong></span>
-      </div>
-      <div>Sensor: <strong>Samsung ISOCELL HM2 (108 MP Nona-Binning to 12 MP)</strong></div>
     </div>
 
   </div>
 
   <script>
-    let currentScreen = 'photo';
-    let isFlipped = false;
+    let isQsOpen = false;
 
-    function switchScreen(mode) {
-      currentScreen = mode;
-      
-      // Hide all overlays
-      document.getElementById('overlay-night').classList.add('hidden');
-      document.getElementById('overlay-portrait').classList.add('hidden');
-      document.getElementById('overlay-pro').classList.add('hidden');
-      document.getElementById('overlay-settings').classList.add('hidden');
-      document.getElementById('focus-reticle').classList.remove('hidden');
-
-      // Reset Tabs
-      const tabs = ['photo', 'night', 'portrait', 'pro', 'settings'];
-      tabs.forEach(t => {
-        const btn = document.getElementById('tab-' + t);
-        if (btn) {
-          btn.className = "px-2.5 py-1 text-xs font-medium rounded-lg text-[var(--muted-foreground)] hover:text-[var(--foreground)] transition-all";
-        }
-      });
-      const activeTab = document.getElementById('tab-' + mode);
-      if (activeTab) {
-        activeTab.className = "px-2.5 py-1 text-xs font-semibold rounded-lg bg-blue-500 text-white shadow transition-all";
+    function toggleQuickSettings() {
+      isQsOpen = !isQsOpen;
+      const overlay = document.getElementById('quick-settings-overlay');
+      if (isQsOpen) {
+        overlay.classList.remove('opacity-0', 'pointer-events-none', 'translate-y-[-10px]');
+        overlay.classList.add('opacity-100', 'pointer-events-auto', 'translate-y-0');
+      } else {
+        overlay.classList.remove('opacity-100', 'pointer-events-auto', 'translate-y-0');
+        overlay.classList.add('opacity-0', 'pointer-events-none', 'translate-y-[-10px]');
       }
+    }
 
-      // Reset Carousel buttons
-      const modes = ['night', 'portrait', 'photo', 'pro'];
-      modes.forEach(m => {
-        const btn = document.getElementById('mode-' + m);
-        if (btn) {
-          btn.className = "hover:text-white transition whitespace-nowrap";
-        }
+    function setScreen(mode) {
+      document.querySelectorAll('[id^="tab-"]').forEach(btn => {
+        btn.className = "px-3 py-1.5 text-xs font-medium rounded-xl text-zinc-400 hover:text-white transition-all";
       });
+      document.getElementById('tab-' + mode).className = "px-3 py-1.5 text-xs font-bold rounded-xl sand-pill transition-all";
 
-      const infoText = document.getElementById('info-mode');
+      const overlay = document.getElementById('quick-settings-overlay');
+      const banner = document.getElementById('video-recording-banner');
       const shutterInner = document.getElementById('shutter-inner');
 
-      if (mode === 'photo') {
-        document.getElementById('mode-photo').className = "bg-[#D3E3FD] text-[#041E49] font-bold px-3 py-1 rounded-full shadow transition whitespace-nowrap";
-        infoText.innerHTML = "📸 Mode: <strong>Camera (HDR+ Enhanced)</strong> — 12 MP binned RAW fusion";
-        shutterInner.className = "w-16 h-16 rounded-full bg-zinc-100 group-active:bg-zinc-300 transition-colors shadow-inner";
-      } else if (mode === 'night') {
-        document.getElementById('overlay-night').classList.remove('hidden');
-        document.getElementById('mode-night').className = "bg-[#D3E3FD] text-[#041E49] font-bold px-3 py-1 rounded-full shadow transition whitespace-nowrap";
-        infoText.innerHTML = "🌙 Mode: <strong>Night Sight</strong> — Multi-frame temporal accumulation for zero noise";
-        shutterInner.className = "w-16 h-16 rounded-full bg-yellow-300 shadow-inner";
-      } else if (mode === 'portrait') {
-        document.getElementById('overlay-portrait').classList.remove('hidden');
-        document.getElementById('mode-portrait').className = "bg-[#D3E3FD] text-[#041E49] font-bold px-3 py-1 rounded-full shadow transition whitespace-nowrap";
-        infoText.innerHTML = "👤 Mode: <strong>Portrait Bokeh</strong> — Progressive optical depth simulation";
-        shutterInner.className = "w-16 h-16 rounded-full bg-zinc-100 shadow-inner";
-      } else if (mode === 'pro') {
-        document.getElementById('overlay-pro').classList.remove('hidden');
-        document.getElementById('mode-pro').className = "bg-[#D3E3FD] text-[#041E49] font-bold px-3 py-1 rounded-full shadow transition whitespace-nowrap";
-        infoText.innerHTML = "⚙️ Mode: <strong>Pro Manual</strong> — Live RGB histogram, manual ISO (100–19200) & shutter speed";
-        shutterInner.className = "w-16 h-16 rounded-full bg-zinc-100 shadow-inner";
-      } else if (mode === 'settings') {
-        document.getElementById('overlay-settings').classList.remove('hidden');
-        infoText.innerHTML = "⚙️ Mode: <strong>Quick Settings Sheet</strong> — Material You swipe-down preferences";
+      if (mode === 'qs') {
+        isQsOpen = false;
+        toggleQuickSettings();
+      } else {
+        if (isQsOpen) toggleQuickSettings();
+      }
+
+      if (mode === 'night') {
+        shutterInner.className = "w-full h-full rounded-full bg-[#E8D099] transition-all duration-300";
+        setMode('night');
+      } else if (mode === 'video') {
+        shutterInner.className = "w-full h-full rounded-full bg-red-600 transition-all duration-300";
+        banner.classList.remove('hidden');
+        banner.classList.add('flex');
+        setPhotoVideo(true);
+      } else {
+        shutterInner.className = "w-full h-full rounded-full bg-white transition-all duration-300";
+        banner.classList.add('hidden');
+        banner.classList.remove('flex');
+        setMode('photo');
+        setPhotoVideo(false);
+      }
+    }
+
+    function setMode(mode) {
+      ['photo', 'portrait', 'night'].forEach(m => {
+        const btn = document.getElementById('mode-btn-' + m);
+        if (btn) {
+          if (m === mode) {
+            btn.className = "px-4 py-1.5 sand-pill font-bold rounded-full transition-all whitespace-nowrap shadow";
+          } else {
+            btn.className = "px-3 py-1.5 text-zinc-400 hover:text-white transition-all whitespace-nowrap";
+          }
+        }
+      });
+    }
+
+    function setPhotoVideo(isVideo) {
+      const cam = document.getElementById('toggle-camera-btn');
+      const vid = document.getElementById('toggle-video-btn');
+      const shutterInner = document.getElementById('shutter-inner');
+
+      if (isVideo) {
+        vid.className = "w-9 h-8 rounded-full sand-pill flex items-center justify-center transition-all shadow";
+        cam.className = "w-9 h-8 rounded-full text-white hover:text-zinc-300 flex items-center justify-center transition-all";
+        shutterInner.className = "w-full h-full rounded-full bg-red-600 transition-all duration-300";
+      } else {
+        cam.className = "w-9 h-8 rounded-full sand-pill flex items-center justify-center transition-all shadow";
+        vid.className = "w-9 h-8 rounded-full text-white hover:text-zinc-300 flex items-center justify-center transition-all";
+        shutterInner.className = "w-full h-full rounded-full bg-white transition-all duration-300";
       }
     }
 
     function setZoom(val) {
-      const z06 = document.getElementById('zoom-06');
-      const z10 = document.getElementById('zoom-10');
-      const z20 = document.getElementById('zoom-20');
-
-      [z06, z10, z20].forEach(z => {
-        z.className = "w-7 h-7 rounded-full text-[11px] font-bold text-zinc-400 flex items-center justify-center hover:text-white transition";
+      ['.5', '1x', '2', '5'].forEach(z => {
+        const id = z === '.5' ? 'zoom-05' : 'zoom-' + z;
+        const el = document.getElementById(id);
+        if (z === val) {
+          el.className = "w-7 h-7 rounded-full text-xs sand-pill font-bold flex items-center justify-center shadow";
+        } else {
+          el.className = "w-7 h-7 rounded-full text-xs text-zinc-400 font-bold flex items-center justify-center";
+        }
       });
+    }
 
-      if (val === 0.6) {
-        z06.className = "w-7 h-7 rounded-full text-[11px] font-bold bg-[#D3E3FD] text-[#041E49] flex items-center justify-center shadow";
-      } else if (val === 1.0) {
-        z10.className = "w-7 h-7 rounded-full text-[11px] font-bold bg-[#D3E3FD] text-[#041E49] flex items-center justify-center shadow";
-      } else if (val === 2.0) {
-        z20.className = "w-7 h-7 rounded-full text-[11px] font-bold bg-[#D3E3FD] text-[#041E49] flex items-center justify-center shadow";
+    function setQsLight(type) {
+      const sub = document.getElementById('qs-light-sub');
+      const bNone = document.getElementById('qs-btn-light-none');
+      const bNight = document.getElementById('qs-btn-light-night');
+      const bFlash = document.getElementById('qs-btn-light-flash');
+
+      [bNone, bNight, bFlash].forEach(b => b.className = "w-10 h-10 rounded-full flex items-center justify-center bg-[#383A3D] text-white");
+
+      if (type === 'none') {
+        sub.innerText = "None";
+        bNone.className = "w-10 h-10 rounded-full flex items-center justify-center sand-pill font-bold shadow";
+      } else if (type === 'night') {
+        sub.innerText = "Night Sight Auto";
+        bNight.className = "w-10 h-10 rounded-full flex items-center justify-center sand-pill font-bold shadow";
+      } else {
+        sub.innerText = "Flash On";
+        bFlash.className = "w-10 h-10 rounded-full flex items-center justify-center sand-pill font-bold shadow";
       }
     }
 
-    function flipCamera() {
-      isFlipped = !isFlipped;
-      const btn = document.getElementById('btn-flip');
-      btn.style.transform = isFlipped ? 'rotate(180deg)' : 'rotate(0deg)';
+    function setQsRaw(isRaw) {
+      const sub = document.getElementById('qs-raw-sub');
+      const bOff = document.getElementById('qs-btn-raw-off');
+      const bOn = document.getElementById('qs-btn-raw-on');
+      if (isRaw) {
+        sub.innerText = "RAW + JPEG";
+        bOn.className = "w-10 h-10 rounded-full flex items-center justify-center sand-pill text-xs font-bold shadow";
+        bOff.className = "w-10 h-10 rounded-full flex items-center justify-center bg-[#383A3D] text-white text-xs";
+      } else {
+        sub.innerText = "JPEG only";
+        bOff.className = "w-10 h-10 rounded-full flex items-center justify-center sand-pill text-xs font-bold shadow";
+        bOn.className = "w-10 h-10 rounded-full flex items-center justify-center bg-[#383A3D] text-white text-xs";
+      }
     }
 
-    function triggerShutter() {
-      const reticle = document.getElementById('focus-reticle');
-      reticle.classList.remove('animate-focus');
-      void reticle.offsetWidth; // trigger reflow
-      reticle.classList.add('animate-focus');
+    function setQsTimer(t) {
+      const sub = document.getElementById('qs-timer-sub');
+      [0, 3, 10].forEach(n => {
+        document.getElementById('qs-btn-timer-' + n).className = "w-10 h-10 rounded-full flex items-center justify-center bg-[#383A3D] text-white text-xs font-bold";
+      });
+      document.getElementById('qs-btn-timer-' + t).className = "w-10 h-10 rounded-full flex items-center justify-center sand-pill text-xs font-bold shadow";
+      sub.innerText = t === 0 ? "Off" : t + "s";
+    }
+
+    function setQsRes(is108) {
+      const sub = document.getElementById('qs-res-sub');
+      const b12 = document.getElementById('qs-btn-res-12');
+      const b108 = document.getElementById('qs-btn-res-108');
+      if (is108) {
+        sub.innerText = "108 MP Ultra";
+        b108.className = "w-10 h-10 rounded-full flex items-center justify-center sand-pill text-[11px] font-bold shadow";
+        b12.className = "w-10 h-10 rounded-full flex items-center justify-center bg-[#383A3D] text-white text-[11px] font-bold";
+      } else {
+        sub.innerText = "12 MP Binned";
+        b12.className = "w-10 h-10 rounded-full flex items-center justify-center sand-pill text-[11px] font-bold shadow";
+        b108.className = "w-10 h-10 rounded-full flex items-center justify-center bg-[#383A3D] text-white text-[11px] font-bold";
+      }
     }
   </script>
 </body>

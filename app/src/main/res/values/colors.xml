@@ -1,18 +1,24 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="pixel_black">#0A0A0A</color>
+    <color name="pixel_black">#000000</color>
     <color name="pixel_surface">#1A1C1E</color>
     <color name="pixel_surface_variant">#2A2C30</color>
+    <color name="pixel_card_bg">#282A2D</color>
+    <color name="pixel_card_btn_inactive">#383A3D</color>
     <color name="pixel_pill_bg">#441F2328</color>
-    <color name="pixel_pill_active">#D3E3FD</color>
-    <color name="pixel_pill_text_active">#041E49</color>
+    <color name="pixel_pill_active">#E8D099</color>
+    <color name="pixel_pill_text_active">#2E1E00</color>
+    <color name="pixel_accent_sand">#E8D099</color>
+    <color name="pixel_accent_sand_text">#2E1E00</color>
+    <color name="pixel_icon_active">#2E1E00</color>
     <color name="pixel_text_white">#F2F2F2</color>
     <color name="pixel_text_secondary">#C4C7C5</color>
     <color name="pixel_accent_blue">#A8C7FA</color>
-    <color name="pixel_accent_yellow">#FDD663</color>
+    <color name="pixel_accent_yellow">#E8D099</color>
     <color name="pixel_shutter_outer">#FFFFFF</color>
-    <color name="pixel_shutter_inner">#F2F2F2</color>
+    <color name="pixel_shutter_inner">#FFFFFF</color>
     <color name="pixel_shutter_video">#E24B4B</color>
     <color name="pixel_indicator_glow">#4CAF50</color>
+    <color name="pixel_grid_line">#26FFFFFF</color>
     <color name="transparent">#00000000</color>
 </resources>

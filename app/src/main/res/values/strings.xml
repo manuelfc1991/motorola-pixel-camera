@@ -2,7 +2,7 @@
     <string name="app_name">Camera</string>
     <string name="mode_night_sight">Night Sight</string>
     <string name="mode_portrait">Portrait</string>
-    <string name="mode_camera">Camera</string>
+    <string name="mode_camera">Photo</string>
     <string name="mode_video">Video</string>
     <string name="mode_pro">Pro</string>
     <string name="mode_astro">Astrophotography</string>
@@ -10,7 +10,7 @@
     <string name="hdr_processing">Processing HDR+…</string>
     <string name="night_processing">Hold still, capturing light…</string>
     <string name="portrait_processing">Calculating depth blur…</string>
-    <string name="zoom_ultrawide">.6x</string>
+    <string name="zoom_ultrawide">.5</string>
     <string name="zoom_1x">1x</string>
-    <string name="zoom_2x">2x</string>
+    <string name="zoom_2x">2</string>
 </resources>
