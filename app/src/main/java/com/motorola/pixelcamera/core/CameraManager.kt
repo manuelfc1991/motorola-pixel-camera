@@ -393,7 +393,10 @@ class CameraManager(private val context: Context) {
 
         when (mode) {
             CameraMode.CAMERA, CameraMode.PRO -> {
-                if (hdrPlusMode == 0 && !isGoogleAwbEnabled) {
+                if (is108MpEnabled) {
+                    onStatusUpdate("Capturing 108MP Ultra...")
+                    takePictureDirect(capture)
+                } else if (hdrPlusMode == 0 && !isGoogleAwbEnabled) {
                     onStatusUpdate("Capturing direct frame...")
                     takePictureDirect(capture)
                 } else {

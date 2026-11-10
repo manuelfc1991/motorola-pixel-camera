@@ -67,6 +67,7 @@ class MainActivity : AppCompatActivity() {
 
     // Aperture blur strength for Portrait mode (progress 0..100)
     private var portraitBlurProgress = 50
+    private var latestCapturedUri: Uri? = null
 
     private val permissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
@@ -732,7 +733,12 @@ class MainActivity : AppCompatActivity() {
         // Gallery Thumbnail Click
         binding.ivGalleryThumbnail.setOnClickListener {
             val intent = Intent(Intent.ACTION_VIEW).apply {
-                type = "image/*"
+                if (latestCapturedUri != null) {
+                    setDataAndType(latestCapturedUri, "image/*")
+                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                } else {
+                    type = "image/*"
+                }
             }
             try {
                 startActivity(intent)
@@ -1079,6 +1085,7 @@ class MainActivity : AppCompatActivity() {
             binding.processingPill.visibility = View.VISIBLE
             binding.tvProcessingStatus.text = "Capturing..."
         }
+        binding.progressThumbnailSpin.visibility = View.VISIBLE
 
         lifecycleScope.launch {
             val blurStrength = 2f + (portraitBlurProgress / 100f) * 24f
@@ -1090,10 +1097,18 @@ class MainActivity : AppCompatActivity() {
 
             binding.processingPill.visibility = View.GONE
             binding.overlayNightHoldStill.visibility = View.GONE
+            binding.progressThumbnailSpin.visibility = View.GONE
             isCapturing = false
 
             if (uri != null) {
+                latestCapturedUri = uri
                 loadLatestGalleryThumbnail()
+                binding.cardGalleryThumbnail.animate()
+                    .scaleX(1.15f).scaleY(1.15f)
+                    .setDuration(120)
+                    .withEndAction {
+                        binding.cardGalleryThumbnail.animate().scaleX(1.0f).scaleY(1.0f).setDuration(150).start()
+                    }.start()
                 Toast.makeText(this@MainActivity, "Photo saved to Gallery", Toast.LENGTH_SHORT).show()
             } else {
                 Toast.makeText(this@MainActivity, "Capture failed", Toast.LENGTH_SHORT).show()

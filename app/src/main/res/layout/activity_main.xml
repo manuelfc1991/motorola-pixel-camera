@@ -414,7 +414,7 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:text="f / 1.8"
-            android:textColor="@color/pixel_accent_sand"
+            android:textColor="@color/pixel_accent_cyan"
             android:textSize="13sp"
             android:textStyle="bold" />
 
@@ -425,8 +425,8 @@
             android:layout_marginStart="8dp"
             android:max="100"
             android:progress="70"
-            android:progressTint="@color/pixel_accent_sand"
-            android:thumbTint="@color/pixel_accent_sand" />
+            android:progressTint="@color/pixel_accent_cyan"
+            android:thumbTint="@color/pixel_accent_cyan" />
 
         <TextView
             android:id="@+id/tvBokehPercent"
@@ -1324,6 +1324,7 @@
 
             <!-- Gallery Circle Button (56dp circle preview) -->
             <androidx.cardview.widget.CardView
+                android:id="@+id/cardGalleryThumbnail"
                 android:layout_width="56dp"
                 android:layout_height="56dp"
                 android:layout_marginStart="36dp"
@@ -1341,6 +1342,19 @@
                     android:background="@drawable/bg_gallery_circle"
                     android:scaleType="centerCrop" />
             </androidx.cardview.widget.CardView>
+
+            <!-- Google Pixel HDR+ Processing Spinner Ring around Gallery Circle -->
+            <ProgressBar
+                android:id="@+id/progressThumbnailSpin"
+                android:layout_width="66dp"
+                android:layout_height="66dp"
+                android:indeterminate="true"
+                android:indeterminateTint="@color/pixel_accent_cyan"
+                android:visibility="gone"
+                app:layout_constraintBottom_toBottomOf="@+id/cardGalleryThumbnail"
+                app:layout_constraintEnd_toEndOf="@+id/cardGalleryThumbnail"
+                app:layout_constraintStart_toStartOf="@+id/cardGalleryThumbnail"
+                app:layout_constraintTop_toTopOf="@+id/cardGalleryThumbnail" />
 
             <!-- THE ICONIC GOOGLE PIXEL SHUTTER BUTTON (Concentric white rings) -->
             <ImageView

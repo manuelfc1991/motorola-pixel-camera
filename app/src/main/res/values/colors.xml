@@ -14,6 +14,7 @@
     <color name="pixel_text_white">#F2F2F2</color>
     <color name="pixel_text_secondary">#C4C7C5</color>
     <color name="pixel_accent_blue">#8AB4F8</color>
+    <color name="pixel_accent_cyan">#8AB4F8</color>
     <color name="pixel_accent_yellow">#FDD663</color>
     <color name="pixel_shutter_outer">#FFFFFF</color>
     <color name="pixel_shutter_inner">#FFFFFF</color>
