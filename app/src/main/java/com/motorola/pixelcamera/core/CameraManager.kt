@@ -311,7 +311,26 @@ class CameraManager(private val context: Context) {
     }
 
     fun setExposureCompensation(evIndex: Int) {
-        camera?.cameraControl?.setExposureCompensationIndex(evIndex)
+        val range = getExposureCompensationRange()
+        val clamped = evIndex.coerceIn(range.lower, range.upper)
+        camera?.cameraControl?.setExposureCompensationIndex(clamped)
+    }
+
+    fun getExposureCompensationRange(): android.util.Range<Int> {
+        return camera?.cameraInfo?.exposureState?.exposureCompensationRange ?: android.util.Range(-6, 6)
+    }
+
+    fun getExposureCompensationStep(): Float {
+        val step = camera?.cameraInfo?.exposureState?.exposureCompensationStep
+        return if (step != null && step.denominator != 0) {
+            step.numerator.toFloat() / step.denominator.toFloat()
+        } else {
+            0.5f
+        }
+    }
+
+    fun getExposureCompensationIndex(): Int {
+        return camera?.cameraInfo?.exposureState?.exposureCompensationIndex ?: 0
     }
 
     @OptIn(ExperimentalCamera2Interop::class)

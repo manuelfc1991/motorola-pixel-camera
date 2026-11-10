@@ -244,44 +244,101 @@
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintTop_toBottomOf="@+id/topBar" />
 
-    <!-- Tap to Focus Animated Pixel Reticle -->
-    <LinearLayout
+    <!-- Tap to Focus & Interactive Brightness Exposure Slider -->
+    <androidx.constraintlayout.widget.ConstraintLayout
         android:id="@+id/focusReticleContainer"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:gravity="center_vertical"
-        android:orientation="horizontal"
+        android:clipChildren="false"
+        android:clipToPadding="false"
         android:visibility="gone"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toTopOf="parent">
+        app:layout_constraintTop_toTopOf="parent"
+        tools:visibility="visible">
 
+        <!-- Animated Focus Reticle Ring -->
         <ImageView
             android:id="@+id/focusRing"
             android:layout_width="64dp"
             android:layout_height="64dp"
-            android:src="@drawable/ic_focus_ring" />
+            android:src="@drawable/ic_focus_ring"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toTopOf="parent"
+            app:tint="@color/pixel_accent_sand" />
 
-        <LinearLayout
-            android:layout_width="wrap_content"
-            android:layout_height="64dp"
-            android:layout_marginStart="4dp"
+        <!-- Vertical Exposure Brightness Slider Track -->
+        <FrameLayout
+            android:id="@+id/exposureSliderTrack"
+            android:layout_width="32dp"
+            android:layout_height="120dp"
+            android:layout_marginStart="8dp"
             android:background="@drawable/bg_pill_container"
-            android:gravity="center"
-            android:orientation="vertical"
-            android:paddingHorizontal="4dp">
+            android:backgroundTint="#8C181A1D"
+            android:clipChildren="false"
+            android:clipToPadding="false"
+            app:layout_constraintBottom_toBottomOf="@+id/focusRing"
+            app:layout_constraintStart_toEndOf="@+id/focusRing"
+            app:layout_constraintTop_toTopOf="@+id/focusRing">
 
-            <ImageView
-                android:layout_width="16dp"
-                android:layout_height="16dp"
-                android:src="@drawable/ic_exposure_sun" />
-
+            <!-- Center Vertical Guide Line -->
             <View
                 android:layout_width="2dp"
-                android:layout_height="24dp"
-                android:layout_marginTop="2dp"
-                android:background="@color/pixel_text_secondary" />
-        </LinearLayout>
-    </LinearLayout>
+                android:layout_height="match_parent"
+                android:layout_gravity="center_horizontal"
+                android:layout_marginVertical="12dp"
+                android:background="#4DFFFFFF" />
+
+            <!-- Top Indicator (Max Brightness dot) -->
+            <View
+                android:layout_width="4dp"
+                android:layout_height="4dp"
+                android:layout_gravity="top|center_horizontal"
+                android:layout_marginTop="8dp"
+                android:background="@drawable/bg_qs_btn_active" />
+
+            <!-- Bottom Indicator (Min Brightness dot) -->
+            <View
+                android:layout_width="4dp"
+                android:layout_height="4dp"
+                android:layout_gravity="bottom|center_horizontal"
+                android:layout_marginBottom="8dp"
+                android:background="@drawable/bg_qs_btn_inactive" />
+
+            <!-- Draggable Sun Exposure Thumb -->
+            <ImageView
+                android:id="@+id/ivExposureSun"
+                android:layout_width="26dp"
+                android:layout_height="26dp"
+                android:layout_gravity="center"
+                android:background="@drawable/bg_qs_btn_active"
+                android:padding="5dp"
+                android:src="@drawable/ic_exposure_sun"
+                app:tint="@color/pixel_icon_active" />
+
+        </FrameLayout>
+
+        <!-- Dynamic Exposure EV Text Badge Pill -->
+        <TextView
+            android:id="@+id/tvExposureEvBadge"
+            android:layout_width="wrap_content"
+            android:layout_height="24dp"
+            android:layout_marginStart="6dp"
+            android:background="@drawable/bg_pill_container"
+            android:backgroundTint="#D9181A1D"
+            android:gravity="center"
+            android:paddingHorizontal="8dp"
+            android:text="+0.0 EV"
+            android:textColor="@color/pixel_accent_sand"
+            android:textSize="11sp"
+            android:textStyle="bold"
+            android:visibility="gone"
+            app:layout_constraintBottom_toBottomOf="@+id/exposureSliderTrack"
+            app:layout_constraintStart_toEndOf="@+id/exposureSliderTrack"
+            app:layout_constraintTop_toTopOf="@+id/exposureSliderTrack"
+            tools:visibility="visible" />
+
+    </androidx.constraintlayout.widget.ConstraintLayout>
 
     <!-- NIGHT SIGHT OVERLAY: Countdown -->
     <LinearLayout

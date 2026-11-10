@@ -8,6 +8,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.SharedPreferences
 import android.content.pm.PackageManager
+import android.graphics.Rect
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
@@ -35,6 +36,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlin.math.abs
 
 class MainActivity : AppCompatActivity() {
 
@@ -49,6 +51,13 @@ class MainActivity : AppCompatActivity() {
     private var moreLightMode = 0 // 0: None, 1: Night Auto, 2: Flash On
     private var topShotMode = 1   // 0: Off, 1: Auto, 2: On
     private var timerDuration = 0 // 0: Off, 3: 3s, 10: 10s
+
+    // Tap to Focus & Interactive Brightness Exposure Slider
+    private var reticleAutoHideJob: Job? = null
+    private var isDraggingExposure = false
+    private var dragStartY = 0f
+    private var initialEvIndex = 0
+    private var currentEvIndex = 0
 
     // Video Recording Timer & Animation Jobs
     private var videoTimerJob: Job? = null
@@ -116,6 +125,8 @@ class MainActivity : AppCompatActivity() {
         binding.proControlPanel.visibility = View.GONE
         binding.histogramView.visibility = View.GONE
         binding.quickSettingsContainer.visibility = View.GONE
+        binding.focusReticleContainer.visibility = View.GONE
+        binding.tvExposureEvBadge.visibility = View.GONE
     }
 
     private fun syncSettings() {
@@ -492,19 +503,109 @@ class MainActivity : AppCompatActivity() {
             override fun onStopTrackingTouch(seekBar: SeekBar?) {}
         })
 
-        // Tap to Focus with Animated Pixel Reticle
+        // Tap to Focus with Interactive Brightness Exposure Slider
         binding.viewFinder.setOnTouchListener { _, event ->
-            if (event.action == MotionEvent.ACTION_DOWN) {
-                if (binding.quickSettingsContainer.visibility == View.VISIBLE) {
+            if (binding.quickSettingsContainer.visibility == View.VISIBLE) {
+                if (event.action == MotionEvent.ACTION_DOWN) {
                     toggleQuickSettings()
-                    return@setOnTouchListener true
                 }
-                val factory = binding.viewFinder.meteringPointFactory
-                val point = factory.createPoint(event.x, event.y)
-                cameraManager.focusAt(point)
-                showFocusRing(event.x, event.y)
+                return@setOnTouchListener true
             }
-            true
+
+            val density = resources.displayMetrics.density
+
+            when (event.actionMasked) {
+                MotionEvent.ACTION_DOWN -> {
+                    // Check if reticle is currently visible and touch is on/near the exposure slider track
+                    if (binding.focusReticleContainer.visibility == View.VISIBLE) {
+                        val trackLocation = IntArray(2)
+                        binding.exposureSliderTrack.getLocationOnScreen(trackLocation)
+                        val touchX = event.rawX.toInt()
+                        val touchY = event.rawY.toInt()
+
+                        val hitPaddingX = (28 * density).toInt()
+                        val hitPaddingY = (16 * density).toInt()
+                        val trackRect = Rect(
+                            trackLocation[0] - hitPaddingX,
+                            trackLocation[1] - hitPaddingY,
+                            trackLocation[0] + binding.exposureSliderTrack.width + hitPaddingX,
+                            trackLocation[1] + binding.exposureSliderTrack.height + hitPaddingY
+                        )
+
+                        if (trackRect.contains(touchX, touchY)) {
+                            // User touched directly on the slider!
+                            isDraggingExposure = true
+                            dragStartY = event.rawY
+                            initialEvIndex = currentEvIndex
+                            reticleAutoHideJob?.cancel()
+                            showExposureEvBadge()
+                            return@setOnTouchListener true
+                        }
+                    }
+
+                    // Tapping anywhere on viewfinder focuses and displays the reticle + slider
+                    isDraggingExposure = true
+                    dragStartY = event.rawY
+                    initialEvIndex = currentEvIndex
+                    reticleAutoHideJob?.cancel()
+
+                    val factory = binding.viewFinder.meteringPointFactory
+                    val point = factory.createPoint(event.x, event.y)
+                    cameraManager.focusAt(point)
+                    showFocusReticleAndSlider(event.x, event.y)
+                    true
+                }
+
+                MotionEvent.ACTION_MOVE -> {
+                    if (isDraggingExposure && binding.focusReticleContainer.visibility == View.VISIBLE) {
+                        val dy = dragStartY - event.rawY // Dragging up = positive dy (brighter)
+
+                        if (abs(dy) > 4 * density) {
+                            reticleAutoHideJob?.cancel()
+
+                            val range = cameraManager.getExposureCompensationRange()
+                            val totalSteps = (range.upper - range.lower).coerceAtLeast(1)
+
+                            // 160dp total drag distance spans the entire EV range from min to max
+                            val dragDistancePerStep = (160f * density) / totalSteps
+                            val evStepDelta = (dy / dragDistancePerStep).toInt()
+                            val targetEv = (initialEvIndex + evStepDelta).coerceIn(range.lower, range.upper)
+
+                            if (targetEv != currentEvIndex) {
+                                currentEvIndex = targetEv
+                                cameraManager.setExposureCompensation(targetEv)
+                                updateExposureThumbPosition(targetEv, range)
+                                showExposureEvBadge()
+                            }
+                        }
+                        true
+                    } else {
+                        false
+                    }
+                }
+
+                MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                    if (isDraggingExposure) {
+                        isDraggingExposure = false
+                        // Fade out the EV numeric badge after 1s
+                        binding.tvExposureEvBadge.animate()
+                            .alpha(0f)
+                            .setStartDelay(1000)
+                            .setDuration(300)
+                            .withEndAction {
+                                binding.tvExposureEvBadge.visibility = View.GONE
+                                binding.tvExposureEvBadge.alpha = 1f
+                            }
+                            .start()
+
+                        // Keep the reticle and slider visible for 3.5s before gently fading out
+                        scheduleReticleAutoHide(3500L)
+                    }
+                    true
+                }
+
+                else -> false
+            }
         }
 
         // Gallery Thumbnail Click
@@ -699,31 +800,102 @@ class MainActivity : AppCompatActivity() {
         cameraManager.bindCameraUseCases()
     }
 
-    private fun showFocusRing(x: Float, y: Float) {
+    private fun showFocusReticleAndSlider(x: Float, y: Float) {
         val container = binding.focusReticleContainer
-        val halfW = container.width / 2
-        val halfH = container.height / 2
+        val density = resources.displayMetrics.density
 
-        container.x = x - halfW
-        container.y = y - halfH
-        container.visibility = View.VISIBLE
+        reticleAutoHideJob?.cancel()
+        container.animate().cancel()
         container.alpha = 1f
-        container.scaleX = 1.3f
-        container.scaleY = 1.3f
+        container.visibility = View.VISIBLE
 
-        container.animate()
+        // Center focusRing (64dp) on tap point (x, y)
+        // focusRing center is at x = 32dp inside container, y = 60dp (centered in 120dp track)
+        val ringCenterX = 32f * density
+        val ringCenterY = 60f * density
+
+        var targetX = x - ringCenterX
+        var targetY = y - ringCenterY
+
+        val parentW = binding.viewFinder.width.toFloat()
+        val parentH = binding.viewFinder.height.toFloat()
+        val containerW = 120f * density
+        val containerH = 130f * density
+
+        // Clamp to viewfinder bounds
+        if (targetX + containerW > parentW - 8 * density) {
+            targetX = parentW - containerW - 8 * density
+        }
+        if (targetX < 8 * density) {
+            targetX = 8 * density
+        }
+
+        if (targetY + containerH > parentH - 8 * density) {
+            targetY = parentH - containerH - 8 * density
+        }
+        if (targetY < 8 * density) {
+            targetY = 8 * density
+        }
+
+        container.x = targetX
+        container.y = targetY
+
+        // Animate focus ring pulse
+        binding.focusRing.scaleX = 1.35f
+        binding.focusRing.scaleY = 1.35f
+        binding.focusRing.animate()
             .scaleX(1.0f)
             .scaleY(1.0f)
             .setDuration(220)
-            .withEndAction {
-                container.animate()
+            .start()
+
+        // Sync sun position
+        val range = cameraManager.getExposureCompensationRange()
+        updateExposureThumbPosition(currentEvIndex, range)
+
+        // Schedule auto-hide after 3.5 seconds
+        scheduleReticleAutoHide(3500L)
+    }
+
+    private fun updateExposureThumbPosition(evIndex: Int, range: android.util.Range<Int>) {
+        val density = resources.displayMetrics.density
+        val maxTravelPx = 38f * density
+
+        val fraction = if (range.upper != range.lower) {
+            (evIndex.toFloat() - range.lower) / (range.upper - range.lower).toFloat()
+        } else {
+            0.5f
+        }
+
+        val translationY = (0.5f - fraction) * 2f * maxTravelPx
+        binding.ivExposureSun.translationY = translationY
+
+        val step = cameraManager.getExposureCompensationStep()
+        val evValue = evIndex * step
+        binding.tvExposureEvBadge.text = String.format("%+.1f EV", evValue)
+    }
+
+    private fun showExposureEvBadge() {
+        binding.tvExposureEvBadge.animate().cancel()
+        binding.tvExposureEvBadge.alpha = 1f
+        binding.tvExposureEvBadge.visibility = View.VISIBLE
+    }
+
+    private fun scheduleReticleAutoHide(delayMs: Long) {
+        reticleAutoHideJob?.cancel()
+        reticleAutoHideJob = lifecycleScope.launch {
+            delay(delayMs)
+            if (isActive && !isDraggingExposure) {
+                binding.focusReticleContainer.animate()
                     .alpha(0f)
-                    .setStartDelay(1200)
-                    .setDuration(400)
-                    .withEndAction { container.visibility = View.GONE }
+                    .setDuration(350)
+                    .withEndAction {
+                        binding.focusReticleContainer.visibility = View.GONE
+                        binding.tvExposureEvBadge.visibility = View.GONE
+                    }
                     .start()
             }
-            .start()
+        }
     }
 
     private fun onShutterClicked() {
@@ -858,6 +1030,8 @@ class MainActivity : AppCompatActivity() {
 
     override fun onDestroy() {
         super.onDestroy()
+        reticleAutoHideJob?.cancel()
+        reticleAutoHideJob = null
         stopVideoRecordingUi()
     }
 
