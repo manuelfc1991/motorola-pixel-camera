@@ -14,7 +14,10 @@ import android.os.Build
 import android.os.Bundle
 import android.provider.MediaStore
 import android.util.Size
+import android.view.GestureDetector
+import android.view.KeyEvent
 import android.view.MotionEvent
+import android.view.ScaleGestureDetector
 import android.view.View
 import android.widget.ImageView
 import android.widget.SeekBar
@@ -105,6 +108,10 @@ class MainActivity : AppCompatActivity() {
         CaptureRequest.CONTROL_AWB_MODE_CLOUDY_DAYLIGHT,
         CaptureRequest.CONTROL_AWB_MODE_SHADE
     )
+
+    private lateinit var scaleGestureDetector: ScaleGestureDetector
+    private lateinit var gestureDetector: GestureDetector
+    private var gridMode: Int = 1 // 0: Off, 1: 3x3, 2: Golden Ratio
 
     private val sensorListener = object : SensorEventListener {
         override fun onSensorChanged(event: SensorEvent?) {
@@ -252,6 +259,24 @@ class MainActivity : AppCompatActivity() {
                 }
             }
         }
+
+        scaleGestureDetector = ScaleGestureDetector(this, object : ScaleGestureDetector.SimpleOnScaleGestureListener() {
+            override fun onScale(detector: ScaleGestureDetector): Boolean {
+                val currentZoom = cameraManager.currentZoomRatio
+                val scale = detector.scaleFactor
+                val newZoom = (currentZoom * scale).coerceIn(1.0f, 8.0f)
+                cameraManager.setZoom(newZoom)
+                updateZoomUiForRatio(newZoom)
+                return true
+            }
+        })
+
+        gestureDetector = GestureDetector(this, object : GestureDetector.SimpleOnGestureListener() {
+            override fun onDoubleTap(e: MotionEvent): Boolean {
+                flipCameraWithAnimation()
+                return true
+            }
+        })
 
         setupListeners()
         initDefaultUiState()
@@ -401,6 +426,21 @@ class MainActivity : AppCompatActivity() {
                 setQsButtonActive(binding.btnQsTimer10s, true)
             }
         }
+
+        // 8. Grid row
+        val activeBg = R.drawable.bg_qs_btn_active
+        val inactiveBg = R.drawable.bg_qs_btn_inactive
+        val activeTextColor = ContextCompat.getColor(this, R.color.pixel_pill_text_active)
+        val inactiveTextColor = ContextCompat.getColor(this, R.color.pixel_text_white)
+
+        binding.btnQsGridOff.setBackgroundResource(if (gridMode == 0) activeBg else inactiveBg)
+        binding.btnQsGridOff.setTextColor(if (gridMode == 0) activeTextColor else inactiveTextColor)
+
+        binding.btnQsGrid3x3.setBackgroundResource(if (gridMode == 1) activeBg else inactiveBg)
+        binding.btnQsGrid3x3.setTextColor(if (gridMode == 1) activeTextColor else inactiveTextColor)
+
+        binding.btnQsGridGolden.setBackgroundResource(if (gridMode == 2) activeBg else inactiveBg)
+        binding.btnQsGridGolden.setTextColor(if (gridMode == 2) activeTextColor else inactiveTextColor)
     }
 
     private fun setQsButtonActive(button: ImageView, active: Boolean) {
@@ -558,6 +598,20 @@ class MainActivity : AppCompatActivity() {
             Toast.makeText(this, "Timer 10s", Toast.LENGTH_SHORT).show()
         }
 
+        // Quick Settings - Row 6: Grid Type (Off / 3x3 / Golden Ratio)
+        binding.btnQsGridOff.setOnClickListener {
+            setGridType(0)
+            Toast.makeText(this, "Grid Off", Toast.LENGTH_SHORT).show()
+        }
+        binding.btnQsGrid3x3.setOnClickListener {
+            setGridType(1)
+            Toast.makeText(this, "Grid 3×3", Toast.LENGTH_SHORT).show()
+        }
+        binding.btnQsGridGolden.setOnClickListener {
+            setGridType(2)
+            Toast.makeText(this, "Grid Golden Ratio", Toast.LENGTH_SHORT).show()
+        }
+
         // MGC 9.7 Segmented Tabs: [ General | Pro ]
         binding.tabQsGeneral.setOnClickListener {
             binding.tabQsGeneral.setBackgroundResource(R.drawable.bg_segmented_pill_active)
@@ -686,13 +740,7 @@ class MainActivity : AppCompatActivity() {
 
         // Tier 1: Camera Switch (Front <-> Rear)
         binding.btnSwitchCamera.setOnClickListener {
-            binding.btnSwitchCamera.animate().rotationBy(180f).setDuration(300).start()
-            cameraManager.switchCamera()
-            val isFront = cameraManager.isFrontCamera()
-            binding.zoomPillContainer.visibility = if (isFront) View.GONE else View.VISIBLE
-            if (!isFront) {
-                selectZoomPill(binding.btnZoom1x)
-            }
+            flipCameraWithAnimation()
         }
 
         // MGC 9.7 Dual Zoom Selectors (Upper Physical Lenses + Lower Multipliers)
@@ -844,12 +892,20 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
-        // Tap to Focus with Interactive Brightness Exposure Slider
+        // Tap to Focus with Interactive Brightness Exposure Slider & Gesture Zoom/Flip
         binding.viewFinder.setOnTouchListener { _, event ->
             if (binding.quickSettingsContainer.visibility == View.VISIBLE) {
                 if (event.action == MotionEvent.ACTION_DOWN) {
                     toggleQuickSettings()
                 }
+                return@setOnTouchListener true
+            }
+
+            scaleGestureDetector.onTouchEvent(event)
+            gestureDetector.onTouchEvent(event)
+
+            if (scaleGestureDetector.isInProgress || event.pointerCount > 1) {
+                isDraggingExposure = false
                 return@setOnTouchListener true
             }
 
@@ -1067,6 +1123,77 @@ class MainActivity : AppCompatActivity() {
     private fun updateProUiForEv() {
         val ev = currentEvIndex * cameraManager.getExposureCompensationStep()
         binding.tvProParamValue.text = String.format("EV %+.1f", ev)
+    }
+
+    private fun flipCameraWithAnimation() {
+        binding.btnSwitchCamera.animate().rotationBy(180f).setDuration(300).start()
+        cameraManager.switchCamera()
+        val isFront = cameraManager.isFrontCamera()
+        binding.zoomPillContainer.visibility = if (isFront) View.GONE else View.VISIBLE
+        if (!isFront) {
+            selectZoomPill(binding.btnZoom1x)
+        }
+    }
+
+    private fun updateZoomUiForRatio(zoom: Float) {
+        when {
+            zoom < 1.4f -> updateDualZoomUi("1.0", "1×")
+            zoom in 1.4f..3.5f -> updateDualZoomUi("2.0", "2")
+            else -> updateDualZoomUi("2.0", "5")
+        }
+        binding.tvSensorInfo.text = String.format(java.util.Locale.US, "%.1fX ZOOM", zoom)
+    }
+
+    private fun setGridType(mode: Int) {
+        gridMode = mode
+        val activeBg = R.drawable.bg_qs_btn_active
+        val inactiveBg = R.drawable.bg_qs_btn_inactive
+        val activeTextColor = ContextCompat.getColor(this, R.color.pixel_pill_text_active)
+        val inactiveTextColor = ContextCompat.getColor(this, R.color.pixel_text_white)
+
+        binding.btnQsGridOff.setBackgroundResource(if (mode == 0) activeBg else inactiveBg)
+        binding.btnQsGridOff.setTextColor(if (mode == 0) activeTextColor else inactiveTextColor)
+
+        binding.btnQsGrid3x3.setBackgroundResource(if (mode == 1) activeBg else inactiveBg)
+        binding.btnQsGrid3x3.setTextColor(if (mode == 1) activeTextColor else inactiveTextColor)
+
+        binding.btnQsGridGolden.setBackgroundResource(if (mode == 2) activeBg else inactiveBg)
+        binding.btnQsGridGolden.setTextColor(if (mode == 2) activeTextColor else inactiveTextColor)
+
+        when (mode) {
+            0 -> {
+                binding.gridOverlay.visibility = View.GONE
+                binding.tvQsGridSubtitle.text = "Off"
+            }
+            1 -> {
+                binding.gridOverlay.visibility = View.VISIBLE
+                binding.guideV1.setGuidelinePercent(0.333f)
+                binding.guideV2.setGuidelinePercent(0.667f)
+                binding.guideH1.setGuidelinePercent(0.333f)
+                binding.guideH2.setGuidelinePercent(0.667f)
+                binding.tvQsGridSubtitle.text = "3 × 3"
+            }
+            2 -> {
+                binding.gridOverlay.visibility = View.VISIBLE
+                binding.guideV1.setGuidelinePercent(0.382f)
+                binding.guideV2.setGuidelinePercent(0.618f)
+                binding.guideH1.setGuidelinePercent(0.382f)
+                binding.guideH2.setGuidelinePercent(0.618f)
+                binding.tvQsGridSubtitle.text = "Golden Ratio"
+            }
+        }
+    }
+
+    override fun onKeyDown(keyCode: Int, event: KeyEvent?): Boolean {
+        return when (keyCode) {
+            KeyEvent.KEYCODE_VOLUME_DOWN, KeyEvent.KEYCODE_VOLUME_UP, KeyEvent.KEYCODE_CAMERA -> {
+                if (event?.repeatCount == 0) {
+                    onShutterClicked()
+                }
+                true
+            }
+            else -> super.onKeyDown(keyCode, event)
+        }
     }
 
     private fun switchToPhotoMode() {
