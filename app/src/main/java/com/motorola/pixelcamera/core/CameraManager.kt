@@ -30,6 +30,7 @@ import androidx.camera.video.VideoCapture
 import androidx.camera.view.PreviewView
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.LifecycleOwner
+import com.motorola.pixelcamera.computational.HdrProcessor
 import com.motorola.pixelcamera.computational.NightSightEngine
 import com.motorola.pixelcamera.computational.PortraitEngine
 import com.motorola.pixelcamera.hardware.MotorolaVendorHelper
@@ -392,14 +393,31 @@ class CameraManager(private val context: Context) {
 
         when (mode) {
             CameraMode.CAMERA, CameraMode.PRO -> {
-                // Razor-Sharp Direct Hardware ISP Capture
-                // Writes directly from MediaTek ISP into MediaStore with full EXIF, high micro-contrast, zero double-compression
-                onStatusUpdate("Capturing high-clarity frame...")
-                takePictureDirect(capture)
+                if (hdrPlusMode == 0 && !isGoogleAwbEnabled) {
+                    onStatusUpdate("Capturing direct frame...")
+                    takePictureDirect(capture)
+                } else {
+                    val frameCount = if (hdrPlusMode == 2) 3 else 2
+                    onStatusUpdate("HDR+ burst: Capturing $frameCount frames...")
+                    val burst = mutableListOf<Bitmap>()
+                    for (i in 0 until frameCount) {
+                        val bmp = runCatching { takeSingleBitmap(capture) }.getOrNull()
+                        if (bmp != null) burst.add(bmp)
+                    }
+
+                    if (burst.isNotEmpty()) {
+                        onStatusUpdate("Merging HDR+ & Pixel tone mapping...")
+                        val processed = HdrProcessor.processHdr(burst, enableGoogleAwb = isGoogleAwbEnabled)
+                        onStatusUpdate("Saving HDR+ photo...")
+                        saveBitmapToMediaStore(processed)
+                    } else {
+                        takePictureDirect(capture)
+                    }
+                }
             }
             CameraMode.PORTRAIT -> {
                 onStatusUpdate("Capturing portrait frame...")
-                val baseBitmap = takeSingleBitmap(capture) ?: return@withContext null
+                val baseBitmap = runCatching { takeSingleBitmap(capture) }.getOrNull() ?: return@withContext null
                 onStatusUpdate("Computing progressive bokeh...")
                 val portraitBitmap = PortraitEngine.applyPortraitBokeh(
                     baseBitmap,
@@ -411,11 +429,20 @@ class CameraManager(private val context: Context) {
                 saveBitmapToMediaStore(portraitBitmap)
             }
             CameraMode.NIGHT_SIGHT -> {
-                // Dimensity 800U Hardware Multi-Frame Noise Reduction (MFNR / 3DNR) & Night Scene Mode
-                // Captures high-speed raw burst on the sensor plane with hardware gyro alignment,
-                // eliminating hand-motion ghosting and producing crisp, razor-sharp low-light images.
-                onStatusUpdate("Night Sight hardware multi-frame fusion...")
-                takePictureDirect(capture)
+                onStatusUpdate("Night Sight: Capturing 3 multi-frame exposures...")
+                val burst = mutableListOf<Bitmap>()
+                for (i in 0 until 3) {
+                    val bmp = runCatching { takeSingleBitmap(capture) }.getOrNull()
+                    if (bmp != null) burst.add(bmp)
+                }
+                if (burst.isNotEmpty()) {
+                    onStatusUpdate("Fusing low-light frames & de-noising...")
+                    val processed = HdrProcessor.processHdr(burst, enableGoogleAwb = true)
+                    onStatusUpdate("Saving Night Sight photo...")
+                    saveBitmapToMediaStore(processed)
+                } else {
+                    takePictureDirect(capture)
+                }
             }
             CameraMode.VIDEO -> {
                 // Video is handled by startRecording / stopRecording
@@ -583,6 +610,23 @@ class CameraManager(private val context: Context) {
         try {
             resolver.openOutputStream(uri)?.use { stream ->
                 bitmap.compress(Bitmap.CompressFormat.JPEG, 100, stream)
+            }
+
+            try {
+                resolver.openFileDescriptor(uri, "rw")?.use { pfd ->
+                    val exif = androidx.exifinterface.media.ExifInterface(pfd.fileDescriptor)
+                    exif.setAttribute(androidx.exifinterface.media.ExifInterface.TAG_MAKE, Build.MANUFACTURER.replaceFirstChar { it.uppercase() })
+                    exif.setAttribute(androidx.exifinterface.media.ExifInterface.TAG_MODEL, Build.MODEL)
+                    exif.setAttribute(androidx.exifinterface.media.ExifInterface.TAG_SOFTWARE, "Pixel Camera 9.7 (HDR+)")
+                    val timeStr = SimpleDateFormat("yyyy:MM:dd HH:mm:ss", Locale.US).format(Date())
+                    exif.setAttribute(androidx.exifinterface.media.ExifInterface.TAG_DATETIME, timeStr)
+                    exif.setAttribute(androidx.exifinterface.media.ExifInterface.TAG_DATETIME_ORIGINAL, timeStr)
+                    exif.setAttribute(androidx.exifinterface.media.ExifInterface.TAG_IMAGE_WIDTH, bitmap.width.toString())
+                    exif.setAttribute(androidx.exifinterface.media.ExifInterface.TAG_IMAGE_LENGTH, bitmap.height.toString())
+                    exif.saveAttributes()
+                }
+            } catch (exifErr: Exception) {
+                Log.w(TAG, "Failed to write EXIF attributes", exifErr)
             }
 
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {

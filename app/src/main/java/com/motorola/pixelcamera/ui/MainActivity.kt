@@ -359,21 +359,24 @@ class MainActivity : AppCompatActivity() {
         binding.btnQsRawOff.setOnClickListener { setQuickRaw(false) }
         binding.btnQsRawOn.setOnClickListener { setQuickRaw(true) }
 
-        // Quick Settings - Row 3: Top Shot
+        // Quick Settings - Row 3: HDR+ (Off / Auto / Enhanced)
         binding.btnQsTopShotOff.setOnClickListener {
             topShotMode = 0
+            cameraManager.hdrPlusMode = 0
             updateQuickSettingsUi()
-            Toast.makeText(this, "Top Shot Off", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, "HDR+ Off", Toast.LENGTH_SHORT).show()
         }
         binding.btnQsTopShotAuto.setOnClickListener {
             topShotMode = 1
+            cameraManager.hdrPlusMode = 1
             updateQuickSettingsUi()
-            Toast.makeText(this, "Top Shot Auto", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, "HDR+ Auto", Toast.LENGTH_SHORT).show()
         }
         binding.btnQsTopShotOn.setOnClickListener {
             topShotMode = 2
+            cameraManager.hdrPlusMode = 2
             updateQuickSettingsUi()
-            Toast.makeText(this, "Top Shot On", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, "HDR+ Enhanced", Toast.LENGTH_SHORT).show()
         }
 
         // Quick Settings - Row 4: Timer
@@ -1038,6 +1041,8 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun onShutterClicked() {
+        binding.btnShutter.performHapticFeedback(android.view.HapticFeedbackConstants.KEYBOARD_TAP)
+
         if (currentMode == CameraMode.VIDEO) {
             handleVideoShutter()
             return
