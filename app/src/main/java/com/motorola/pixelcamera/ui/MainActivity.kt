@@ -22,6 +22,7 @@ import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
+import androidx.camera.core.AspectRatio
 import androidx.camera.core.ImageCapture
 import androidx.camera.video.VideoRecordEvent
 import androidx.core.content.ContextCompat
@@ -199,7 +200,25 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
-        // 4. Timer row
+        // 4. Aspect Ratio row
+        val is169 = cameraManager.aspectRatio == AspectRatio.RATIO_16_9
+        binding.tvQsRatioSubtitle.text = if (is169) "16:9 Wide" else "4:3 Standard"
+        setQsButtonActive(binding.btnQsRatio43, !is169)
+        setQsButtonActive(binding.btnQsRatio169, is169)
+
+        // 5. Resolution row
+        val is108 = cameraManager.is108MpEnabled
+        binding.tvQsResSubtitle.text = if (is108) "108 MP Ultra" else "12 MP Binned"
+        setQsButtonActive(binding.btnQsRes12, !is108)
+        setQsButtonActive(binding.btnQsRes108, is108)
+
+        // 6. Google AWB row
+        val isAwb = cameraManager.isGoogleAwbEnabled
+        binding.tvQsAwbSubtitle.text = if (isAwb) "Auto White Balance ON" else "Standard"
+        setQsButtonActive(binding.btnQsAwbOff, !isAwb)
+        setQsButtonActive(binding.btnQsAwbOn, isAwb)
+
+        // 7. Timer row
         when (timerDuration) {
             0 -> {
                 binding.tvQsTimerSubtitle.text = "Off"
@@ -220,12 +239,6 @@ class MainActivity : AppCompatActivity() {
                 setQsButtonActive(binding.btnQsTimer10s, true)
             }
         }
-
-        // 5. Resolution row
-        val is108 = cameraManager.is108MpEnabled
-        binding.tvQsResSubtitle.text = if (is108) "108 MP Ultra" else "12 MP Binned"
-        setQsButtonActive(binding.btnQsRes12, !is108)
-        setQsButtonActive(binding.btnQsRes108, is108)
     }
 
     private fun setQsButtonActive(button: ImageView, active: Boolean) {
@@ -380,9 +393,42 @@ class MainActivity : AppCompatActivity() {
             Toast.makeText(this, "Timer 10s", Toast.LENGTH_SHORT).show()
         }
 
+        // Quick Settings - Row 4: Aspect Ratio
+        binding.btnQsRatio43.setOnClickListener {
+            cameraManager.aspectRatio = AspectRatio.RATIO_4_3
+            cameraManager.bindCameraUseCases()
+            updateQuickSettingsUi()
+            Toast.makeText(this, "Aspect Ratio: 4:3 Standard", Toast.LENGTH_SHORT).show()
+        }
+        binding.btnQsRatio169.setOnClickListener {
+            cameraManager.aspectRatio = AspectRatio.RATIO_16_9
+            cameraManager.bindCameraUseCases()
+            updateQuickSettingsUi()
+            Toast.makeText(this, "Aspect Ratio: 16:9 Widescreen", Toast.LENGTH_SHORT).show()
+        }
+
         // Quick Settings - Row 5: Resolution
         binding.btnQsRes12.setOnClickListener { setQuickResolution(false) }
         binding.btnQsRes108.setOnClickListener { setQuickResolution(true) }
+
+        // Quick Settings - Row 6: Google AWB
+        binding.btnQsAwbOff.setOnClickListener {
+            cameraManager.isGoogleAwbEnabled = false
+            cameraManager.bindCameraUseCases()
+            updateQuickSettingsUi()
+            Toast.makeText(this, "Google AWB: Standard", Toast.LENGTH_SHORT).show()
+        }
+        binding.btnQsAwbOn.setOnClickListener {
+            cameraManager.isGoogleAwbEnabled = true
+            cameraManager.bindCameraUseCases()
+            updateQuickSettingsUi()
+            Toast.makeText(this, "Google AWB: ON", Toast.LENGTH_SHORT).show()
+        }
+
+        // Quick Settings - Floating "More settings" Pill
+        binding.btnMoreSettings.setOnClickListener {
+            startActivity(Intent(this, SettingsActivity::class.java))
+        }
 
         // Flash Button Quick Toggle in Top Bar (Off -> Auto -> On -> Off)
         binding.btnFlash.setOnClickListener {
@@ -406,6 +452,22 @@ class MainActivity : AppCompatActivity() {
         }
         binding.btnToggleVideo.setOnClickListener {
             switchToVideoMode()
+        }
+
+        // Tier 3: Pro Controls Button (ic_tune)
+        binding.btnProControls.setOnClickListener {
+            val isShowing = binding.proControlPanel.visibility == View.VISIBLE
+            if (isShowing) {
+                binding.proControlPanel.visibility = View.GONE
+                binding.histogramView.visibility = View.GONE
+                binding.btnProControls.setBackgroundResource(R.drawable.bg_settings_circle)
+                ImageViewCompat.setImageTintList(binding.btnProControls, ContextCompat.getColorStateList(this, R.color.pixel_text_white))
+            } else {
+                binding.proControlPanel.visibility = View.VISIBLE
+                binding.histogramView.visibility = View.VISIBLE
+                binding.btnProControls.setBackgroundResource(R.drawable.bg_qs_btn_active)
+                ImageViewCompat.setImageTintList(binding.btnProControls, ContextCompat.getColorStateList(this, R.color.pixel_icon_active))
+            }
         }
 
         // Tier 1: Shutter Button

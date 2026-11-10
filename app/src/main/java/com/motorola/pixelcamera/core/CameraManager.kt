@@ -65,6 +65,9 @@ class CameraManager(private val context: Context) {
 
     var isRawEnabled: Boolean = false
     var is108MpEnabled: Boolean = false
+    var aspectRatio: Int = AspectRatio.RATIO_4_3
+    var isGoogleAwbEnabled: Boolean = false
+    var hdrPlusMode: Int = 1 // 0: Off, 1: On, 2: Enhanced
 
     var onHistogramUpdate: ((IntArray, IntArray, IntArray) -> Unit)? = null
 
@@ -120,12 +123,18 @@ class CameraManager(private val context: Context) {
 
         val cameraSelector = getCameraSelectorForId(currentCameraId)
 
-        // 1. Preview Use Case with 4:3 Aspect Ratio (optimal for 12MP/108MP HM2 sensor)
+        val aspectStrategy = if (aspectRatio == AspectRatio.RATIO_16_9) {
+            AspectRatioStrategy.RATIO_16_9_FALLBACK_AUTO_STRATEGY
+        } else {
+            AspectRatioStrategy.RATIO_4_3_FALLBACK_AUTO_STRATEGY
+        }
+
+        // 1. Preview Use Case with Dynamic Aspect Ratio (4:3 or 16:9)
         val previewResolutionSelector = ResolutionSelector.Builder()
-            .setAspectRatioStrategy(AspectRatioStrategy.RATIO_4_3_FALLBACK_AUTO_STRATEGY)
+            .setAspectRatioStrategy(aspectStrategy)
             .setResolutionStrategy(
                 ResolutionStrategy(
-                    Size(1920, 1440),
+                    if (aspectRatio == AspectRatio.RATIO_16_9) Size(1920, 1080) else Size(1920, 1440),
                     ResolutionStrategy.FALLBACK_RULE_CLOSEST_HIGHER_THEN_LOWER
                 )
             )
@@ -137,6 +146,9 @@ class CameraManager(private val context: Context) {
         val previewExtender = Camera2Interop.Extender(previewBuilder)
         previewExtender.setCaptureRequestOption(CaptureRequest.CONTROL_AF_MODE, CaptureRequest.CONTROL_AF_MODE_CONTINUOUS_PICTURE)
         previewExtender.setCaptureRequestOption(CaptureRequest.CONTROL_AE_ANTIBANDING_MODE, CaptureRequest.CONTROL_AE_ANTIBANDING_MODE_AUTO)
+        if (isGoogleAwbEnabled) {
+            previewExtender.setCaptureRequestOption(CaptureRequest.CONTROL_AWB_MODE, CaptureRequest.CONTROL_AWB_MODE_AUTO)
+        }
         if (currentCameraMode == CameraMode.NIGHT_SIGHT) {
             previewExtender.setCaptureRequestOption(CaptureRequest.CONTROL_MODE, CaptureRequest.CONTROL_MODE_USE_SCENE_MODE)
             previewExtender.setCaptureRequestOption(CaptureRequest.CONTROL_SCENE_MODE, CaptureRequest.CONTROL_SCENE_MODE_NIGHT)
@@ -148,7 +160,7 @@ class CameraManager(private val context: Context) {
 
         // 2. Image Capture Use Case (Maximum Quality & Hardware ISP Clarity Tuning)
         val captureResolutionSelector = ResolutionSelector.Builder()
-            .setAspectRatioStrategy(AspectRatioStrategy.RATIO_4_3_FALLBACK_AUTO_STRATEGY)
+            .setAspectRatioStrategy(aspectStrategy)
             .setResolutionStrategy(ResolutionStrategy.HIGHEST_AVAILABLE_STRATEGY)
             .build()
 

@@ -1,0 +1,15 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <!-- HDR text -->
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M3,9h1.5v2.2h2V9H8v6H6.5v-2.5h-2V15H3V9zm6,0h2.5c0.8,0 1.5,0.7 1.5,1.5v3c0,0.8 -0.7,1.5 -1.5,1.5H9V9zm1.5,4.8h1c0.3,0 0.5,-0.2 0.5,-0.5v-2.6c0,-0.3 -0.2,-0.5 -0.5,-0.5h-1v3.6zm5,-4.8h2.5c0.8,0 1.5,0.7 1.5,1.5v1c0,0.6 -0.4,1.1 -0.9,1.3l1.1,2.2h-1.6l-1,-2h-0.6v2h-1.5V9zm1.5,2.8h1c0.3,0 0.5,-0.2 0.5,-0.5v-0.8c0,-0.3 -0.2,-0.5 -0.5,-0.5h-1v1.8z" />
+    <!-- Diagonal Slash -->
+    <path
+        android:strokeColor="#FFFFFFFF"
+        android:strokeWidth="1.8"
+        android:pathData="M2,20L20,4" />
+</vector>
