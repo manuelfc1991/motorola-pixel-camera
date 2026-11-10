@@ -30,6 +30,7 @@ import androidx.camera.video.VideoCapture
 import androidx.camera.view.PreviewView
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.LifecycleOwner
+import com.motorola.pixelcamera.computational.AstrophotographyEngine
 import com.motorola.pixelcamera.computational.HdrProcessor
 import com.motorola.pixelcamera.computational.NightSightEngine
 import com.motorola.pixelcamera.computational.PortraitEngine
@@ -79,6 +80,7 @@ class CameraManager(private val context: Context) {
 
     var isRawEnabled: Boolean = false
     var is108MpEnabled: Boolean = false
+    var isAstrophotographyActive: Boolean = false
     var aspectRatio: Int = AspectRatio.RATIO_4_3
     var isGoogleAwbEnabled: Boolean = false
     var hdrPlusMode: Int = 1 // 0: Off, 1: On, 2: Enhanced
@@ -552,20 +554,57 @@ class CameraManager(private val context: Context) {
                 saveBitmapToMediaStore(portraitBitmap)
             }
             CameraMode.NIGHT_SIGHT -> {
-                onStatusUpdate("Night Sight: Capturing 3 multi-frame exposures...")
+                if (isAstrophotographyActive) {
+                    onStatusUpdate("Astrophotography: Capturing 8 long exposures...")
+                    val burst = mutableListOf<Bitmap>()
+                    for (i in 0 until 8) {
+                        val bmp = runCatching { takeSingleBitmap(capture) }.getOrNull()
+                        if (bmp != null) burst.add(bmp)
+                    }
+                    if (burst.isNotEmpty()) {
+                        onStatusUpdate("Aligning stars & sidereal stacking...")
+                        val processed = AstrophotographyEngine.processAstroStack(burst)
+                        onStatusUpdate("Saving Astrophotography photo...")
+                        saveBitmapToMediaStore(processed)
+                    } else {
+                        takePictureDirect(capture)
+                    }
+                } else {
+                    onStatusUpdate("Night Sight: Capturing 4 multi-frame exposures...")
+                    val burst = mutableListOf<Bitmap>()
+                    for (i in 0 until 4) {
+                        val bmp = runCatching { takeSingleBitmap(capture) }.getOrNull()
+                        if (bmp != null) burst.add(bmp)
+                    }
+                    if (burst.isNotEmpty()) {
+                        onStatusUpdate("Fusing low-light frames & de-noising...")
+                        val processed = NightSightEngine.processNightSight(burst)
+                        onStatusUpdate("Saving Night Sight photo...")
+                        saveBitmapToMediaStore(processed)
+                    } else {
+                        takePictureDirect(capture)
+                    }
+                }
+            }
+            CameraMode.LONG_EXPOSURE -> {
+                onStatusUpdate("Long Exposure: Capturing 12 motion frames...")
                 val burst = mutableListOf<Bitmap>()
-                for (i in 0 until 3) {
+                for (i in 0 until 12) {
                     val bmp = runCatching { takeSingleBitmap(capture) }.getOrNull()
                     if (bmp != null) burst.add(bmp)
                 }
                 if (burst.isNotEmpty()) {
-                    onStatusUpdate("Fusing low-light frames & de-noising...")
-                    val processed = HdrProcessor.processHdr(burst, enableGoogleAwb = true)
-                    onStatusUpdate("Saving Night Sight photo...")
+                    onStatusUpdate("Blending motion blur & light trails...")
+                    val processed = HdrProcessor.blendLongExposure(burst)
+                    onStatusUpdate("Saving Long Exposure photo...")
                     saveBitmapToMediaStore(processed)
                 } else {
                     takePictureDirect(capture)
                 }
+            }
+            CameraMode.PANORAMA -> {
+                onStatusUpdate("Capturing wide panorama frame...")
+                takePictureDirect(capture)
             }
             CameraMode.VIDEO -> {
                 // Video is handled by startRecording / stopRecording

@@ -118,6 +118,8 @@ class MainActivity : AppCompatActivity() {
     private lateinit var gestureDetector: GestureDetector
     private var gridMode: Int = 1 // 0: Off, 1: 3x3, 2: Golden Ratio
     private var isProTabActive: Boolean = false
+    private var lastTotalAcc: Float = 9.8f
+    private var stillStartTime: Long = 0L
 
     private val sensorListener = object : SensorEventListener {
         override fun onSensorChanged(event: SensorEvent?) {
@@ -126,6 +128,32 @@ class MainActivity : AppCompatActivity() {
             val ax = event.values[0]
             val ay = event.values[1]
             val az = event.values[2]
+
+            // Astrophotography Stability Detection in Night Sight mode
+            val totalAcc = kotlin.math.sqrt((ax * ax + ay * ay + az * az).toDouble()).toFloat()
+            val deltaAcc = abs(totalAcc - lastTotalAcc)
+            lastTotalAcc = totalAcc
+
+            if (currentMode == CameraMode.NIGHT_SIGHT) {
+                if (deltaAcc < 0.08f) {
+                    if (stillStartTime == 0L) {
+                        stillStartTime = System.currentTimeMillis()
+                    } else if (System.currentTimeMillis() - stillStartTime >= 2500L) {
+                        if (!cameraManager.isAstrophotographyActive) {
+                            cameraManager.isAstrophotographyActive = true
+                            binding.tvHdrBadge.text = "★ ASTROPHOTOGRAPHY"
+                            binding.tvHdrBadge.setTextColor(ContextCompat.getColor(this@MainActivity, R.color.pixel_accent_yellow))
+                        }
+                    }
+                } else {
+                    stillStartTime = 0L
+                    if (cameraManager.isAstrophotographyActive) {
+                        cameraManager.isAstrophotographyActive = false
+                        binding.tvHdrBadge.text = "NIGHT SIGHT"
+                        binding.tvHdrBadge.setTextColor(ContextCompat.getColor(this@MainActivity, R.color.pixel_pill_text_active))
+                    }
+                }
+            }
 
             val isFlatLay = abs(az) >= 8.2f // Top-down / table flat-lay shot
 
@@ -1005,14 +1033,14 @@ class MainActivity : AppCompatActivity() {
 
         // Tier 2: Mode Ribbon / Carousel
         binding.modeLongExposure.setOnClickListener {
-            setMode(CameraMode.CAMERA, binding.modeLongExposure)
-            Toast.makeText(this, "Long Exposure • Handheld Stabilization", Toast.LENGTH_SHORT).show()
+            setMode(CameraMode.LONG_EXPOSURE, binding.modeLongExposure)
+            Toast.makeText(this, "Long Exposure • Handheld Motion Blur", Toast.LENGTH_SHORT).show()
         }
         binding.modePortrait.setOnClickListener { setMode(CameraMode.PORTRAIT, binding.modePortrait) }
         binding.modeCamera.setOnClickListener { setMode(CameraMode.CAMERA, binding.modeCamera) }
         binding.modeNightSight.setOnClickListener { setMode(CameraMode.NIGHT_SIGHT, binding.modeNightSight) }
         binding.modePanorama.setOnClickListener {
-            setMode(CameraMode.CAMERA, binding.modePanorama)
+            setMode(CameraMode.PANORAMA, binding.modePanorama)
             Toast.makeText(this, "Panorama Mode", Toast.LENGTH_SHORT).show()
         }
         binding.modePro.setOnClickListener { setMode(CameraMode.PRO, binding.modePro) }
@@ -1615,7 +1643,7 @@ class MainActivity : AppCompatActivity() {
 
         // Update Pixel Shutter color per mode
         when (mode) {
-            CameraMode.NIGHT_SIGHT -> binding.btnShutter.setImageResource(R.drawable.bg_shutter_night)
+            CameraMode.NIGHT_SIGHT, CameraMode.LONG_EXPOSURE -> binding.btnShutter.setImageResource(R.drawable.bg_shutter_night)
             CameraMode.VIDEO -> binding.btnShutter.setImageResource(R.drawable.bg_shutter_video)
             else -> binding.btnShutter.setImageResource(R.drawable.bg_shutter_button)
         }
@@ -1623,19 +1651,31 @@ class MainActivity : AppCompatActivity() {
         // Update Overlays Visibility per Mode
         when (mode) {
             CameraMode.NIGHT_SIGHT -> {
+                stillStartTime = 0L
+                cameraManager.isAstrophotographyActive = false
                 binding.tvHdrBadge.text = "NIGHT SIGHT"
+                binding.tvHdrBadge.setTextColor(ContextCompat.getColor(this, R.color.pixel_pill_text_active))
+                binding.proControlPanel.visibility = View.GONE
+                binding.histogramView.visibility = View.GONE
+                binding.overlayPortraitAperture.visibility = View.GONE
+            }
+            CameraMode.LONG_EXPOSURE -> {
+                binding.tvHdrBadge.text = "LONG EXPOSURE"
+                binding.tvHdrBadge.setTextColor(ContextCompat.getColor(this, R.color.pixel_pill_text_active))
                 binding.proControlPanel.visibility = View.GONE
                 binding.histogramView.visibility = View.GONE
                 binding.overlayPortraitAperture.visibility = View.GONE
             }
             CameraMode.PORTRAIT -> {
                 binding.tvHdrBadge.text = "PORTRAIT DEPTH"
+                binding.tvHdrBadge.setTextColor(ContextCompat.getColor(this, R.color.pixel_pill_text_active))
                 binding.proControlPanel.visibility = View.GONE
                 binding.histogramView.visibility = View.GONE
                 binding.overlayPortraitAperture.visibility = View.VISIBLE
             }
             CameraMode.PRO -> {
                 binding.tvHdrBadge.text = "PRO MANUAL"
+                binding.tvHdrBadge.setTextColor(ContextCompat.getColor(this, R.color.pixel_pill_text_active))
                 binding.proControlPanel.visibility = View.VISIBLE
                 binding.histogramView.visibility = View.VISIBLE
                 binding.overlayPortraitAperture.visibility = View.GONE
@@ -1648,6 +1688,14 @@ class MainActivity : AppCompatActivity() {
             }
             CameraMode.CAMERA -> {
                 binding.tvHdrBadge.text = "HDR+ ON"
+                binding.tvHdrBadge.setTextColor(ContextCompat.getColor(this, R.color.pixel_pill_text_active))
+                binding.proControlPanel.visibility = View.GONE
+                binding.histogramView.visibility = View.GONE
+                binding.overlayPortraitAperture.visibility = View.GONE
+            }
+            CameraMode.PANORAMA -> {
+                binding.tvHdrBadge.text = "PANORAMA"
+                binding.tvHdrBadge.setTextColor(ContextCompat.getColor(this, R.color.pixel_pill_text_active))
                 binding.proControlPanel.visibility = View.GONE
                 binding.histogramView.visibility = View.GONE
                 binding.overlayPortraitAperture.visibility = View.GONE
@@ -1788,10 +1836,13 @@ class MainActivity : AppCompatActivity() {
             binding.btnShutter.animate().scaleX(1.0f).scaleY(1.0f).setDuration(120).start()
         }.start()
 
-        // If Night Sight is active, show the countdown overlay
+        // If Night Sight or Long Exposure is active, show the countdown overlay
         if (currentMode == CameraMode.NIGHT_SIGHT) {
             binding.overlayNightHoldStill.visibility = View.VISIBLE
-            binding.tvNightTimer.text = "Hold still..."
+            binding.tvNightTimer.text = if (cameraManager.isAstrophotographyActive) "Astrophotography • Tracking stars..." else "Hold still..."
+        } else if (currentMode == CameraMode.LONG_EXPOSURE) {
+            binding.overlayNightHoldStill.visibility = View.VISIBLE
+            binding.tvNightTimer.text = "Hold still • Blending motion..."
         } else {
             binding.processingPill.visibility = View.VISIBLE
             binding.tvProcessingStatus.text = "Capturing..."

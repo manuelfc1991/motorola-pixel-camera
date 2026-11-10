@@ -289,4 +289,72 @@ object HdrProcessor {
 
         return (blended * 255.0f).coerceIn(0f, 255f)
     }
+
+    /**
+     * Handheld Long Exposure / Motion Blur Accumulator:
+     * Blends consecutive burst frames using dynamic temporal exposure accumulation,
+     * creating silky water motion blur and vibrant light trails while preserving static details.
+     */
+    suspend fun blendLongExposure(frames: List<Bitmap>): Bitmap = withContext(DimensityOptimizer.computationDispatcher) {
+        if (frames.isEmpty()) throw IllegalArgumentException("Frame list empty")
+        if (frames.size == 1) return@withContext frames[0]
+
+        val width = frames[0].width
+        val height = frames[0].height
+        val total = width * height
+        val n = frames.size
+
+        val accR = FloatArray(total)
+        val accG = FloatArray(total)
+        val accB = FloatArray(total)
+        val maxLum = FloatArray(total)
+
+        val temp = IntArray(total)
+
+        for (frame in frames) {
+            frame.getPixels(temp, 0, width, 0, 0, width, height)
+            val weight = 1.0f / n
+            for (i in 0 until total) {
+                val c = temp[i]
+                val r = Color.red(c).toFloat()
+                val g = Color.green(c).toFloat()
+                val b = Color.blue(c).toFloat()
+                val lum = 0.299f * r + 0.587f * g + 0.114f * b
+
+                accR[i] += r * weight
+                accG[i] += g * weight
+                accB[i] += b * weight
+
+                if (lum > maxLum[i]) {
+                    maxLum[i] = lum
+                }
+            }
+        }
+
+        val outPixels = IntArray(total)
+        for (i in 0 until total) {
+            var r = accR[i]
+            var g = accG[i]
+            var b = accB[i]
+
+            // Highlight recovery for light trails: blend in maximum light if it's a moving streak
+            val avgLum = 0.299f * r + 0.587f * g + 0.114f * b
+            if (maxLum[i] > avgLum + 25f) {
+                val streakBlend = 0.40f
+                r = r * (1f - streakBlend) + maxLum[i] * streakBlend
+                g = g * (1f - streakBlend) + maxLum[i] * streakBlend
+                b = b * (1f - streakBlend) + maxLum[i] * streakBlend
+            }
+
+            outPixels[i] = Color.rgb(
+                DimensityOptimizer.clamp(r.toInt()),
+                DimensityOptimizer.clamp(g.toInt()),
+                DimensityOptimizer.clamp(b.toInt())
+            )
+        }
+
+        val output = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+        output.setPixels(outPixels, 0, width, 0, 0, width, height)
+        return@withContext output
+    }
 }
