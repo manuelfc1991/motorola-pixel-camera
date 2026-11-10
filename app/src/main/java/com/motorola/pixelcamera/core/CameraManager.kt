@@ -649,14 +649,19 @@ class CameraManager(private val context: Context) {
                     onStatusUpdate("Night Sight: Capturing $NIGHT_HANDHELD_CAPTURES multi-frame exposures...")
                     val burst = mutableListOf<Bitmap>()
                     for (i in 0 until NIGHT_HANDHELD_CAPTURES) {
+                        val tc = android.os.SystemClock.elapsedRealtime()
                         val bmp = runCatching { takeSingleBitmap(capture) }.getOrNull()
+                        Log.i(TAG, "Night Sight capture+decode ${i + 1}: ${android.os.SystemClock.elapsedRealtime() - tc}ms")
                         if (bmp != null) burst.add(bmp)
                     }
                     if (burst.isNotEmpty()) {
                         onStatusUpdate("Fusing low-light frames & de-noising...")
                         val processed = NightSightEngine.processNightSight(burst)
                         onStatusUpdate("Saving Night Sight photo...")
-                        saveBitmapToMediaStore(processed)
+                        val ts = android.os.SystemClock.elapsedRealtime()
+                        saveBitmapToMediaStore(processed).also {
+                            Log.i(TAG, "Night Sight save=${android.os.SystemClock.elapsedRealtime() - ts}ms")
+                        }
                     } else {
                         takePictureDirect(capture)
                     }
