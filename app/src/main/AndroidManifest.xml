@@ -58,6 +58,19 @@
             android:exported="false"
             android:screenOrientation="portrait"
             android:theme="@style/Theme.MotorolaPixelCamera.Fullscreen" />
+        <!-- CameraX forces GL surface processing for video on this phone
+             (PreviewBlackScreenQuirk), which drops 4K recording to ~15 fps.
+             Disable it so the encoder receives camera frames directly. -->
+        <service
+            android:name="androidx.camera.core.impl.QuirkSettingsLoader$MetadataHolderService"
+            android:enabled="false"
+            android:exported="false"
+            tools:ignore="Instantiatable,MissingClass"
+            tools:node="merge">
+            <meta-data
+                android:name="androidx.camera.core.quirks.FORCE_DISABLED"
+                android:resource="@array/camerax_force_disabled_quirks" />
+        </service>
     </application>
 
 </manifest>

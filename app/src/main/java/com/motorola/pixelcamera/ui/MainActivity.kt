@@ -388,17 +388,13 @@ class MainActivity : AppCompatActivity() {
         binding.tvSensorInfo.text = MAIN_SENSOR_LABEL
         setGridType(gridMode)
         // Rows for features this phone cannot deliver through the public camera API:
-        // 108 MP output (driver tops out at 12 MP), RAW/DNG and manual lens selection.
+        // 108 MP output (driver tops out at 12 MP) and manual lens selection.
         (binding.btnQsRes12.parent.parent as View).visibility = View.GONE
-        (binding.btnQsRawOff.parent.parent as View).visibility = View.GONE
         (binding.btnQsLensAuto.parent.parent as View).visibility = View.GONE
-        // 60 fps: the camera accepts the request but still delivers ~30 fps, so it is not offered.
-        binding.btnQsPreset1080p60.visibility = View.GONE
-        (binding.btnQsVideoFps30.parent.parent as View).visibility = View.GONE
-        binding.segmentedTabsContainer.visibility = View.GONE
     }
 
     private fun syncSettings() {
+        cameraManager.isRawEnabled = prefs.getBoolean(SettingsActivity.KEY_RAW_ENABLED, false)
         hdrMode = prefs.getInt(SettingsActivity.KEY_HDR_MODE, 0).coerceIn(0, 2)
         cameraManager.hdrPlusMode = hdrMode
         cameraManager.shutterSoundEnabled = prefs.getBoolean(SettingsActivity.KEY_CAMERA_SOUNDS, true)
@@ -420,7 +416,7 @@ class MainActivity : AppCompatActivity() {
 
         val videoQualityPref = prefs.getString(SettingsActivity.KEY_VIDEO_QUALITY, "1080p")
         cameraManager.currentVideoResolution = if (videoQualityPref == "4k") CameraManager.VideoResolution.UHD else CameraManager.VideoResolution.FHD
-        cameraManager.currentVideoFps = CameraManager.VideoFps.FPS_30
+        cameraManager.currentVideoFps = if (prefs.getInt(SettingsActivity.KEY_VIDEO_FPS, 30) == 60) CameraManager.VideoFps.FPS_60 else CameraManager.VideoFps.FPS_30
 
         com.motorola.pixelcamera.computational.HdrProcessor.saturationMultiplier = prefs.getInt(SettingsActivity.KEY_SATURATION, 100) / 100f
         com.motorola.pixelcamera.computational.HdrProcessor.microContrastMultiplier = prefs.getInt(SettingsActivity.KEY_MICRO_CONTRAST, 100) / 100f
@@ -444,6 +440,7 @@ class MainActivity : AppCompatActivity() {
         }
 
         binding.tvQsTitle.text = if (currentMode == CameraMode.NIGHT_SIGHT) "Night Sight settings" else "Photo settings"
+        binding.segmentedTabsContainer.visibility = View.VISIBLE
         binding.containerQsVideo.visibility = View.GONE
         if (isProTabActive) {
             binding.containerQsGeneral.visibility = View.GONE
@@ -474,6 +471,12 @@ class MainActivity : AppCompatActivity() {
                 setQsButtonActive(binding.btnQsLightFlash, true)
             }
         }
+
+        // 2. RAW/JPEG row
+        val isRaw = cameraManager.isRawEnabled
+        binding.tvQsRawSubtitle.text = if (isRaw) "RAW (DNG) + JPEG • Photo and Pro" else "JPEG only"
+        setQsButtonActive(binding.btnQsRawOff, !isRaw)
+        setQsButtonActive(binding.btnQsRawOn, isRaw)
 
         // 3. Top Shot row
         when (hdrMode) {
@@ -935,6 +938,10 @@ class MainActivity : AppCompatActivity() {
             setQuickFlash(ImageCapture.FLASH_MODE_ON)
         }
 
+        // Quick Settings (Pro tab): RAW + JPEG
+        binding.btnQsRawOff.setOnClickListener { setQuickRaw(false) }
+        binding.btnQsRawOn.setOnClickListener { setQuickRaw(true) }
+
         // Quick Settings - Row 3: HDR+ (Off / Auto / Enhanced)
         binding.btnQsTopShotOff.setOnClickListener {
             setHdrMode(0)
@@ -1029,12 +1036,14 @@ class MainActivity : AppCompatActivity() {
         // Quick Settings - Row 4: Aspect Ratio
         binding.btnQsRatio43.setOnClickListener {
             cameraManager.aspectRatio = AspectRatio.RATIO_4_3
+            applyPreviewScale()
             cameraManager.bindCameraUseCases()
             updateQuickSettingsUi()
             Toast.makeText(this, "Aspect Ratio: 4:3 Standard", Toast.LENGTH_SHORT).show()
         }
         binding.btnQsRatio169.setOnClickListener {
             cameraManager.aspectRatio = AspectRatio.RATIO_16_9
+            applyPreviewScale()
             cameraManager.bindCameraUseCases()
             updateQuickSettingsUi()
             Toast.makeText(this, "Aspect Ratio: 16:9 Widescreen", Toast.LENGTH_SHORT).show()
@@ -1625,6 +1634,16 @@ class MainActivity : AppCompatActivity() {
         checkSelfieRingLight()
     }
 
+    /** 16:9 photos and video are letterboxed so the viewfinder shows exactly what is saved. */
+    private fun applyPreviewScale() {
+        val wide = cameraManager.aspectRatio == AspectRatio.RATIO_16_9 || currentMode == CameraMode.VIDEO
+        binding.viewFinder.scaleType = if (wide) {
+            androidx.camera.view.PreviewView.ScaleType.FIT_CENTER
+        } else {
+            androidx.camera.view.PreviewView.ScaleType.FILL_CENTER
+        }
+    }
+
     private fun updateZoomPillVisibility() {
         val hide = cameraManager.isFrontCamera() || currentMode == CameraMode.PANORAMA
         binding.zoomPillContainer.visibility = if (hide) View.GONE else View.VISIBLE
@@ -1798,6 +1817,21 @@ class MainActivity : AppCompatActivity() {
         } catch (e: Exception) {
             binding.tvStorageInfo.text = "Storage OK"
         }
+    }
+
+    private fun setQuickRaw(enabled: Boolean) {
+        if (isModeChangeBlocked()) return
+        cameraManager.isRawEnabled = enabled
+        prefs.edit().putBoolean(SettingsActivity.KEY_RAW_ENABLED, enabled).apply()
+        cameraManager.bindCameraUseCases()
+        updateQuickSettingsUi()
+        val msg = when {
+            !enabled -> "JPEG only"
+            cameraManager.isRawActive() -> "RAW (DNG) + JPEG"
+            currentMode == CameraMode.CAMERA || currentMode == CameraMode.PRO -> "RAW is not supported on this camera"
+            else -> "RAW applies in Photo and Pro"
+        }
+        Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
     }
 
     private fun setHdrMode(mode: Int) {
@@ -2102,6 +2136,7 @@ class MainActivity : AppCompatActivity() {
         }
 
         // Rebind use cases for optimal performance in active mode
+        applyPreviewScale()
         cameraManager.bindCameraUseCases()
         updateZoomPillVisibility()
         updateQuickSettingsUi()

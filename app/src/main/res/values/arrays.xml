@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string-array name="camerax_force_disabled_quirks" translatable="false">
+        <item>androidx.camera.video.internal.compat.quirk.PreviewBlackScreenQuirk</item>
+    </string-array>
+</resources>
