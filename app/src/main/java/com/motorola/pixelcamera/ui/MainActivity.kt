@@ -393,6 +393,50 @@ class MainActivity : AppCompatActivity() {
             Toast.makeText(this, "Timer 10s", Toast.LENGTH_SHORT).show()
         }
 
+        // MGC 9.7 Segmented Tabs: [ General | Pro ]
+        binding.tabQsGeneral.setOnClickListener {
+            binding.tabQsGeneral.setBackgroundResource(R.drawable.bg_segmented_pill_active)
+            binding.tabQsGeneral.setTextColor(ContextCompat.getColor(this, R.color.pixel_pill_text_active))
+            binding.tabQsGeneral.paint.isFakeBoldText = true
+
+            binding.tabQsPro.background = null
+            binding.tabQsPro.setTextColor(ContextCompat.getColor(this, R.color.pixel_text_white))
+            binding.tabQsPro.paint.isFakeBoldText = false
+
+            binding.containerQsGeneral.visibility = View.VISIBLE
+            binding.containerQsPro.visibility = View.GONE
+        }
+
+        binding.tabQsPro.setOnClickListener {
+            binding.tabQsPro.setBackgroundResource(R.drawable.bg_segmented_pill_active)
+            binding.tabQsPro.setTextColor(ContextCompat.getColor(this, R.color.pixel_pill_text_active))
+            binding.tabQsPro.paint.isFakeBoldText = true
+
+            binding.tabQsGeneral.background = null
+            binding.tabQsGeneral.setTextColor(ContextCompat.getColor(this, R.color.pixel_text_white))
+            binding.tabQsGeneral.paint.isFakeBoldText = false
+
+            binding.containerQsGeneral.visibility = View.GONE
+            binding.containerQsPro.visibility = View.VISIBLE
+        }
+
+        // Pro Tab: Lens Selection (Auto vs Manual)
+        binding.btnQsLensAuto.setOnClickListener {
+            binding.btnQsLensAuto.setBackgroundResource(R.drawable.bg_segmented_pill_active)
+            binding.btnQsLensAuto.setTextColor(ContextCompat.getColor(this, R.color.pixel_pill_text_active))
+            binding.btnQsLensManual.setBackgroundResource(R.drawable.bg_qs_btn_inactive)
+            binding.btnQsLensManual.setTextColor(ContextCompat.getColor(this, R.color.pixel_text_white))
+            binding.tvQsLensSubtitle.text = "Auto"
+        }
+
+        binding.btnQsLensManual.setOnClickListener {
+            binding.btnQsLensManual.setBackgroundResource(R.drawable.bg_segmented_pill_active)
+            binding.btnQsLensManual.setTextColor(ContextCompat.getColor(this, R.color.pixel_pill_text_active))
+            binding.btnQsLensAuto.setBackgroundResource(R.drawable.bg_qs_btn_inactive)
+            binding.btnQsLensAuto.setTextColor(ContextCompat.getColor(this, R.color.pixel_text_white))
+            binding.tvQsLensSubtitle.text = "Manual"
+        }
+
         // Quick Settings - Row 4: Aspect Ratio
         binding.btnQsRatio43.setOnClickListener {
             cameraManager.aspectRatio = AspectRatio.RATIO_4_3
@@ -486,28 +530,40 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
-        // Physical Zoom Selectors (.5 Ultrawide, 1x Main, 2x Tele, 5x Digital)
+        // MGC 9.7 Dual Zoom Selectors (Upper Physical Lenses + Lower Multipliers)
         binding.btnZoomUltrawide.setOnClickListener {
             cameraManager.switchToLens(CameraManager.CAMERA_ULTRAWIDE, 1.0f)
-            selectZoomPill(binding.btnZoomUltrawide)
+            updateDualZoomUi("0.6", "1×")
             binding.tvSensorInfo.text = "8MP UW"
+        }
+
+        binding.btnLens10.setOnClickListener {
+            cameraManager.switchToLens(CameraManager.CAMERA_MAIN, 1.0f)
+            updateDualZoomUi("1.0", "1×")
+            binding.tvSensorInfo.text = if (cameraManager.is108MpEnabled) "108MP ULTRA" else "108MP HM2"
+        }
+
+        binding.btnLens20.setOnClickListener {
+            cameraManager.switchToLens(CameraManager.CAMERA_MAIN, 2.0f)
+            updateDualZoomUi("2.0", "2")
+            binding.tvSensorInfo.text = "2X SENSOR CROP"
         }
 
         binding.btnZoom1x.setOnClickListener {
             cameraManager.switchToLens(CameraManager.CAMERA_MAIN, 1.0f)
-            selectZoomPill(binding.btnZoom1x)
+            updateDualZoomUi("1.0", "1×")
             binding.tvSensorInfo.text = if (cameraManager.is108MpEnabled) "108MP ULTRA" else "108MP HM2"
         }
 
         binding.btnZoom2x.setOnClickListener {
             cameraManager.switchToLens(CameraManager.CAMERA_MAIN, 2.0f)
-            selectZoomPill(binding.btnZoom2x)
+            updateDualZoomUi("2.0", "2")
             binding.tvSensorInfo.text = "2X SUPER RES"
         }
 
         binding.btnZoom5x.setOnClickListener {
             cameraManager.switchToLens(CameraManager.CAMERA_MAIN, 5.0f)
-            selectZoomPill(binding.btnZoom5x)
+            updateDualZoomUi("2.0", "5")
             binding.tvSensorInfo.text = "5X ZOOM"
         }
 
@@ -765,11 +821,32 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun selectZoomPill(selectedView: TextView) {
-        val zoomButtons = listOf(binding.btnZoomUltrawide, binding.btnZoom1x, binding.btnZoom2x, binding.btnZoom5x)
-        for (btn in zoomButtons) {
-            if (btn == selectedView) {
+        when (selectedView) {
+            binding.btnZoomUltrawide -> updateDualZoomUi("0.6", "1×")
+            binding.btnLens10, binding.btnZoom1x -> updateDualZoomUi("1.0", "1×")
+            binding.btnLens20, binding.btnZoom2x -> updateDualZoomUi("2.0", "2")
+            binding.btnZoom5x -> updateDualZoomUi("2.0", "5")
+            else -> updateDualZoomUi("1.0", "1×")
+        }
+    }
+
+    private fun updateDualZoomUi(activeLens: String, activeMultiplier: String) {
+        val upperButtons = listOf(binding.btnZoomUltrawide, binding.btnLens10, binding.btnLens20)
+        for (btn in upperButtons) {
+            if (btn.text == activeLens) {
                 btn.setBackgroundResource(R.drawable.bg_zoom_pill_active)
-                btn.setTextColor(ContextCompat.getColor(this, R.color.pixel_accent_sand_text))
+                btn.setTextColor(ContextCompat.getColor(this, R.color.pixel_pill_text_active))
+            } else {
+                btn.background = null
+                btn.setTextColor(ContextCompat.getColor(this, R.color.pixel_text_secondary))
+            }
+        }
+
+        val lowerButtons = listOf(binding.btnZoom1x, binding.btnZoom2x, binding.btnZoom5x)
+        for (btn in lowerButtons) {
+            if (btn.text == activeMultiplier) {
+                btn.setBackgroundResource(R.drawable.bg_zoom_pill_active)
+                btn.setTextColor(ContextCompat.getColor(this, R.color.pixel_pill_text_active))
             } else {
                 btn.background = null
                 btn.setTextColor(ContextCompat.getColor(this, R.color.pixel_text_secondary))
