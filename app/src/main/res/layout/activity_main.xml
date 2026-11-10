@@ -528,6 +528,23 @@
             android:textSize="12sp" />
     </LinearLayout>
 
+    <!-- Self-timer countdown -->
+    <TextView
+        android:id="@+id/tvCountdown"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:elevation="10dp"
+        android:shadowColor="#99000000"
+        android:shadowRadius="12"
+        android:textColor="@color/pixel_text_white"
+        android:textSize="96sp"
+        android:textStyle="bold"
+        android:visibility="gone"
+        app:layout_constraintBottom_toBottomOf="@+id/viewFinderCard"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="@+id/viewFinderCard" />
+
     <!-- Processing Toast Pill -->
     <LinearLayout
         android:id="@+id/processingPill"
@@ -1097,7 +1114,7 @@
                                         android:clickable="true"
                                         android:focusable="true"
                                         android:padding="9dp"
-                                        android:src="@drawable/ic_qs_night_auto"
+                                        android:src="@drawable/ic_flash_auto"
                                         app:tint="@color/pixel_text_white" />
 
                                     <ImageView

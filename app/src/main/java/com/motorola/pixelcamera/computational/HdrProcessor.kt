@@ -5,7 +5,6 @@ import android.graphics.Color
 import com.motorola.pixelcamera.hardware.DimensityOptimizer
 import kotlinx.coroutines.withContext
 import kotlin.math.abs
-import kotlin.math.exp
 import kotlin.math.max
 import kotlin.math.min
 
@@ -155,49 +154,15 @@ object HdrProcessor {
     }
 
     /**
-     * Multi-Frame Burst Fusion: Merges multiple frames using well-exposedness Gaussian weights
-     * to eliminate noise in shadows and recover blown highlights without motion artifacts.
+     * Multi-frame merge. Handheld burst frames are shifted against each other, so they are
+     * aligned to the sharpest frame and merged with ghost rejection (same path as Night Sight).
      */
     private fun fuseBurstFrames(frames: List<Bitmap>, width: Int, height: Int, outPixels: IntArray) {
-        val total = width * height
-        val numFrames = frames.size
-
-        val pixelBuffers = Array(numFrames) { i ->
-            val buf = IntArray(total)
-            frames[i].getPixels(buf, 0, width, 0, 0, width, height)
-            buf
-        }
-
-        for (i in 0 until total) {
-            var sumR = 0f
-            var sumG = 0f
-            var sumB = 0f
-            var totalWeight = 0f
-
-            for (f in 0 until numFrames) {
-                val c = pixelBuffers[f][i]
-                val r = Color.red(c).toFloat()
-                val g = Color.green(c).toFloat()
-                val b = Color.blue(c).toFloat()
-
-                // Gaussian well-exposedness weighting centered on midtones (128)
-                val normR = (r - 128f) / 128f
-                val normG = (g - 128f) / 128f
-                val normB = (b - 128f) / 128f
-                val weight = exp(-0.5f * (normR * normR + normG * normG + normB * normB) / (0.35f * 0.35f)) + 0.01f
-
-                sumR += r * weight
-                sumG += g * weight
-                sumB += b * weight
-                totalWeight += weight
-            }
-
-            val finalR = (sumR / totalWeight).coerceIn(0f, 255f).toInt()
-            val finalG = (sumG / totalWeight).coerceIn(0f, 255f).toInt()
-            val finalB = (sumB / totalWeight).coerceIn(0f, 255f).toInt()
-
-            outPixels[i] = Color.rgb(finalR, finalG, finalB)
-        }
+        val usable = frames.filter { it.width == width && it.height == height }
+        fun pixelsOf(bmp: Bitmap) = IntArray(width * height).also { bmp.getPixels(it, 0, width, 0, 0, width, height) }
+        val refIndex = usable.indices.maxByOrNull { BurstAligner.sharpness(pixelsOf(usable[it]), width, height) } ?: 0
+        val merged = BurstAligner.alignAndMerge(usable.size, width, height, refIndex) { pixelsOf(usable[it]) }
+        System.arraycopy(merged, 0, outPixels, 0, width * height)
     }
 
     /**

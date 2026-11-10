@@ -259,7 +259,8 @@ class PanoramaEngine(private val context: Context) : SensorEventListener {
         } catch (ignored: Exception) {}
 
         val pano = panoBitmap ?: return@withContext null
-        if (currentPanoWidth < 200 || frameCount == 0) {
+        // A sweep under ~15 degrees is just the same view stitched onto itself.
+        if (currentPanoWidth < 200 || frameCount < 2 || currentSweptDegrees < MIN_SWEEP_DEGREES) {
             Log.w(TAG, "Panorama was too short to save ($currentPanoWidth px)")
             return@withContext null
         }
@@ -393,5 +394,6 @@ class PanoramaEngine(private val context: Context) : SensorEventListener {
 
     companion object {
         private const val TAG = "PanoramaEngine"
+        private const val MIN_SWEEP_DEGREES = 15f
     }
 }

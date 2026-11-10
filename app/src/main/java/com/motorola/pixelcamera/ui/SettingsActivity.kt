@@ -28,15 +28,7 @@ class SettingsActivity : AppCompatActivity() {
     private fun loadPreferences() {
         binding.swLocation.isChecked = prefs.getBoolean(KEY_SAVE_LOCATION, true)
         binding.swSounds.isChecked = prefs.getBoolean(KEY_CAMERA_SOUNDS, true)
-        binding.swRaw.isChecked = prefs.getBoolean(KEY_RAW_ENABLED, false)
-        binding.swUltraHdr.isChecked = prefs.getBoolean(KEY_ULTRA_HDR, true)
-        binding.sw108MpRemosaic.isChecked = prefs.getBoolean(KEY_108MP_REMOSAIC, true)
         binding.swEis.isChecked = prefs.getBoolean(KEY_EIS_ENABLED, true)
-        binding.swHevc.isChecked = prefs.getBoolean(KEY_HEVC_ENABLED, true)
-
-        val hdrFrames = prefs.getInt(KEY_HDR_FRAMES, 18)
-        binding.sbHdrFrames.progress = hdrFrames
-        binding.tvHdrFramesLabel.text = "HDR+ Frame Count: $hdrFrames frames"
 
         val sat = prefs.getInt(KEY_SATURATION, 100)
         binding.sbSaturation.progress = sat
@@ -64,34 +56,9 @@ class SettingsActivity : AppCompatActivity() {
             prefs.edit().putBoolean(KEY_CAMERA_SOUNDS, isChecked).apply()
         }
 
-        binding.swRaw.setOnCheckedChangeListener { _, isChecked ->
-            prefs.edit().putBoolean(KEY_RAW_ENABLED, isChecked).apply()
-        }
-
-        binding.swUltraHdr.setOnCheckedChangeListener { _, isChecked ->
-            prefs.edit().putBoolean(KEY_ULTRA_HDR, isChecked).apply()
-        }
-
-        binding.sw108MpRemosaic.setOnCheckedChangeListener { _, isChecked ->
-            prefs.edit().putBoolean(KEY_108MP_REMOSAIC, isChecked).apply()
-        }
-
         binding.swEis.setOnCheckedChangeListener { _, isChecked ->
             prefs.edit().putBoolean(KEY_EIS_ENABLED, isChecked).apply()
         }
-
-        binding.swHevc.setOnCheckedChangeListener { _, isChecked ->
-            prefs.edit().putBoolean(KEY_HEVC_ENABLED, isChecked).apply()
-        }
-
-        binding.sbHdrFrames.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
-            override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
-                binding.tvHdrFramesLabel.text = "HDR+ Frame Count: $progress frames"
-                prefs.edit().putInt(KEY_HDR_FRAMES, progress).apply()
-            }
-            override fun onStartTrackingTouch(seekBar: SeekBar?) {}
-            override fun onStopTrackingTouch(seekBar: SeekBar?) {}
-        })
 
         binding.sbSaturation.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
             override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
@@ -131,13 +98,10 @@ class SettingsActivity : AppCompatActivity() {
         const val PREFS_NAME = "PixelCameraPrefs"
         const val KEY_SAVE_LOCATION = "save_location"
         const val KEY_CAMERA_SOUNDS = "camera_sounds"
-        const val KEY_RAW_ENABLED = "raw_enabled"
-        const val KEY_ULTRA_HDR = "ultra_hdr"
-        const val KEY_108MP_REMOSAIC = "remosaic_108mp"
         const val KEY_EIS_ENABLED = "eis_enabled"
-        const val KEY_HEVC_ENABLED = "hevc_enabled"
-        const val KEY_HDR_FRAMES = "hdr_frames"
         const val KEY_FLASH_MODE = "flash_mode"
+        const val KEY_HDR_MODE = "hdr_plus_mode"
+        const val KEY_GRID_MODE = "grid_mode"
         const val KEY_VIDEO_QUALITY = "video_quality"
         const val KEY_VIDEO_FPS = "video_fps"
         const val KEY_SATURATION = "pref_saturation"

@@ -37,7 +37,6 @@ import com.motorola.pixelcamera.computational.NightSightEngine
 import com.motorola.pixelcamera.computational.PanoramaEngine
 import com.motorola.pixelcamera.computational.PortraitEngine
 import com.motorola.pixelcamera.hardware.LocationHelper
-import com.motorola.pixelcamera.hardware.MotorolaVendorHelper
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
@@ -97,12 +96,19 @@ class CameraManager(private val context: Context) {
     var currentVideoResolution: VideoResolution = VideoResolution.FHD
     var currentVideoFps: VideoFps = VideoFps.FPS_30
 
-    var isRawEnabled: Boolean = false
-    var is108MpEnabled: Boolean = false
+    /** Played on photo capture and video start/stop when enabled in Settings. */
+    var shutterSoundEnabled: Boolean = true
+    var videoStabilizationEnabled: Boolean = true
+    private val actionSound by lazy { android.media.MediaActionSound() }
+
+    private fun playSound(sound: Int) {
+        if (!shutterSoundEnabled) return
+        runCatching { actionSound.play(sound) }
+    }
     var isAstrophotographyActive: Boolean = false
     var aspectRatio: Int = AspectRatio.RATIO_4_3
     var isGoogleAwbEnabled: Boolean = false
-    var hdrPlusMode: Int = 1 // 0: Off, 1: On, 2: Enhanced
+    var hdrPlusMode: Int = 0 // 0: Off (direct ISP JPEG), 1: On (2-frame merge), 2: Enhanced (3-frame merge)
 
     var onHistogramUpdate: ((IntArray, IntArray, IntArray) -> Unit)? = null
 
@@ -156,6 +162,10 @@ class CameraManager(private val context: Context) {
         }
         provider.unbindAll()
 
+        if (currentCameraId == CAMERA_ULTRAWIDE && !isUltrawideAvailable()) {
+            Log.w(TAG, "Ultrawide camera is not exposed to this app; using main camera")
+            currentCameraId = CAMERA_MAIN
+        }
         val cameraSelector = getCameraSelectorForId(currentCameraId)
 
         val aspectStrategy = if (aspectRatio == AspectRatio.RATIO_16_9 || currentCameraMode == CameraMode.VIDEO) {
@@ -230,18 +240,6 @@ class CameraManager(private val context: Context) {
             camera2Extender.setCaptureRequestOption(CaptureRequest.CONTROL_SCENE_MODE, CaptureRequest.CONTROL_SCENE_MODE_NIGHT)
         }
 
-        if (is108MpEnabled && currentCameraId == CAMERA_MAIN) {
-            try {
-                val remosaicKey = CaptureRequest.Key<Int>(
-                    MotorolaVendorHelper.KEY_REMOSAIC_SCENARIO,
-                    Int::class.javaPrimitiveType ?: Int::class.java
-                )
-                camera2Extender.setCaptureRequestOption(remosaicKey, 1)
-            } catch (t: Throwable) {
-                Log.d(TAG, "Vendor remosaic key note: ${t.message}")
-            }
-        }
-
         imageCapture = captureBuilder.build()
 
         // 3. Video Capture Use Case (Full HD 1080p / 4K recording)
@@ -258,7 +256,20 @@ class CameraManager(private val context: Context) {
                 )
             )
             .build()
-        videoCapture = VideoCapture.withOutput(recorder)
+        val wants60 = currentVideoFps == VideoFps.FPS_60 && targetQuality != Quality.UHD && currentCameraId != CAMERA_FRONT
+        val videoBuilder = VideoCapture.Builder(recorder)
+            .setTargetFrameRate(if (wants60) android.util.Range(60, 60) else android.util.Range(30, 30))
+        // CameraX 1.3 has no stabilization switch on VideoCapture, so request the HAL's EIS directly.
+        // The HAL only keeps full frame rate with EIS at 1080p30; at 4K it halves the frame rate
+        // and at 60 fps the recording produces no frames.
+        val eis = videoStabilizationEnabled && currentCameraMode == CameraMode.VIDEO &&
+            targetQuality == Quality.FHD && !wants60
+        Camera2Interop.Extender(videoBuilder).setCaptureRequestOption(
+            CaptureRequest.CONTROL_VIDEO_STABILIZATION_MODE,
+            if (eis) CaptureRequest.CONTROL_VIDEO_STABILIZATION_MODE_ON else CaptureRequest.CONTROL_VIDEO_STABILIZATION_MODE_OFF
+        )
+        Log.i(TAG, "Video config: quality=$targetQuality fps=${if (wants60) 60 else 30} eis=$eis")
+        videoCapture = videoBuilder.build()
 
         // 4. Image Analysis Use Case (Real-time Live RGB/Luminance Histogram, Top Shot, Panorama)
         val analysis = ImageAnalysis.Builder()
@@ -335,8 +346,10 @@ class CameraManager(private val context: Context) {
             val zState = camera?.cameraInfo?.zoomState?.value
             Log.i(TAG, "Active camera zoom range: min=${zState?.minZoomRatio}, max=${zState?.maxZoomRatio}, current=${zState?.zoomRatio}")
             setZoom(currentZoomRatio)
-            if (currentCameraMode == CameraMode.VIDEO) {
-                applyVideoFps()
+            when (currentCameraMode) {
+                CameraMode.VIDEO -> applyVideoFps()
+                CameraMode.PRO -> applyManualControls()
+                else -> clearManualControls()
             }
         } catch (exc: Exception) {
             Log.e(TAG, "Use case binding failed, falling back to minimal", exc)
@@ -355,11 +368,30 @@ class CameraManager(private val context: Context) {
         }
     }
 
+    @OptIn(ExperimentalCamera2Interop::class)
     private fun getCameraSelectorForId(targetId: String): CameraSelector {
-        return if (targetId == CAMERA_FRONT) {
-            CameraSelector.DEFAULT_FRONT_CAMERA
-        } else {
-            CameraSelector.DEFAULT_BACK_CAMERA
+        if (targetId == CAMERA_FRONT) return CameraSelector.DEFAULT_FRONT_CAMERA
+        // Pick the exact rear camera by Camera2 id; fall back to the default rear camera.
+        return CameraSelector.Builder()
+            .requireLensFacing(CameraSelector.LENS_FACING_BACK)
+            .addCameraFilter { infos ->
+                val exact = infos.filter { runCatching { Camera2CameraInfo.from(it).cameraId }.getOrNull() == targetId }
+                exact.ifEmpty {
+                    infos.filter { runCatching { Camera2CameraInfo.from(it).cameraId }.getOrNull() == CAMERA_MAIN }.ifEmpty { infos }
+                }
+            }
+            .build()
+    }
+
+    /**
+     * True only when the ultrawide (camera id 3) is exposed to this app. On this phone the
+     * vendor framework hides auxiliary cameras from apps outside vendor.camera.aux.packagelist.
+     */
+    @OptIn(ExperimentalCamera2Interop::class)
+    fun isUltrawideAvailable(): Boolean {
+        val provider = cameraProvider ?: return false
+        return provider.availableCameraInfos.any {
+            runCatching { Camera2CameraInfo.from(it).cameraId }.getOrNull() == CAMERA_ULTRAWIDE
         }
     }
 
@@ -398,6 +430,8 @@ class CameraManager(private val context: Context) {
         camera?.cameraControl?.setZoomRatio(clamped)
         audioZoomManager.onZoomRatioChanged(clamped)
     }
+
+    fun maxZoomRatio(): Float = camera?.cameraInfo?.zoomState?.value?.maxZoomRatio ?: 8.0f
 
     fun setExposureCompensation(evIndex: Int) {
         val range = getExposureCompensationRange()
@@ -446,10 +480,9 @@ class CameraManager(private val context: Context) {
         currentVideoFps = if (resolution == VideoResolution.UHD) VideoFps.FPS_30 else fps
 
         if (currentCameraMode == CameraMode.VIDEO) {
-            if (resolutionChanged) {
+            // Frame rate is part of the recorder configuration, so both changes need a rebind.
+            if (resolutionChanged || fpsChanged) {
                 bindCameraUseCases()
-            } else if (fpsChanged) {
-                applyVideoFps()
             }
         }
     }
@@ -526,6 +559,20 @@ class CameraManager(private val context: Context) {
         c2Control.setCaptureRequestOptions(optionsBuilder.build())
     }
 
+    /** Drops every Pro override so the other modes run on full auto. */
+    @OptIn(ExperimentalCamera2Interop::class)
+    fun clearManualControls() {
+        val cam = camera ?: return
+        runCatching { Camera2CameraControl.from(cam.cameraControl).clearCaptureRequestOptions() }
+    }
+
+    fun resetManualState() {
+        currentManualIso = 0
+        currentManualExposureTimeNs = 0L
+        currentManualFocusDistance = -1f
+        currentManualAwbMode = CaptureRequest.CONTROL_AWB_MODE_AUTO
+    }
+
     fun hasFlashUnit(): Boolean {
         return camera?.cameraInfo?.hasFlashUnit() ?: false
     }
@@ -552,20 +599,23 @@ class CameraManager(private val context: Context) {
         onStatusUpdate: (String) -> Unit
     ): Uri? = withContext(Dispatchers.IO) {
         val capture = imageCapture ?: return@withContext null
+        if (mode != CameraMode.PANORAMA) playSound(android.media.MediaActionSound.SHUTTER_CLICK)
 
         when (mode) {
-            CameraMode.CAMERA, CameraMode.PRO -> {
+            CameraMode.PRO -> {
+                // Manual exposure: keep the single hardware frame exactly as shot.
+                onStatusUpdate("Capturing manual frame...")
+                takePictureDirect(capture)
+            }
+            CameraMode.CAMERA -> {
                 val shouldRecordMotion = (topShotMode != TopShotMode.OFF) && (mode == CameraMode.CAMERA)
                 val motionFrames = if (shouldRecordMotion) MotionPhotoEngine.snapshotFrames() else emptyList()
 
-                val savedUri = if (is108MpEnabled) {
-                    onStatusUpdate("Capturing 108MP Ultra...")
-                    takePictureDirect(capture)
-                } else if (hdrPlusMode == 0 && !isGoogleAwbEnabled) {
-                    onStatusUpdate("Capturing direct frame...")
+                val savedUri = if (hdrPlusMode == 0 && !isGoogleAwbEnabled) {
+                    onStatusUpdate("Capturing...")
                     takePictureDirect(capture)
                 } else {
-                    val frameCount = if (hdrPlusMode == 2) 3 else 2
+                    val frameCount = if (hdrPlusMode == 2) 3 else if (hdrPlusMode == 1) 2 else 1
                     onStatusUpdate("HDR+ burst: Capturing $frameCount frames...")
                     val burst = mutableListOf<Bitmap>()
                     for (i in 0 until frameCount) {
@@ -805,6 +855,7 @@ class CameraManager(private val context: Context) {
         if (flashMode == ImageCapture.FLASH_MODE_ON) {
             setTorchEnabled(true)
         }
+        playSound(android.media.MediaActionSound.START_VIDEO_RECORDING)
 
         activeRecording = pendingRecording.start(ContextCompat.getMainExecutor(context)) { event ->
             if (event is VideoRecordEvent.Finalize) {
@@ -820,6 +871,7 @@ class CameraManager(private val context: Context) {
     }
 
     fun stopVideoRecording() {
+        if (activeRecording != null) playSound(android.media.MediaActionSound.STOP_VIDEO_RECORDING)
         activeRecording?.stop()
         activeRecording = null
         setTorchEnabled(false)
