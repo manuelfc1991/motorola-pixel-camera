@@ -32,6 +32,7 @@ import android.hardware.Sensor
 import android.hardware.SensorEvent
 import android.hardware.SensorEventListener
 import android.hardware.SensorManager
+import android.hardware.camera2.CaptureRequest
 import android.view.HapticFeedbackConstants
 import androidx.lifecycle.lifecycleScope
 import com.motorola.pixelcamera.R
@@ -82,6 +83,28 @@ class MainActivity : AppCompatActivity() {
     private var accelerometer: Sensor? = null
     private var filteredRoll = 0f
     private var isLevelAligned = false
+
+    // Pro Manual Controls State
+    enum class ProTab { ISO, SHUTTER, FOCUS, WB, EV }
+    private var activeProTab = ProTab.ISO
+
+    private var proIsoIndex = 0
+    private var proShutterIndex = 0
+    private var proFocusProgress = 0
+    private var proWbIndex = 0
+
+    private val isoValues = intArrayOf(0, 50, 100, 200, 400, 800, 1600, 3200, 6400)
+    private val shutterLabels = arrayOf("AUTO", "1/4000s", "1/2000s", "1/1000s", "1/500s", "1/250s", "1/125s", "1/60s", "1/30s", "1/15s", "1/8s", "1/4s", "1/2s", "1s")
+    private val shutterNanos = longArrayOf(0L, 250_000L, 500_000L, 1_000_000L, 2_000_000L, 4_000_000L, 8_000_000L, 16_666_666L, 33_333_333L, 66_666_666L, 125_000_000L, 250_000_000L, 500_000_000L, 1_000_000_000L)
+    private val wbLabels = arrayOf("AWB AUTO", "2800K Incandescent", "4000K Fluorescent", "5500K Daylight", "6500K Cloudy", "7500K Shade")
+    private val wbModes = intArrayOf(
+        CaptureRequest.CONTROL_AWB_MODE_AUTO,
+        CaptureRequest.CONTROL_AWB_MODE_INCANDESCENT,
+        CaptureRequest.CONTROL_AWB_MODE_FLUORESCENT,
+        CaptureRequest.CONTROL_AWB_MODE_DAYLIGHT,
+        CaptureRequest.CONTROL_AWB_MODE_CLOUDY_DAYLIGHT,
+        CaptureRequest.CONTROL_AWB_MODE_SHADE
+    )
 
     private val sensorListener = object : SensorEventListener {
         override fun onSensorChanged(event: SensorEvent?) {
@@ -266,6 +289,7 @@ class MainActivity : AppCompatActivity() {
         binding.quickSettingsContainer.visibility = View.GONE
         binding.focusReticleContainer.visibility = View.GONE
         binding.tvExposureEvBadge.visibility = View.GONE
+        selectProTab(ProTab.ISO)
     }
 
     private fun syncSettings() {
@@ -735,32 +759,90 @@ class MainActivity : AppCompatActivity() {
             override fun onStopTrackingTouch(seekBar: SeekBar?) {}
         })
 
-        // Pro Controls: ISO Slider (0 = Auto, 100..6400)
-        binding.sbIso.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+        // Pro Manual Controls Tabs [ ISO | S | FOCUS | WB | EV ]
+        binding.tabProIso.setOnClickListener { selectProTab(ProTab.ISO) }
+        binding.tabProShutter.setOnClickListener { selectProTab(ProTab.SHUTTER) }
+        binding.tabProFocus.setOnClickListener { selectProTab(ProTab.FOCUS) }
+        binding.tabProWb.setOnClickListener { selectProTab(ProTab.WB) }
+        binding.tabProEv.setOnClickListener { selectProTab(ProTab.EV) }
+
+        binding.sbProSlider.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
             override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
-                if (progress == 0) {
-                    binding.tvIsoLabel.text = "ISO AUTO"
-                    cameraManager.setManualIso(0)
-                } else {
-                    val iso = progress * 100
-                    binding.tvIsoLabel.text = "ISO $iso"
-                    cameraManager.setManualIso(iso)
+                if (!fromUser) return
+                when (activeProTab) {
+                    ProTab.ISO -> {
+                        proIsoIndex = progress
+                        updateProUiForIso()
+                        cameraManager.setManualIso(isoValues[proIsoIndex])
+                    }
+                    ProTab.SHUTTER -> {
+                        proShutterIndex = progress
+                        updateProUiForShutter()
+                        cameraManager.setManualShutter(shutterNanos[proShutterIndex])
+                    }
+                    ProTab.FOCUS -> {
+                        proFocusProgress = progress
+                        updateProUiForFocus()
+                        if (progress == 0) {
+                            cameraManager.setManualFocus(-1f)
+                        } else {
+                            val diopters = (progress / 100f) * 10.0f
+                            cameraManager.setManualFocus(diopters)
+                        }
+                    }
+                    ProTab.WB -> {
+                        proWbIndex = progress
+                        updateProUiForWb()
+                        cameraManager.setManualWb(wbModes[proWbIndex])
+                    }
+                    ProTab.EV -> {
+                        val range = cameraManager.getExposureCompensationRange()
+                        val targetEv = range.lower + progress
+                        currentEvIndex = targetEv
+                        cameraManager.setExposureCompensation(targetEv)
+                        updateProUiForEv()
+                    }
                 }
             }
             override fun onStartTrackingTouch(seekBar: SeekBar?) {}
             override fun onStopTrackingTouch(seekBar: SeekBar?) {}
         })
 
-        // Pro Controls: EV Slider
-        binding.sbEv.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
-            override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
-                val ev = (progress - 12) * 0.166f
-                binding.tvEvLabel.text = String.format("EV %+.1f", ev)
-                cameraManager.setExposureCompensation(progress - 12)
+        binding.btnProReset.setOnClickListener {
+            when (activeProTab) {
+                ProTab.ISO -> {
+                    proIsoIndex = 0
+                    binding.sbProSlider.progress = 0
+                    updateProUiForIso()
+                    cameraManager.setManualIso(0)
+                }
+                ProTab.SHUTTER -> {
+                    proShutterIndex = 0
+                    binding.sbProSlider.progress = 0
+                    updateProUiForShutter()
+                    cameraManager.setManualShutter(0L)
+                }
+                ProTab.FOCUS -> {
+                    proFocusProgress = 0
+                    binding.sbProSlider.progress = 0
+                    updateProUiForFocus()
+                    cameraManager.setManualFocus(-1f)
+                }
+                ProTab.WB -> {
+                    proWbIndex = 0
+                    binding.sbProSlider.progress = 0
+                    updateProUiForWb()
+                    cameraManager.setManualWb(CaptureRequest.CONTROL_AWB_MODE_AUTO)
+                }
+                ProTab.EV -> {
+                    currentEvIndex = 0
+                    val range = cameraManager.getExposureCompensationRange()
+                    binding.sbProSlider.progress = (0 - range.lower).coerceIn(0, binding.sbProSlider.max)
+                    cameraManager.setExposureCompensation(0)
+                    updateProUiForEv()
+                }
             }
-            override fun onStartTrackingTouch(seekBar: SeekBar?) {}
-            override fun onStopTrackingTouch(seekBar: SeekBar?) {}
-        })
+        }
 
         // Tap to Focus with Interactive Brightness Exposure Slider
         binding.viewFinder.setOnTouchListener { _, event ->
@@ -906,6 +988,85 @@ class MainActivity : AppCompatActivity() {
                 .setDuration(220)
                 .start()
         }
+    }
+
+    private fun selectProTab(tab: ProTab) {
+        activeProTab = tab
+        val activeBg = R.drawable.bg_zoom_pill_active
+        val activeColor = ContextCompat.getColor(this, R.color.pixel_pill_text_active)
+        val inactiveColor = ContextCompat.getColor(this, R.color.pixel_text_secondary)
+
+        val tabs = listOf(
+            binding.tabProIso,
+            binding.tabProShutter,
+            binding.tabProFocus,
+            binding.tabProWb,
+            binding.tabProEv
+        )
+        tabs.forEach {
+            it.background = null
+            it.setTextColor(inactiveColor)
+        }
+
+        when (tab) {
+            ProTab.ISO -> {
+                binding.tabProIso.setBackgroundResource(activeBg)
+                binding.tabProIso.setTextColor(activeColor)
+                binding.sbProSlider.max = isoValues.size - 1
+                binding.sbProSlider.progress = proIsoIndex
+                updateProUiForIso()
+            }
+            ProTab.SHUTTER -> {
+                binding.tabProShutter.setBackgroundResource(activeBg)
+                binding.tabProShutter.setTextColor(activeColor)
+                binding.sbProSlider.max = shutterLabels.size - 1
+                binding.sbProSlider.progress = proShutterIndex
+                updateProUiForShutter()
+            }
+            ProTab.FOCUS -> {
+                binding.tabProFocus.setBackgroundResource(activeBg)
+                binding.tabProFocus.setTextColor(activeColor)
+                binding.sbProSlider.max = 100
+                binding.sbProSlider.progress = proFocusProgress
+                updateProUiForFocus()
+            }
+            ProTab.WB -> {
+                binding.tabProWb.setBackgroundResource(activeBg)
+                binding.tabProWb.setTextColor(activeColor)
+                binding.sbProSlider.max = wbLabels.size - 1
+                binding.sbProSlider.progress = proWbIndex
+                updateProUiForWb()
+            }
+            ProTab.EV -> {
+                binding.tabProEv.setBackgroundResource(activeBg)
+                binding.tabProEv.setTextColor(activeColor)
+                val range = cameraManager.getExposureCompensationRange()
+                binding.sbProSlider.max = (range.upper - range.lower).coerceAtLeast(1)
+                binding.sbProSlider.progress = (currentEvIndex - range.lower).coerceIn(0, binding.sbProSlider.max)
+                updateProUiForEv()
+            }
+        }
+    }
+
+    private fun updateProUiForIso() {
+        binding.tvProParamValue.text = if (proIsoIndex == 0) "ISO AUTO" else "ISO ${isoValues[proIsoIndex]}"
+    }
+
+    private fun updateProUiForShutter() {
+        binding.tvProParamValue.text = shutterLabels[proShutterIndex]
+    }
+
+    private fun updateProUiForFocus() {
+        binding.tvProParamValue.text = if (proFocusProgress == 0) "FOCUS AF" else if (proFocusProgress > 80) "Macro" else if (proFocusProgress < 20) "Infinity" else "Focus ${proFocusProgress}%"
+    }
+
+    private fun updateProUiForWb() {
+        binding.tvProParamValue.text = wbLabels[proWbIndex].split(" ").first()
+    }
+
+    private fun updateProUiForEv() {
+        val ev = currentEvIndex * cameraManager.getExposureCompensationStep()
+        binding.tvProParamValue.text = String.format("EV %+.1f", ev)
     }
 
     private fun switchToPhotoMode() {

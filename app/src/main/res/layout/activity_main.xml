@@ -525,64 +525,129 @@
             android:textSize="13sp" />
     </LinearLayout>
 
-    <!-- Pro Manual Controls Drawer (ISO, EV) -->
+    <!-- Pro Manual Controls Drawer (Shutter, ISO, Focus, WB, EV) -->
     <LinearLayout
         android:id="@+id/proControlPanel"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:background="#DD121316"
+        android:layout_marginBottom="4dp"
+        android:background="#E6121417"
+        android:elevation="6dp"
         android:orientation="vertical"
         android:paddingHorizontal="16dp"
-        android:paddingVertical="8dp"
+        android:paddingVertical="10dp"
         android:visibility="gone"
         app:layout_constraintBottom_toTopOf="@+id/zoomPillContainer">
 
+        <!-- Active Control Row: Value Label + Slider + Reset Button -->
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:gravity="center_vertical"
             android:orientation="horizontal">
+
             <TextView
-                android:id="@+id/tvIsoLabel"
-                android:layout_width="80dp"
+                android:id="@+id/tvProParamValue"
+                android:layout_width="95dp"
                 android:layout_height="wrap_content"
                 android:text="ISO AUTO"
-                android:textColor="@color/pixel_accent_sand"
-                android:textSize="12sp"
+                android:textColor="@color/pixel_accent_cyan"
+                android:textSize="13sp"
                 android:textStyle="bold" />
+
             <SeekBar
-                android:id="@+id/sbIso"
+                android:id="@+id/sbProSlider"
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
-                android:max="192"
+                android:max="8"
                 android:progress="0"
-                android:progressTint="@color/pixel_accent_sand"
-                android:thumbTint="@color/pixel_accent_sand" />
+                android:progressTint="@color/pixel_accent_cyan"
+                android:thumbTint="@color/pixel_accent_cyan" />
+
+            <TextView
+                android:id="@+id/btnProReset"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="8dp"
+                android:background="@drawable/bg_pill_container"
+                android:backgroundTint="#33FFFFFF"
+                android:paddingHorizontal="8dp"
+                android:paddingVertical="4dp"
+                android:text="AUTO"
+                android:textColor="@color/pixel_text_white"
+                android:textSize="11sp"
+                android:textStyle="bold" />
         </LinearLayout>
 
+        <!-- Parameter Tabs Selector: [ ISO | S | FOCUS | WB | EV ] -->
         <LinearLayout
+            android:id="@+id/layoutProTabs"
             android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:gravity="center_vertical"
+            android:layout_height="32dp"
+            android:layout_marginTop="8dp"
+            android:gravity="center"
             android:orientation="horizontal">
+
             <TextView
-                android:id="@+id/tvEvLabel"
-                android:layout_width="80dp"
-                android:layout_height="wrap_content"
-                android:text="EV 0.0"
-                android:textColor="@color/pixel_text_white"
-                android:textSize="12sp"
-                android:textStyle="bold" />
-            <SeekBar
-                android:id="@+id/sbEv"
+                android:id="@+id/tabProIso"
                 android:layout_width="0dp"
-                android:layout_height="wrap_content"
+                android:layout_height="match_parent"
                 android:layout_weight="1"
-                android:max="24"
-                android:progress="12"
-                android:progressTint="@color/pixel_accent_blue"
-                android:thumbTint="@color/pixel_accent_blue" />
+                android:background="@drawable/bg_zoom_pill_active"
+                android:gravity="center"
+                android:text="ISO"
+                android:textColor="@color/pixel_pill_text_active"
+                android:textSize="11sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/tabProShutter"
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_marginStart="4dp"
+                android:layout_weight="1"
+                android:gravity="center"
+                android:text="S"
+                android:textColor="@color/pixel_text_secondary"
+                android:textSize="11sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/tabProFocus"
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_marginStart="4dp"
+                android:layout_weight="1"
+                android:gravity="center"
+                android:text="FOCUS"
+                android:textColor="@color/pixel_text_secondary"
+                android:textSize="11sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/tabProWb"
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_marginStart="4dp"
+                android:layout_weight="1"
+                android:gravity="center"
+                android:text="WB"
+                android:textColor="@color/pixel_text_secondary"
+                android:textSize="11sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/tabProEv"
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_marginStart="4dp"
+                android:layout_weight="1"
+                android:gravity="center"
+                android:text="EV"
+                android:textColor="@color/pixel_text_secondary"
+                android:textSize="11sp"
+                android:textStyle="bold" />
         </LinearLayout>
     </LinearLayout>
 

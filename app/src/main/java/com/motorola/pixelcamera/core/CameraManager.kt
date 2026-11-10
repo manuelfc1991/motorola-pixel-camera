@@ -346,21 +346,67 @@ class CameraManager(private val context: Context) {
         return camera?.cameraInfo?.exposureState?.exposureCompensationIndex ?: 0
     }
 
+    var currentManualIso: Int = 0 // 0 = Auto
+    var currentManualExposureTimeNs: Long = 0L // 0 = Auto
+    var currentManualFocusDistance: Float = -1f // -1 = Auto AF
+    var currentManualAwbMode: Int = CaptureRequest.CONTROL_AWB_MODE_AUTO
+
     @OptIn(ExperimentalCamera2Interop::class)
     fun setManualIso(iso: Int) {
+        currentManualIso = iso
+        applyManualControls()
+    }
+
+    @OptIn(ExperimentalCamera2Interop::class)
+    fun setManualShutter(ns: Long) {
+        currentManualExposureTimeNs = ns
+        applyManualControls()
+    }
+
+    @OptIn(ExperimentalCamera2Interop::class)
+    fun setManualFocus(distance: Float) {
+        currentManualFocusDistance = distance
+        applyManualControls()
+    }
+
+    @OptIn(ExperimentalCamera2Interop::class)
+    fun setManualWb(mode: Int) {
+        currentManualAwbMode = mode
+        applyManualControls()
+    }
+
+    @OptIn(ExperimentalCamera2Interop::class)
+    fun applyManualControls() {
         val cam = camera ?: return
         val c2Control = Camera2CameraControl.from(cam.cameraControl)
         val optionsBuilder = CaptureRequestOptions.Builder()
-        if (iso == 0) {
-            // Auto Exposure
-            optionsBuilder.setCaptureRequestOption(CaptureRequest.CONTROL_AE_MODE, CaptureRequest.CONTROL_AE_MODE_ON)
-        } else {
-            // Manual ISO
+
+        // 1. Exposure (ISO + Shutter)
+        if (currentManualIso > 0 || currentManualExposureTimeNs > 0L) {
             optionsBuilder.setCaptureRequestOption(CaptureRequest.CONTROL_AE_MODE, CaptureRequest.CONTROL_AE_MODE_OFF)
-            optionsBuilder.setCaptureRequestOption(CaptureRequest.SENSOR_SENSITIVITY, iso)
-            // Keep default exposure time at 1/50s (20ms = 20,000,000ns) for responsive manual preview
-            optionsBuilder.setCaptureRequestOption(CaptureRequest.SENSOR_EXPOSURE_TIME, 20_000_000L)
+            if (currentManualIso > 0) {
+                optionsBuilder.setCaptureRequestOption(CaptureRequest.SENSOR_SENSITIVITY, currentManualIso)
+            }
+            if (currentManualExposureTimeNs > 0L) {
+                optionsBuilder.setCaptureRequestOption(CaptureRequest.SENSOR_EXPOSURE_TIME, currentManualExposureTimeNs)
+            } else {
+                optionsBuilder.setCaptureRequestOption(CaptureRequest.SENSOR_EXPOSURE_TIME, 16_666_666L)
+            }
+        } else {
+            optionsBuilder.setCaptureRequestOption(CaptureRequest.CONTROL_AE_MODE, CaptureRequest.CONTROL_AE_MODE_ON)
         }
+
+        // 2. Focus Distance
+        if (currentManualFocusDistance >= 0f) {
+            optionsBuilder.setCaptureRequestOption(CaptureRequest.CONTROL_AF_MODE, CaptureRequest.CONTROL_AF_MODE_OFF)
+            optionsBuilder.setCaptureRequestOption(CaptureRequest.LENS_FOCUS_DISTANCE, currentManualFocusDistance)
+        } else {
+            optionsBuilder.setCaptureRequestOption(CaptureRequest.CONTROL_AF_MODE, CaptureRequest.CONTROL_AF_MODE_CONTINUOUS_PICTURE)
+        }
+
+        // 3. White Balance
+        optionsBuilder.setCaptureRequestOption(CaptureRequest.CONTROL_AWB_MODE, currentManualAwbMode)
+
         c2Control.setCaptureRequestOptions(optionsBuilder.build())
     }
 
