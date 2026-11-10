@@ -8,6 +8,8 @@ import android.content.Context
 import android.content.Intent
 import android.content.SharedPreferences
 import android.content.pm.PackageManager
+import android.graphics.BitmapFactory
+import android.graphics.ImageDecoder
 import android.graphics.Rect
 import android.net.Uri
 import android.os.Build
@@ -48,6 +50,7 @@ import com.motorola.pixelcamera.core.CameraMode
 import com.motorola.pixelcamera.databinding.ActivityMainBinding
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
@@ -309,6 +312,14 @@ class MainActivity : AppCompatActivity() {
             override fun onDoubleTap(e: MotionEvent): Boolean {
                 flipCameraWithAnimation()
                 return true
+            }
+
+            override fun onFling(e1: MotionEvent?, e2: MotionEvent, velocityX: Float, velocityY: Float): Boolean {
+                if (e1 != null && (e1.x - e2.x > 140) && kotlin.math.abs(velocityX) > 200) {
+                    openInAppPhotoPreview()
+                    return true
+                }
+                return false
             }
         })
 
@@ -662,6 +673,151 @@ class MainActivity : AppCompatActivity() {
             } catch (e: Exception) {
                 // Ignore if permission not granted yet or no photos exist
             }
+        }
+    }
+
+    private var previewLastX = 0f
+    private var previewLastY = 0f
+    private var isPreviewDragging = false
+
+    private fun setupPhotoPreviewInteractions() {
+        binding.btnPreviewBack.setOnClickListener {
+            closeInAppPhotoPreview()
+        }
+
+        binding.btnPreviewShare.setOnClickListener {
+            val uri = latestCapturedUri ?: return@setOnClickListener
+            val shareIntent = Intent(Intent.ACTION_SEND).apply {
+                type = "image/jpeg"
+                putExtra(Intent.EXTRA_STREAM, uri)
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            }
+            startActivity(Intent.createChooser(shareIntent, "Share Pixel Photo"))
+        }
+
+        val scaleDetector = ScaleGestureDetector(this, object : ScaleGestureDetector.SimpleOnScaleGestureListener() {
+            override fun onScale(detector: ScaleGestureDetector): Boolean {
+                val currentScale = binding.ivPreviewPhoto.scaleX
+                val factor = detector.scaleFactor
+                val targetScale = (currentScale * factor).coerceIn(1.0f, 4.0f)
+                binding.ivPreviewPhoto.scaleX = targetScale
+                binding.ivPreviewPhoto.scaleY = targetScale
+                if (targetScale <= 1.05f) {
+                    binding.ivPreviewPhoto.translationX = 0f
+                    binding.ivPreviewPhoto.translationY = 0f
+                }
+                return true
+            }
+        })
+
+        val gestureDetector = GestureDetector(this, object : GestureDetector.SimpleOnGestureListener() {
+            override fun onDoubleTap(e: MotionEvent): Boolean {
+                val targetScale = if (binding.ivPreviewPhoto.scaleX > 1.5f) 1.0f else 2.5f
+                binding.ivPreviewPhoto.animate()
+                    .scaleX(targetScale)
+                    .scaleY(targetScale)
+                    .translationX(0f)
+                    .translationY(0f)
+                    .setDuration(220)
+                    .start()
+                return true
+            }
+
+            override fun onFling(e1: MotionEvent?, e2: MotionEvent, velocityX: Float, velocityY: Float): Boolean {
+                if (e1 != null && (e2.x - e1.x > 140) && kotlin.math.abs(velocityX) > 200 && binding.ivPreviewPhoto.scaleX <= 1.05f) {
+                    closeInAppPhotoPreview()
+                    return true
+                }
+                return false
+            }
+        })
+
+        binding.ivPreviewPhoto.setOnTouchListener { _, event ->
+            scaleDetector.onTouchEvent(event)
+            gestureDetector.onTouchEvent(event)
+
+            if (binding.ivPreviewPhoto.scaleX > 1.05f) {
+                when (event.actionMasked) {
+                    MotionEvent.ACTION_DOWN -> {
+                        previewLastX = event.rawX
+                        previewLastY = event.rawY
+                        isPreviewDragging = true
+                    }
+                    MotionEvent.ACTION_MOVE -> {
+                        if (isPreviewDragging) {
+                            val dx = event.rawX - previewLastX
+                            val dy = event.rawY - previewLastY
+                            previewLastX = event.rawX
+                            previewLastY = event.rawY
+                            binding.ivPreviewPhoto.translationX += dx
+                            binding.ivPreviewPhoto.translationY += dy
+                        }
+                    }
+                    MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                        isPreviewDragging = false
+                    }
+                }
+            }
+            true
+        }
+    }
+
+    private fun openInAppPhotoPreview() {
+        val uri = latestCapturedUri
+        if (uri == null) {
+            Toast.makeText(this, "No photo in gallery yet", Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        lifecycleScope.launch(Dispatchers.IO) {
+            try {
+                val bitmap = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                    val source = ImageDecoder.createSource(contentResolver, uri)
+                    ImageDecoder.decodeBitmap(source) { decoder, _, _ ->
+                        decoder.isMutableRequired = false
+                        decoder.allocator = ImageDecoder.ALLOCATOR_SOFTWARE
+                    }
+                } else {
+                    contentResolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it) }
+                }
+
+                if (bitmap != null) {
+                    withContext(Dispatchers.Main) {
+                        binding.ivPreviewPhoto.setImageBitmap(bitmap)
+                        binding.ivPreviewPhoto.scaleX = 1.0f
+                        binding.ivPreviewPhoto.scaleY = 1.0f
+                        binding.ivPreviewPhoto.translationX = 0f
+                        binding.ivPreviewPhoto.translationY = 0f
+
+                        binding.tvPreviewTitle.text = uri.lastPathSegment ?: "Captured Photo"
+                        binding.tvPreviewDetails.text = "${bitmap.width} × ${bitmap.height} • Motorola Edge 20 Fusion"
+
+                        binding.overlayPhotoPreview.alpha = 0f
+                        binding.overlayPhotoPreview.visibility = View.VISIBLE
+                        binding.overlayPhotoPreview.animate()
+                            .alpha(1f)
+                            .setDuration(220)
+                            .start()
+                    }
+                }
+            } catch (e: Exception) {
+                withContext(Dispatchers.Main) {
+                    Toast.makeText(this@MainActivity, "Could not open preview: ${e.message}", Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
+    }
+
+    private fun closeInAppPhotoPreview() {
+        if (binding.overlayPhotoPreview.visibility == View.VISIBLE) {
+            binding.overlayPhotoPreview.animate()
+                .alpha(0f)
+                .setDuration(180)
+                .withEndAction {
+                    binding.overlayPhotoPreview.visibility = View.GONE
+                    binding.ivPreviewPhoto.setImageDrawable(null)
+                }
+                .start()
         }
     }
 
@@ -1262,20 +1418,10 @@ class MainActivity : AppCompatActivity() {
 
         // Gallery Thumbnail Click
         binding.ivGalleryThumbnail.setOnClickListener {
-            val intent = Intent(Intent.ACTION_VIEW).apply {
-                if (latestCapturedUri != null) {
-                    setDataAndType(latestCapturedUri, "image/*")
-                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                } else {
-                    type = "image/*"
-                }
-            }
-            try {
-                startActivity(intent)
-            } catch (e: Exception) {
-                // Ignore if no gallery app available
-            }
+            openInAppPhotoPreview()
         }
+
+        setupPhotoPreviewInteractions()
     }
 
     private fun toggleQuickSettings() {
@@ -1456,6 +1602,12 @@ class MainActivity : AppCompatActivity() {
     }
 
     override fun onKeyDown(keyCode: Int, event: KeyEvent?): Boolean {
+        if (keyCode == KeyEvent.KEYCODE_BACK) {
+            if (binding.overlayPhotoPreview.visibility == View.VISIBLE) {
+                closeInAppPhotoPreview()
+                return true
+            }
+        }
         return when (keyCode) {
             KeyEvent.KEYCODE_VOLUME_DOWN, KeyEvent.KEYCODE_VOLUME_UP, KeyEvent.KEYCODE_CAMERA -> {
                 if (event?.repeatCount == 0) {
