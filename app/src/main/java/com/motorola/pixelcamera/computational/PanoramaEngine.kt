@@ -252,7 +252,7 @@ class PanoramaEngine(private val context: Context) : SensorEventListener {
     /**
      * Stop panorama capture, crop trimmed edges, inject Photosphere XMP, and save to MediaStore
      */
-    suspend fun finishCapture(): Uri? = withContext(Dispatchers.IO) {
+    suspend fun finishCapture(location: android.location.Location? = null): Uri? = withContext(Dispatchers.IO) {
         isRecording = false
         try {
             sensorManager.unregisterListener(this@PanoramaEngine)
@@ -301,6 +301,18 @@ class PanoramaEngine(private val context: Context) : SensorEventListener {
             resolver.openOutputStream(uri)?.use { out ->
                 out.write(finalJpeg)
                 out.flush()
+            }
+
+            if (location != null) {
+                try {
+                    resolver.openFileDescriptor(uri, "rw")?.use { pfd ->
+                        val exif = androidx.exifinterface.media.ExifInterface(pfd.fileDescriptor)
+                        exif.setGpsInfo(location)
+                        exif.saveAttributes()
+                    }
+                } catch (gpsErr: Exception) {
+                    Log.w(TAG, "Failed setting GPS on panorama: ${gpsErr.message}")
+                }
             }
 
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {

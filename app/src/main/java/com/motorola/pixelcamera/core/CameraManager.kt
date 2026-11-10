@@ -36,6 +36,7 @@ import com.motorola.pixelcamera.computational.MotionPhotoEngine
 import com.motorola.pixelcamera.computational.NightSightEngine
 import com.motorola.pixelcamera.computational.PanoramaEngine
 import com.motorola.pixelcamera.computational.PortraitEngine
+import com.motorola.pixelcamera.hardware.LocationHelper
 import com.motorola.pixelcamera.hardware.MotorolaVendorHelper
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.suspendCancellableCoroutine
@@ -61,6 +62,7 @@ class CameraManager(private val context: Context) {
 
     val panoramaEngine by lazy { PanoramaEngine(context) }
     val audioZoomManager by lazy { AudioZoomManager(context) }
+    val locationHelper by lazy { LocationHelper(context) }
 
     enum class TopShotMode {
         OFF, AUTO, ON
@@ -677,7 +679,7 @@ class CameraManager(private val context: Context) {
             CameraMode.PANORAMA -> {
                 if (panoramaEngine.isCapturing()) {
                     onStatusUpdate("Stitching cylindrical panorama...")
-                    panoramaEngine.finishCapture()
+                    panoramaEngine.finishCapture(locationHelper.getCurrentLocation())
                 } else {
                     onStatusUpdate("Aligning panorama horizon...")
                     panoramaEngine.startCapture()
@@ -696,7 +698,7 @@ class CameraManager(private val context: Context) {
     }
 
     suspend fun stopPanoramaCapture(): Uri? {
-        return panoramaEngine.finishCapture()
+        return panoramaEngine.finishCapture(locationHelper.getCurrentLocation())
     }
 
     fun isCapturingPanorama(): Boolean = panoramaEngine.isCapturing()
@@ -718,11 +720,16 @@ class CameraManager(private val context: Context) {
                 }
             }
 
+            val gpsLocation = locationHelper.getCurrentLocation()
             val outputOptions = ImageCapture.OutputFileOptions.Builder(
                 context.contentResolver,
                 MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
                 contentValues
-            ).build()
+            ).apply {
+                if (gpsLocation != null) {
+                    setMetadata(ImageCapture.Metadata().apply { location = gpsLocation })
+                }
+            }.build()
 
             capture.takePicture(
                 outputOptions,
@@ -771,10 +778,16 @@ class CameraManager(private val context: Context) {
             }
         }
 
+        val gpsLocation = locationHelper.getCurrentLocation()
         val mediaStoreOutput = MediaStoreOutputOptions.Builder(
             context.contentResolver,
             MediaStore.Video.Media.EXTERNAL_CONTENT_URI
-        ).setContentValues(contentValues).build()
+        ).setContentValues(contentValues)
+            .apply {
+                if (gpsLocation != null) {
+                    setLocation(gpsLocation)
+                }
+            }.build()
 
         val pendingRecording = video.output.prepareRecording(context, mediaStoreOutput)
 
@@ -899,6 +912,14 @@ class CameraManager(private val context: Context) {
             try {
                 resolver.openFileDescriptor(uri, "rw")?.use { pfd ->
                     val exif = androidx.exifinterface.media.ExifInterface(pfd.fileDescriptor)
+                    val gpsLocation = locationHelper.getCurrentLocation()
+                    if (gpsLocation != null) {
+                        try {
+                            exif.setGpsInfo(gpsLocation)
+                        } catch (gpsErr: Exception) {
+                            Log.w(TAG, "Failed setting GPS EXIF info: ${gpsErr.message}")
+                        }
+                    }
                     exif.setAttribute(androidx.exifinterface.media.ExifInterface.TAG_MAKE, Build.MANUFACTURER.replaceFirstChar { it.uppercase() })
                     exif.setAttribute(androidx.exifinterface.media.ExifInterface.TAG_MODEL, Build.MODEL)
                     exif.setAttribute(androidx.exifinterface.media.ExifInterface.TAG_SOFTWARE, "Pixel Camera 9.7 (HDR+)")

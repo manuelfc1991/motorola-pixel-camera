@@ -342,6 +342,7 @@ class MainActivity : AppCompatActivity() {
         super.onResume()
         syncSettings()
         loadLatestGalleryThumbnail()
+        cameraManager.locationHelper.startListening()
         accelerometer?.let {
             sensorManager?.registerListener(sensorListener, it, SensorManager.SENSOR_DELAY_UI)
         }
@@ -349,6 +350,7 @@ class MainActivity : AppCompatActivity() {
 
     override fun onPause() {
         super.onPause()
+        cameraManager.locationHelper.stopListening()
         sensorManager?.unregisterListener(sensorListener)
     }
 
