@@ -29,6 +29,17 @@
             android:layout_width="match_parent"
             android:layout_height="match_parent" />
 
+        <!-- Live Portrait blur: background blurred, subject see-through to the preview below. -->
+        <ImageView
+            android:id="@+id/ivPortraitPreview"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:clickable="false"
+            android:focusable="false"
+            android:importantForAccessibility="no"
+            android:scaleType="centerCrop"
+            android:visibility="gone" />
+
         <!-- Slow motion runs its own camera session; its picture is drawn here. -->
         <TextureView
             android:id="@+id/slowMotionPreview"
