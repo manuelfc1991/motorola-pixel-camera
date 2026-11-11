@@ -5,4 +5,6 @@
     <dimen name="gc_zoom_top">546dp</dimen>
     <dimen name="gc_deck_top">660dp</dimen>
     <dimen name="gc_sheet_top">288dp</dimen>
+    <dimen name="gc_pro_slider_top">580dp</dimen>
+    <dimen name="gc_pro_bar_top">788dp</dimen>
 </resources>

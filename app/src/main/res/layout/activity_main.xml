@@ -764,130 +764,372 @@
         </FrameLayout>
     </androidx.constraintlayout.widget.ConstraintLayout>
 
-    <!-- Pro Manual Controls Drawer (Shutter, ISO, Focus, WB, EV) -->
+    <!-- Manual controls, as Google Camera: the current values across the top of the frame,
+         a ruler slider where the zoom rows sit, and round buttons in place of the mode row. -->
+    <LinearLayout
+        android:id="@+id/proInfoRow"
+        android:layout_width="wrap_content"
+        android:layout_height="40dp"
+        android:layout_marginTop="66dp"
+        android:elevation="6dp"
+        android:gravity="center"
+        android:orientation="horizontal"
+        android:visibility="gone"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent">
+
+        <TextView
+            android:id="@+id/tvProInfoFocus"
+            android:layout_width="wrap_content"
+            android:layout_height="match_parent"
+            android:layout_marginHorizontal="12dp"
+            android:clickable="true"
+            android:focusable="true"
+            android:gravity="center"
+            android:maxLines="1"
+            android:text="Auto focus"
+            android:textColor="@color/gc_icon"
+            android:textSize="14sp" />
+
+        <TextView
+            android:id="@+id/tvProInfoShutter"
+            android:layout_width="wrap_content"
+            android:layout_height="match_parent"
+            android:layout_marginHorizontal="12dp"
+            android:clickable="true"
+            android:focusable="true"
+            android:gravity="center"
+            android:maxLines="1"
+            android:text="Ⓐ 1/60s"
+            android:textColor="@color/gc_icon"
+            android:textSize="14sp" />
+
+        <TextView
+            android:id="@+id/tvProInfoIso"
+            android:layout_width="wrap_content"
+            android:layout_height="match_parent"
+            android:layout_marginHorizontal="12dp"
+            android:clickable="true"
+            android:focusable="true"
+            android:gravity="center"
+            android:maxLines="1"
+            android:text="Ⓐ ISO 100"
+            android:textColor="@color/gc_icon"
+            android:textSize="14sp" />
+
+        <TextView
+            android:id="@+id/tvProInfoWb"
+            android:layout_width="wrap_content"
+            android:layout_height="match_parent"
+            android:layout_marginHorizontal="12dp"
+            android:clickable="true"
+            android:focusable="true"
+            android:gravity="center"
+            android:maxLines="1"
+            android:text="Auto WB"
+            android:textColor="@color/gc_icon"
+            android:textSize="14sp" />
+
+        <TextView
+            android:id="@+id/tvProInfoEv"
+            android:layout_width="wrap_content"
+            android:layout_height="match_parent"
+            android:layout_marginHorizontal="12dp"
+            android:clickable="true"
+            android:focusable="true"
+            android:gravity="center"
+            android:maxLines="1"
+            android:text="±0"
+            android:textColor="@color/gc_icon"
+            android:textSize="14sp" />
+
+    </LinearLayout>
+
+    <LinearLayout
+        android:id="@+id/proSliderRow"
+        android:layout_width="wrap_content"
+        android:layout_height="48dp"
+        android:layout_marginStart="15dp"
+        android:layout_marginTop="@dimen/gc_pro_slider_top"
+        android:elevation="6dp"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:visibility="gone"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent">
+
+        <!-- Auto for the control being set; blue while it is automatic. -->
+        <TextView
+            android:id="@+id/btnProReset"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:background="@drawable/bg_gc_pro_btn"
+            android:clickable="true"
+            android:focusable="true"
+            android:gravity="center"
+            android:text="A"
+            android:textColor="@color/gc_icon"
+            android:textSize="18sp"
+            android:textStyle="bold" />
+
+        <LinearLayout
+            android:layout_width="276dp"
+            android:layout_height="48dp"
+            android:layout_marginStart="15dp"
+            android:background="@drawable/bg_gc_pill"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:paddingHorizontal="6dp">
+
+            <TextView
+                android:id="@+id/tvRulerMin"
+                android:layout_width="40dp"
+                android:layout_height="40dp"
+                android:clickable="true"
+                android:focusable="true"
+                android:gravity="center"
+                android:maxLines="1"
+                android:textColor="@color/gc_toggle_active"
+                android:textSize="11sp" />
+
+            <com.motorola.pixelcamera.ui.RulerSliderView
+                android:id="@+id/sbProSlider"
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_weight="1" />
+
+            <TextView
+                android:id="@+id/tvRulerMax"
+                android:layout_width="40dp"
+                android:layout_height="40dp"
+                android:clickable="true"
+                android:focusable="true"
+                android:gravity="center"
+                android:maxLines="1"
+                android:textColor="@color/gc_toggle_active"
+                android:textSize="11sp" />
+        </LinearLayout>
+    </LinearLayout>
+
     <LinearLayout
         android:id="@+id/proControlPanel"
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginBottom="4dp"
-        android:background="#E6121417"
+        android:layout_height="0dp"
+        android:layout_marginTop="@dimen/gc_pro_bar_top"
+        android:background="@android:color/black"
+        android:clickable="true"
         android:elevation="6dp"
         android:orientation="vertical"
-        android:paddingHorizontal="16dp"
-        android:paddingVertical="10dp"
         android:visibility="gone"
-        app:layout_constraintBottom_toTopOf="@+id/zoomPillContainer">
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintTop_toTopOf="parent">
 
-        <!-- Active Control Row: Value Label + Slider + Reset Button -->
-        <LinearLayout
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="2dp"
+            android:background="#333333" />
+
+        <!-- Tap or drag down to close, as Google Camera. -->
+        <FrameLayout
+            android:id="@+id/proPanelHandle"
+            android:layout_width="match_parent"
+            android:layout_height="34dp">
+
+            <View
+                android:layout_width="36dp"
+                android:layout_height="4dp"
+                android:layout_gravity="center_horizontal"
+                android:layout_marginTop="14dp"
+                android:background="@drawable/bg_gc_handle" />
+        </FrameLayout>
+
+        <HorizontalScrollView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:gravity="center_vertical"
-            android:orientation="horizontal">
+            android:scrollbars="none">
 
-            <TextView
-                android:id="@+id/tvProParamValue"
-                android:layout_width="95dp"
-                android:layout_height="wrap_content"
-                android:text="ISO AUTO"
-                android:textColor="@color/pixel_accent_cyan"
-                android:textSize="13sp"
-                android:textStyle="bold" />
-
-            <SeekBar
-                android:id="@+id/sbProSlider"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:max="8"
-                android:progress="0"
-                android:progressTint="@color/pixel_accent_cyan"
-                android:thumbTint="@color/pixel_accent_cyan" />
-
-            <TextView
-                android:id="@+id/btnProReset"
+            <LinearLayout
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_marginStart="8dp"
-                android:background="@drawable/bg_pill_container"
-                android:backgroundTint="#33FFFFFF"
-                android:paddingHorizontal="8dp"
-                android:paddingVertical="4dp"
-                android:text="AUTO"
-                android:textColor="@color/pixel_text_white"
-                android:textSize="11sp"
-                android:textStyle="bold" />
-        </LinearLayout>
+                android:orientation="horizontal">
 
-        <!-- Parameter Tabs Selector: [ ISO | S | FOCUS | WB | EV ] -->
-        <LinearLayout
-            android:id="@+id/layoutProTabs"
-            android:layout_width="match_parent"
-            android:layout_height="32dp"
-            android:layout_marginTop="8dp"
-            android:gravity="center"
-            android:orientation="horizontal">
+                <LinearLayout
+                    android:id="@+id/btnProResetAll"
+                    android:layout_width="88dp"
+                    android:layout_height="wrap_content"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:gravity="center_horizontal"
+                    android:orientation="vertical">
 
-            <TextView
-                android:id="@+id/tabProIso"
-                android:layout_width="0dp"
-                android:layout_height="match_parent"
-                android:layout_weight="1"
-                android:background="@drawable/bg_zoom_pill_active"
-                android:gravity="center"
-                android:text="ISO"
-                android:textColor="@color/pixel_pill_text_active"
-                android:textSize="11sp"
-                android:textStyle="bold" />
+                    <ImageView
+                        android:id="@+id/icProResetAll"
+                        android:layout_width="56dp"
+                        android:layout_height="56dp"
+                        android:background="@drawable/bg_gc_pro_circle"
+                        android:padding="16dp"
+                        android:src="@drawable/ic_pro_reset"
+                        app:tint="@color/gc_icon" />
 
-            <TextView
-                android:id="@+id/tabProShutter"
-                android:layout_width="0dp"
-                android:layout_height="match_parent"
-                android:layout_marginStart="4dp"
-                android:layout_weight="1"
-                android:gravity="center"
-                android:text="S"
-                android:textColor="@color/pixel_text_secondary"
-                android:textSize="11sp"
-                android:textStyle="bold" />
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="8dp"
+                        android:maxLines="1"
+                        android:text="Reset all"
+                        android:textColor="@color/gc_qs_icon"
+                        android:textSize="13sp" />
+                </LinearLayout>
 
-            <TextView
-                android:id="@+id/tabProFocus"
-                android:layout_width="0dp"
-                android:layout_height="match_parent"
-                android:layout_marginStart="4dp"
-                android:layout_weight="1"
-                android:gravity="center"
-                android:text="FOCUS"
-                android:textColor="@color/pixel_text_secondary"
-                android:textSize="11sp"
-                android:textStyle="bold" />
+                <View
+                    android:layout_width="2dp"
+                    android:layout_height="28dp"
+                    android:layout_marginTop="14dp"
+                    android:background="#5C5F5E" />
 
-            <TextView
-                android:id="@+id/tabProWb"
-                android:layout_width="0dp"
-                android:layout_height="match_parent"
-                android:layout_marginStart="4dp"
-                android:layout_weight="1"
-                android:gravity="center"
-                android:text="WB"
-                android:textColor="@color/pixel_text_secondary"
-                android:textSize="11sp"
-                android:textStyle="bold" />
+                <LinearLayout
+                    android:id="@+id/tabProFocus"
+                    android:layout_width="88dp"
+                    android:layout_height="wrap_content"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:gravity="center_horizontal"
+                    android:orientation="vertical">
 
-            <TextView
-                android:id="@+id/tabProEv"
-                android:layout_width="0dp"
-                android:layout_height="match_parent"
-                android:layout_marginStart="4dp"
-                android:layout_weight="1"
-                android:gravity="center"
-                android:text="EV"
-                android:textColor="@color/pixel_text_secondary"
-                android:textSize="11sp"
-                android:textStyle="bold" />
-        </LinearLayout>
+                    <ImageView
+                        android:id="@+id/icProFocus"
+                        android:layout_width="56dp"
+                        android:layout_height="56dp"
+                        android:background="@drawable/bg_gc_pro_circle"
+                        android:padding="16dp"
+                        android:src="@drawable/ic_pro_focus"
+                        app:tint="@color/gc_icon" />
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="8dp"
+                        android:maxLines="1"
+                        android:text="Focus"
+                        android:textColor="@color/gc_qs_icon"
+                        android:textSize="13sp" />
+                </LinearLayout>
+
+                <LinearLayout
+                    android:id="@+id/tabProShutter"
+                    android:layout_width="88dp"
+                    android:layout_height="wrap_content"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:gravity="center_horizontal"
+                    android:orientation="vertical">
+
+                    <ImageView
+                        android:id="@+id/icProShutter"
+                        android:layout_width="56dp"
+                        android:layout_height="56dp"
+                        android:background="@drawable/bg_gc_pro_circle"
+                        android:padding="16dp"
+                        android:src="@drawable/ic_pro_shutter"
+                        app:tint="@color/gc_icon" />
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="8dp"
+                        android:maxLines="1"
+                        android:text="Shutter speed"
+                        android:textColor="@color/gc_qs_icon"
+                        android:textSize="13sp" />
+                </LinearLayout>
+
+                <LinearLayout
+                    android:id="@+id/tabProIso"
+                    android:layout_width="88dp"
+                    android:layout_height="wrap_content"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:gravity="center_horizontal"
+                    android:orientation="vertical">
+
+                    <ImageView
+                        android:id="@+id/icProIso"
+                        android:layout_width="56dp"
+                        android:layout_height="56dp"
+                        android:background="@drawable/bg_gc_pro_circle"
+                        android:padding="16dp"
+                        android:src="@drawable/ic_pro_iso"
+                        app:tint="@color/gc_icon" />
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="8dp"
+                        android:maxLines="1"
+                        android:text="ISO"
+                        android:textColor="@color/gc_qs_icon"
+                        android:textSize="13sp" />
+                </LinearLayout>
+
+                <LinearLayout
+                    android:id="@+id/tabProWb"
+                    android:layout_width="88dp"
+                    android:layout_height="wrap_content"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:gravity="center_horizontal"
+                    android:orientation="vertical">
+
+                    <ImageView
+                        android:id="@+id/icProWb"
+                        android:layout_width="56dp"
+                        android:layout_height="56dp"
+                        android:background="@drawable/bg_gc_pro_circle"
+                        android:padding="16dp"
+                        android:src="@drawable/ic_pro_wb"
+                        app:tint="@color/gc_icon" />
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="8dp"
+                        android:maxLines="1"
+                        android:text="White balance"
+                        android:textColor="@color/gc_qs_icon"
+                        android:textSize="13sp" />
+                </LinearLayout>
+
+                <LinearLayout
+                    android:id="@+id/tabProEv"
+                    android:layout_width="88dp"
+                    android:layout_height="wrap_content"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:gravity="center_horizontal"
+                    android:orientation="vertical">
+
+                    <ImageView
+                        android:id="@+id/icProEv"
+                        android:layout_width="56dp"
+                        android:layout_height="56dp"
+                        android:background="@drawable/bg_gc_pro_circle"
+                        android:padding="16dp"
+                        android:src="@drawable/ic_exposure_sun"
+                        app:tint="@color/gc_icon" />
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="8dp"
+                        android:maxLines="1"
+                        android:text="Brightness"
+                        android:textColor="@color/gc_qs_icon"
+                        android:textSize="13sp" />
+                </LinearLayout>
+
+            </LinearLayout>
+        </HorizontalScrollView>
     </LinearLayout>
 
     <!-- MGC 9.7 DUAL ZOOM SELECTOR (Physical Lenses Upper Row + Multiplier Lower Pill) -->
