@@ -379,7 +379,11 @@ class CameraManager(private val context: Context) {
                 }
 
                 val qrListener = onQrDetected
-                if (qrListener != null && currentCameraMode == CameraMode.CAMERA) {
+                // A code stays in view for seconds, so a few looks a second are enough; scanning
+                // every frame kept a processor core busy for nothing.
+                val nowMs = android.os.SystemClock.elapsedRealtime()
+                if (qrListener != null && currentCameraMode == CameraMode.CAMERA && nowMs - lastQrScanMs >= QR_SCAN_INTERVAL_MS) {
+                    lastQrScanMs = nowMs
                     qrScanner.scan(imageProxy)?.let(qrListener)
                 }
 
@@ -724,6 +728,7 @@ class CameraManager(private val context: Context) {
     /** Called with the text of a QR code seen in Photo mode. */
     var onQrDetected: ((String) -> Unit)? = null
     private val qrScanner = QrScanner()
+    private var lastQrScanMs = 0L
 
     @OptIn(ExperimentalCamera2Interop::class)
     private fun setIspCleanup(enabled: Boolean) {
@@ -940,6 +945,12 @@ class CameraManager(private val context: Context) {
      * hardware edge enhancement, and all EXIF tags without lossy software recompression.
      */
     private suspend fun takePictureDirect(capture: ImageCapture): Uri? =
+        // With RAW on, the camera hands over two files and refuses a request that names only one
+        // (that crashed the hold-the-shutter burst).
+        if (capture.outputFormat == ImageCapture.OUTPUT_FORMAT_RAW_JPEG) takePictureRawAndJpeg(capture)
+        else takeJpegToMediaStore(capture)
+
+    private suspend fun takeJpegToMediaStore(capture: ImageCapture): Uri? =
         suspendCancellableCoroutine { cont ->
             val timeStamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())
             val name = "IMG_${timeStamp}_PXL"
@@ -1336,6 +1347,7 @@ class CameraManager(private val context: Context) {
         const val CAMERA_ULTRAWIDE = "3"
         private const val NIGHT_HANDHELD_CAPTURES = 2
         private const val DARK_4K_ISO_LIMIT = 2500
+        private const val QR_SCAN_INTERVAL_MS = 300L
         private const val LOW_LIGHT_VIDEO_MIN_FPS = 10
         /** Two seconds at 30 frames a second. */
         private const val DARK_4K_FRAMES = 60
