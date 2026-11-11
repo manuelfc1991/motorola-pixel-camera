@@ -54,6 +54,10 @@ android {
     buildFeatures {
         viewBinding = true
     }
+    androidResources {
+        // Models are memory-mapped straight from the APK, which needs them stored uncompressed
+        noCompress += "tflite"
+    }
 }
 
 androidComponents {
@@ -82,6 +86,12 @@ dependencies {
     // Concurrency & Image IO
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3")
     implementation("androidx.exifinterface:exifinterface:1.3.7")
+
+    // QR code reading from the viewfinder (pure Java, no Play services)
+    implementation("com.google.zxing:core:3.5.3")
+
+    // Runs the optional portrait models (assets/gmodels, not in the repository)
+    implementation("com.google.ai.edge.litert:litert:1.0.1")
 
     testImplementation("junit:junit:4.13.2")
 }

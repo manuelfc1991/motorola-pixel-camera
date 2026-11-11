@@ -69,7 +69,7 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="2dp"
-                    android:text="MediaTek Dimensity 800U • 108MP HM2 Sensor"
+                    android:text="MediaTek Dimensity 800U • 12 MP photos"
                     android:textColor="@color/pixel_accent_blue"
                     android:textSize="12sp" />
             </LinearLayout>
@@ -115,6 +115,33 @@
                     android:layout_height="wrap_content"
                     android:checked="true"
                     android:text="Camera sounds\nShutter click audio"
+                    android:textColor="@color/pixel_text_white"
+                    android:textSize="14sp" />
+
+                <com.google.android.material.switchmaterial.SwitchMaterial
+                    android:id="@+id/swRememberMode"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:checked="false"
+                    android:text="Remember last mode\nOpen in the mode you used last"
+                    android:textColor="@color/pixel_text_white"
+                    android:textSize="14sp" />
+
+                <com.google.android.material.switchmaterial.SwitchMaterial
+                    android:id="@+id/swMultiFrameLowLight"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:checked="true"
+                    android:text="Multi-frame in low light\nMerges 3-4 frames for less grain; takes a few seconds"
+                    android:textColor="@color/pixel_text_white"
+                    android:textSize="14sp" />
+
+                <com.google.android.material.switchmaterial.SwitchMaterial
+                    android:id="@+id/swMultiFrameZoom"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:checked="true"
+                    android:text="Multi-frame when zoomed\nMerges 3 frames at 2x and above"
                     android:textColor="@color/pixel_text_white"
                     android:textSize="14sp" />
             </LinearLayout>
@@ -260,6 +287,15 @@
                     android:layout_height="wrap_content"
                     android:checked="true"
                     android:text="Video stabilization (EIS)\nGyroscope-assisted shake reduction"
+                    android:textColor="@color/pixel_text_white"
+                    android:textSize="14sp" />
+
+                <com.google.android.material.switchmaterial.SwitchMaterial
+                    android:id="@+id/swHighBitrate"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:checked="false"
+                    android:text="High bitrate 1080p video\nLarger files, finer detail"
                     android:textColor="@color/pixel_text_white"
                     android:textSize="14sp" />
 

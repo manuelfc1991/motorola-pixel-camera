@@ -12,3 +12,9 @@ app/build/
 *.apk
 *.dng
 *.jpg
+
+# Third-party camera apps and the neural models taken from them: local use only, never published
+/scp/
+/scp.zip
+app/src/main/assets/gmodels/
+*.tflite

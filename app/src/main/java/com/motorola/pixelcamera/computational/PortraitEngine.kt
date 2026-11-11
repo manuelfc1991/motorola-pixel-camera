@@ -1,5 +1,6 @@
 package com.motorola.pixelcamera.computational
 
+import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Color
@@ -7,29 +8,118 @@ import android.graphics.Paint
 import android.graphics.PorterDuff
 import android.graphics.PorterDuffXfermode
 import android.graphics.RadialGradient
+import android.graphics.Rect
 import android.graphics.Shader
+import android.os.SystemClock
+import android.util.Log
 import com.motorola.pixelcamera.hardware.DimensityOptimizer
 import kotlinx.coroutines.withContext
+import java.util.stream.IntStream
 import kotlin.math.sqrt
 
 /**
- * Computational Portrait Blur & Depth Simulation Engine.
- * Creates progressive optical bokeh based on subject distance and aperture slider.
- * Uses high-performance separable box blur with radial focal depth masking.
+ * Portrait blur.
+ *
+ * With the neural models installed (see [PortraitSegmenter]) the subject is cut out along its
+ * real outline and the background blurs more the farther it is behind the subject.
+ * Without them the old look remains: a sharp circle around the focus point.
  */
 object PortraitEngine {
 
+    private const val TAG = "PortraitEngine"
+
+    /** Slider value (1..40) to blur radius on the 768 px working grid. */
+    private const val RADIUS_PER_STEP = 0.6f
+
+    /** Blur amount at which the blurred layer fully replaces the sharp photo. */
+    private const val FULL_COVER_AT = 0.33f
+
     suspend fun applyPortraitBokeh(
+        context: Context,
         input: Bitmap,
         focusX: Float = 0.5f,
         focusY: Float = 0.45f,
         blurIntensity: Float = 14f
     ): Bitmap = withContext(DimensityOptimizer.computationDispatcher) {
+        if (blurIntensity.toInt() <= 1) return@withContext input
+        val started = SystemClock.elapsedRealtime()
+        val map = PortraitSegmenter.analyse(context, input)
+        val result = map?.let { depthBokeh(input, it, focusX, focusY, blurIntensity) }
+        if (result != null) {
+            Log.i(TAG, "AI portrait in ${SystemClock.elapsedRealtime() - started} ms")
+            return@withContext result
+        }
+        radialBokeh(input, focusX, focusY, blurIntensity)
+    }
+
+    /** Subject-mask and depth driven blur. Returns null when there is nothing to anchor on. */
+    private fun depthBokeh(
+        input: Bitmap, map: PortraitSegmenter.SubjectMap, focusX: Float, focusY: Float, blurIntensity: Float
+    ): Bitmap? {
+        val w = map.width
+        val h = map.height
+        val size = w * h
+        val depth = map.depth
+        // A mask that covers almost nothing means no person or object stood out.
+        val alpha = map.alpha?.takeIf { PortraitMath.subjectShare(it) >= PortraitMath.MIN_SUBJECT_SHARE }
+
+        val subjectDepth = when {
+            alpha != null && depth != null -> PortraitMath.subjectDepth(alpha, depth)
+            // No subject found: keep whatever the user tapped on sharp, by depth alone.
+            depth != null -> {
+                val x = (focusX * w).toInt().coerceIn(0, w - 1)
+                val y = (focusY * h).toInt().coerceIn(0, h - 1)
+                depth[y * w + x]
+            }
+            alpha != null -> 0f
+            else -> return null
+        }
+        val amount = PortraitMath.blurAmount(alpha, depth, subjectDepth)
+
+        val small = Bitmap.createScaledBitmap(input, w, h, true)
+        val pixels = IntArray(size)
+        small.getPixels(pixels, 0, w, 0, 0, w, h)
+        if (small !== input) small.recycle()
+
+        val background = FloatArray(size) { 1f - (alpha?.get(it) ?: 0f) }
+        val radius = (blurIntensity * RADIUS_PER_STEP).toInt().coerceAtLeast(2)
+        // Two strengths per colour channel: near-background gets the mild one, far gets the strong one.
+        val mild = Array(3) { FloatArray(0) }
+        val strong = Array(3) { FloatArray(0) }
+        IntStream.range(0, 6).parallel().forEach { job ->
+            val c = job % 3
+            val shift = 16 - 8 * c
+            val channel = FloatArray(size) { ((pixels[it] shr shift) and 0xFF).toFloat() }
+            if (job < 3) mild[c] = PortraitMath.backgroundBlur(channel, background, w, h, (radius / 2).coerceAtLeast(1))
+            else strong[c] = PortraitMath.backgroundBlur(channel, background, w, h, radius)
+        }
+
+        // Blurred layer whose own alpha says how much of the sharp photo it hides.
+        val layerPixels = IntArray(size)
+        for (i in 0 until size) {
+            val a = amount[i]
+            val cover = (a / FULL_COVER_AT).coerceAtMost(1f)
+            val mix = ((a - FULL_COVER_AT) / (1f - FULL_COVER_AT)).coerceIn(0f, 1f)
+            val r = (mild[0][i] + (strong[0][i] - mild[0][i]) * mix).toInt().coerceIn(0, 255)
+            val g = (mild[1][i] + (strong[1][i] - mild[1][i]) * mix).toInt().coerceIn(0, 255)
+            val b = (mild[2][i] + (strong[2][i] - mild[2][i]) * mix).toInt().coerceIn(0, 255)
+            layerPixels[i] = ((cover * 255f).toInt() shl 24) or (r shl 16) or (g shl 8) or b
+        }
+        val layer = Bitmap.createBitmap(layerPixels, w, h, Bitmap.Config.ARGB_8888)
+
+        val output = input.copy(Bitmap.Config.ARGB_8888, true)
+        val paint = Paint(Paint.FILTER_BITMAP_FLAG or Paint.ANTI_ALIAS_FLAG)
+        Canvas(output).drawBitmap(layer, null, Rect(0, 0, output.width, output.height), paint)
+        layer.recycle()
+        return output
+    }
+
+    private fun radialBokeh(input: Bitmap, focusX: Float, focusY: Float, blurIntensity: Float): Bitmap {
         val width = input.width
         val height = input.height
 
         val radius = blurIntensity.toInt().coerceIn(1, 40)
-        if (radius <= 1) return@withContext input
+        if (radius <= 1) return input
 
         // 1. Generate blurred background layer using fast downscaled separable blur
         val scale = 0.5f
@@ -77,7 +167,7 @@ object PortraitEngine {
         val normalPaint = Paint(Paint.ANTI_ALIAS_FLAG)
         canvas.drawBitmap(sharpCopy, 0f, 0f, normalPaint)
 
-        return@withContext output
+        return output
     }
 
     private fun fastBoxBlur(pixels: IntArray, w: Int, h: Int, radius: Int): IntArray {

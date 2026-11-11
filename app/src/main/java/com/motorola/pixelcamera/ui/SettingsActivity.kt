@@ -29,6 +29,10 @@ class SettingsActivity : AppCompatActivity() {
         binding.swLocation.isChecked = prefs.getBoolean(KEY_SAVE_LOCATION, true)
         binding.swSounds.isChecked = prefs.getBoolean(KEY_CAMERA_SOUNDS, true)
         binding.swEis.isChecked = prefs.getBoolean(KEY_EIS_ENABLED, true)
+        binding.swHighBitrate.isChecked = prefs.getBoolean(KEY_HIGH_BITRATE, false)
+        binding.swRememberMode.isChecked = prefs.getBoolean(KEY_REMEMBER_MODE, false)
+        binding.swMultiFrameLowLight.isChecked = prefs.getBoolean(KEY_MULTI_FRAME_LOW_LIGHT, true)
+        binding.swMultiFrameZoom.isChecked = prefs.getBoolean(KEY_MULTI_FRAME_ZOOM, true)
 
         val sat = prefs.getInt(KEY_SATURATION, 100)
         binding.sbSaturation.progress = sat
@@ -58,6 +62,15 @@ class SettingsActivity : AppCompatActivity() {
 
         binding.swEis.setOnCheckedChangeListener { _, isChecked ->
             prefs.edit().putBoolean(KEY_EIS_ENABLED, isChecked).apply()
+        }
+
+        mapOf(
+            binding.swHighBitrate to KEY_HIGH_BITRATE,
+            binding.swRememberMode to KEY_REMEMBER_MODE,
+            binding.swMultiFrameLowLight to KEY_MULTI_FRAME_LOW_LIGHT,
+            binding.swMultiFrameZoom to KEY_MULTI_FRAME_ZOOM
+        ).forEach { (switch, key) ->
+            switch.setOnCheckedChangeListener { _, isChecked -> prefs.edit().putBoolean(key, isChecked).apply() }
         }
 
         binding.sbSaturation.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
@@ -108,5 +121,13 @@ class SettingsActivity : AppCompatActivity() {
         const val KEY_SATURATION = "pref_saturation"
         const val KEY_MICRO_CONTRAST = "pref_micro_contrast"
         const val KEY_SHARPNESS = "pref_sharpness"
+        const val KEY_HIGH_BITRATE = "video_high_bitrate"
+        const val KEY_REMEMBER_MODE = "remember_mode"
+        const val KEY_LAST_MODE = "last_mode"
+        const val KEY_MULTI_FRAME_LOW_LIGHT = "multi_frame_low_light"
+        const val KEY_MULTI_FRAME_ZOOM = "multi_frame_zoom"
+        const val KEY_MIRROR_FRONT = "mirror_front"
+        const val KEY_MIRROR_BACK = "mirror_back"
+        const val KEY_MOTION_PHOTO = "motion_photo"
     }
 }
