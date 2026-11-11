@@ -11,8 +11,11 @@ import kotlin.math.min
  * by tens of pixels. Averaging them unaligned produces "ghost" copies of every edge.
  *
  * 1. Global translation per frame, found coarse-to-fine on a luma pyramid.
- * 2. Robust merge: areas where an aligned frame still disagrees with the reference
- *    (moving subjects, rotation at the edges) fall back to the reference frame.
+ * 2. Per-tile refinement: something near the camera shifts differently from the background
+ *    (parallax), and so do the edges when the phone rotates. Each tile may move away from the
+ *    global shift when that clearly fits better.
+ * 3. Robust merge: areas where an aligned frame still disagrees with the reference
+ *    (moving subjects) fall back to the reference frame.
  */
 object BurstAligner {
 
@@ -21,6 +24,15 @@ object BurstAligner {
     private const val MAX_SAMPLES = 250_000
     private const val WEIGHT_BLOCK = 4
     private const val WEIGHT_ONE = 64
+    /** Tile edge in full-resolution pixels; a multiple of [WEIGHT_BLOCK]. */
+    private const val TILE = 64
+    /** Coarsest pyramid level used for tiles, and how far a tile may stray there (in its pixels). */
+    private const val TILE_START_LEVEL = 3
+    private const val TILE_START_RADIUS = 6
+    private const val TILE_MIN_WINDOW = 16
+    /** A tile leaves the global shift only when its own fits better than this factor and margin. */
+    private const val TILE_GAIN_FACTOR = 0.85
+    private const val TILE_GAIN_MARGIN = 1.0
     private const val FEATHER_BLOCKS = 3
     private const val GAIN_SHIFT = 10
     private const val GAIN_ONE = 1 shl GAIN_SHIFT
@@ -156,10 +168,91 @@ object BurstAligner {
     fun sharpestIndex(frames: List<IntArray>, w: Int, h: Int): Int =
         frames.indices.maxByOrNull { sharpness(frames[it], w, h) } ?: 0
 
-    private fun blockMeans(l: ByteArray, w: Int, h: Int, dx: Int, dy: Int, bw: Int, bh: Int): IntArray {
-        // Block average of frame shifted by (dx, dy); -1 marks blocks outside the frame
+    /**
+     * Mean absolute difference between a square window of [ref] at (x0, y0) and the same window of
+     * [frm] moved by (dx, dy), on about 256 samples. MAX_VALUE when too little of it is inside.
+     */
+    private fun windowSad(ref: Plane, frm: Plane, x0: Int, y0: Int, size: Int, dx: Int, dy: Int): Double {
+        val xa = max(max(x0, 0), -dx)
+        val xb = min(min(x0 + size, ref.w), frm.w - dx)
+        val ya = max(max(y0, 0), -dy)
+        val yb = min(min(y0 + size, ref.h), frm.h - dy)
+        if (xb - xa < size / 2 || yb - ya < size / 2) return Double.MAX_VALUE
+        val stride = max(1, size / TILE_MIN_WINDOW)
+        var sum = 0L
+        var n = 0
+        var y = ya
+        while (y < yb) {
+            val rRow = y * ref.w
+            val fRow = (y + dy) * frm.w + dx
+            var x = xa
+            while (x < xb) {
+                sum += abs(ref[rRow + x] - frm[fRow + x])
+                n++
+                x += stride
+            }
+            y += stride
+        }
+        return if (n > 0) sum.toDouble() / n else Double.MAX_VALUE
+    }
+
+    /**
+     * Refines the global shift (gdx, gdy) per tile, coarse to fine, writing full-resolution
+     * shifts into [tdx] / [tdy]. A tile keeps the global shift unless another one is clearly
+     * better, so flat or noisy tiles do not wander.
+     */
+    private fun refineTiles(
+        refPyr: List<Plane>, frmPyr: List<Plane>, gdx: Int, gdy: Int,
+        tdx: IntArray, tdy: IntArray, tw: Int, th: Int
+    ) {
+        val start = min(TILE_START_LEVEL, refPyr.size - 1)
+        parallelFor(tw * th) { t ->
+            val centreX = (t % tw) * TILE + TILE / 2
+            val centreY = (t / tw) * TILE + TILE / 2
+            var dx = 0
+            var dy = 0
+            for (level in start downTo 0) {
+                val ref = refPyr[level]
+                val frm = frmPyr[level]
+                val size = max(TILE_MIN_WINDOW, TILE shr level)
+                val x0 = (centreX shr level) - size / 2
+                val y0 = (centreY shr level) - size / 2
+                // Global shift at this level, rounded to nearest.
+                val globalX = Math.floorDiv(gdx + (1 shl level) / 2, 1 shl level)
+                val globalY = Math.floorDiv(gdy + (1 shl level) / 2, 1 shl level)
+                val radius: Int
+                if (level == start) { dx = globalX; dy = globalY; radius = TILE_START_RADIUS }
+                else { dx *= 2; dy *= 2; radius = 1 }
+
+                var best = Double.MAX_VALUE
+                var bx = dx
+                var by = dy
+                for (cy in dy - radius..dy + radius) for (cx in dx - radius..dx + radius) {
+                    val sad = windowSad(ref, frm, x0, y0, size, cx, cy)
+                    if (sad < best) { best = sad; bx = cx; by = cy }
+                }
+                val global = windowSad(ref, frm, x0, y0, size, globalX, globalY)
+                if (global == Double.MAX_VALUE || best < global * TILE_GAIN_FACTOR - TILE_GAIN_MARGIN) {
+                    dx = bx; dy = by
+                } else {
+                    dx = globalX; dy = globalY
+                }
+            }
+            tdx[t] = dx
+            tdy[t] = dy
+        }
+    }
+
+    private fun blockMeans(
+        l: ByteArray, w: Int, h: Int, tdx: IntArray?, tdy: IntArray?, tw: Int, bw: Int, bh: Int
+    ): IntArray {
+        // Block average of the frame moved by its tile's shift; -1 marks blocks outside the frame
         val out = IntArray(bw * bh)
+        val blocksPerTile = TILE / WEIGHT_BLOCK
         for (by in 0 until bh) for (bx in 0 until bw) {
+            val tile = (by / blocksPerTile) * tw + bx / blocksPerTile
+            val dx = tdx?.get(tile) ?: 0
+            val dy = tdy?.get(tile) ?: 0
             var s = 0; var n = 0; var outside = false
             for (yy in by * WEIGHT_BLOCK until min(h, (by + 1) * WEIGHT_BLOCK)) {
                 val sy = yy + dy
@@ -205,9 +298,9 @@ object BurstAligner {
         return out
     }
 
-    /** A frame after alignment: its pixels, its shift, per-block trust in 1/[WEIGHT_ONE] steps,
+    /** A frame after alignment: its pixels, its per-tile shifts, per-block trust in 1/[WEIGHT_ONE] steps,
      *  and the brightness gain (in 1/[GAIN_ONE] steps) that matches it to the reference. */
-    private class Aligned(val px: IntArray, val dx: Int, val dy: Int, val blockWeight: IntArray, val gain: Int)
+    private class Aligned(val px: IntArray, val dx: IntArray, val dy: IntArray, val blockWeight: IntArray, val gain: Int)
 
     private fun parallelFor(count: Int, body: (Int) -> Unit) =
         java.util.stream.IntStream.range(0, count).parallel().forEach { body(it) }
@@ -234,15 +327,21 @@ object BurstAligner {
 
         val bw = (w + WEIGHT_BLOCK - 1) / WEIGHT_BLOCK
         val bh = (h + WEIGHT_BLOCK - 1) / WEIGHT_BLOCK
-        val refBlocks = blockMeans(refLuma, w, h, 0, 0, bw, bh)
+        val tw = (w + TILE - 1) / TILE
+        val th = (h + TILE - 1) / TILE
+        val refBlocks = blockMeans(refLuma, w, h, null, null, tw, bw, bh)
 
         val others = (0 until frameCount).filter { it != referenceIndex }
         val slots = arrayOfNulls<Aligned>(others.size)
         parallelFor(others.size) { n ->
             val frame = frameAt(others[n])
             val frmLuma = luma(frame)
-            val (dx, dy) = estimateOffset(refPyr, pyramid(frmLuma, w, h, levels))
-            val frmBlocks = blockMeans(frmLuma, w, h, dx, dy, bw, bh)
+            val frmPyr = pyramid(frmLuma, w, h, levels)
+            val (gdx, gdy) = estimateOffset(refPyr, frmPyr)
+            val dx = IntArray(tw * th)
+            val dy = IntArray(tw * th)
+            refineTiles(refPyr, frmPyr, gdx, gdy, dx, dy, tw, th)
+            val frmBlocks = blockMeans(frmLuma, w, h, dx, dy, tw, bw, bh)
 
             // Frames of one burst differ a little in brightness (exposure still settling, lamp
             // flicker). Match this frame to the reference first; otherwise every area where the
@@ -282,6 +381,7 @@ object BurstAligner {
         val out = IntArray(w * h)
         parallelFor(h) { y ->
             val bRow = (y / WEIGHT_BLOCK) * bw
+            val tRow = (y / TILE) * tw
             for (x in 0 until w) {
                 val i = y * w + x
                 val c = ref[i]
@@ -290,8 +390,9 @@ object BurstAligner {
                 var b = (c and 0xFF) * WEIGHT_ONE
                 var weight = WEIGHT_ONE
                 for (a in aligned) {
-                    val sy = y + a.dy
-                    val sx = x + a.dx
+                    val tile = tRow + x / TILE
+                    val sy = y + a.dy[tile]
+                    val sx = x + a.dx[tile]
                     if (sy < 0 || sy >= h || sx < 0 || sx >= w) continue
                     val wq = a.blockWeight[bRow + x / WEIGHT_BLOCK]
                     if (wq <= 0) continue

@@ -160,4 +160,50 @@ class BurstAlignerTest {
         // The object itself must stay where the reference has it, at the reference's darkness.
         assertEquals(50.0, mean(280, 360, 170, 280), 3.0)
     }
+
+    /**
+     * A textured near object that moves against the (also textured) background between frames.
+     * One shift for the whole frame can only line up the background, so the object used to be
+     * left out of the merge and kept the full noise of a single frame. Aligned in tiles, the
+     * object is merged too and comes out cleaner.
+     */
+    @Test
+    fun nearObjectThatShiftsIsStillDenoised() {
+        val background = scene(w, h, seed = 3)
+        val objectW = 200
+        val objectH = 200
+        val objectTexture = scene(objectW, objectH, seed = 4)
+        val noise = 12
+        fun clean(objectX: Int, objectY: Int) = IntArray(w * h) { i ->
+            val x = i % w
+            val y = i / w
+            if (x in objectX until objectX + objectW && y in objectY until objectY + objectH) {
+                lum(objectTexture[(y - objectY) * objectW + (x - objectX)])
+            } else lum(background[i])
+        }
+        fun noisy(clean: IntArray, seed: Int): IntArray {
+            val rnd = Random(seed)
+            return IntArray(w * h) { gray(clean[it] + rnd.nextInt(-noise, noise + 1)) }
+        }
+        val truth = clean(200, 140)
+        val positions = listOf(200 to 140, 222 to 131, 181 to 152, 213 to 158)
+        val frames = positions.mapIndexed { k, (x, y) -> noisy(clean(x, y), 30 + k) }
+
+        val merged = BurstAligner.alignAndMerge(frames, w, h, referenceIndex = 0)
+
+        // Mean squared error inside the object, away from its outline.
+        fun error(px: IntArray): Double {
+            var sum = 0.0
+            var n = 0
+            for (y in 180 until 300) for (x in 240 until 360) {
+                val d = lum(px[y * w + x]) - truth[y * w + x].coerceIn(0, 255)
+                sum += d.toDouble() * d
+                n++
+            }
+            return sum / n
+        }
+        val single = error(frames[0])
+        val result = error(merged)
+        assertTrue("object noise only fell from $single to $result", result < single * 0.5)
+    }
 }
