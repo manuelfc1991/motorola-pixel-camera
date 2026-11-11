@@ -107,6 +107,11 @@ class MainActivity : AppCompatActivity() {
     private var captureChipHeldByCapture = false
     private var shutterHeld = false
     private var videoPaused = false
+
+    // Slow motion runs outside CameraX, on its own camera session.
+    private val slowMotion by lazy { com.motorola.pixelcamera.core.SlowMotionCamera(applicationContext) }
+    private var slowMode: com.motorola.pixelcamera.core.SlowMotionCamera.Mode? = null
+    private var slowModeSwitching = false
     private var lastTapFocus: PointF? = null   // where the last tap lands in the saved photo
     private var qrText: String? = null
     private var qrHideJob: Job? = null
@@ -388,6 +393,8 @@ class MainActivity : AppCompatActivity() {
 
     override fun onPause() {
         super.onPause()
+        // Another app may need the camera; the normal preview comes back with the lifecycle.
+        leaveSlowMotion(rebind = true)
         timerJob?.cancel()
         lowLightJob?.cancel()
         binding.tvCountdown.visibility = View.GONE
@@ -613,6 +620,16 @@ class MainActivity : AppCompatActivity() {
         binding.tvQsVideoPresetSubtitle.text = presetText
         binding.tvQsVideoResSubtitle.text = if (isUhd) "4K Ultra HD (2160p)" else "Full HD (1080p)"
         binding.tvQsVideoFpsSubtitle.text = if (isUhd) "30 fps (4K)" else if (is60) "60 fps" else "30 fps"
+
+        // Slow motion
+        val slow = slowMode
+        binding.tvQsSlowMotionSubtitle.text = when (slow) {
+            null -> "Off"
+            else -> "${slow.factor}× slower · ${slow.size.height}p · no sound"
+        }
+        setQsPillActive(binding.btnQsSlowOff, slow == null)
+        setQsPillActive(binding.btnQsSlow4x, slow == com.motorola.pixelcamera.core.SlowMotionCamera.Mode.X4)
+        setQsPillActive(binding.btnQsSlow8x, slow == com.motorola.pixelcamera.core.SlowMotionCamera.Mode.X8)
 
         // Preset Pills
         setQsPillActive(binding.btnQsPreset1080p30, !isUhd && !is60)
@@ -1123,6 +1140,9 @@ class MainActivity : AppCompatActivity() {
         }
 
         // Quick Settings - Video Mode Listeners
+        binding.btnQsSlowOff.setOnClickListener { setSlowMotion(null) }
+        binding.btnQsSlow4x.setOnClickListener { setSlowMotion(com.motorola.pixelcamera.core.SlowMotionCamera.Mode.X4) }
+        binding.btnQsSlow8x.setOnClickListener { setSlowMotion(com.motorola.pixelcamera.core.SlowMotionCamera.Mode.X8) }
         binding.btnQsPreset1080p30.setOnClickListener {
             if (cameraManager.isRecordingVideo()) return@setOnClickListener
             cameraManager.setVideoProfile(CameraManager.VideoResolution.FHD, CameraManager.VideoFps.FPS_30)
@@ -1671,6 +1691,10 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun flipCameraWithAnimation() {
+        if (slowMode != null) {
+            showHint("Slow motion uses the rear camera")
+            return
+        }
         if (isCapturing || timerJob?.isActive == true || cameraManager.isRecordingVideo() || cameraManager.isCapturingPanorama()) return
         binding.quickSettingsContainer.visibility = View.GONE
         binding.btnSwitchCamera.animate().rotationBy(180f).setDuration(300).start()
@@ -1698,7 +1722,8 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun updateZoomPillVisibility() {
-        val hide = cameraManager.isFrontCamera() || currentMode == CameraMode.PANORAMA
+        // Slow motion runs its own session at a fixed 1x.
+        val hide = cameraManager.isFrontCamera() || currentMode == CameraMode.PANORAMA || slowMode != null
         binding.zoomPillContainer.visibility = if (hide) View.GONE else View.VISIBLE
     }
 
@@ -2101,7 +2126,8 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun isModeChangeBlocked(): Boolean =
-        isCapturing || timerJob?.isActive == true || cameraManager.isCapturingPanorama()
+        isCapturing || timerJob?.isActive == true || cameraManager.isCapturingPanorama() ||
+            slowModeSwitching || slowMotion.isRecording
 
     private fun setMode(mode: CameraMode, selectedView: TextView) {
         if (currentMode == mode) {
@@ -2129,6 +2155,9 @@ class MainActivity : AppCompatActivity() {
             stopVideoRecordingUi()
             cameraManager.stopVideoRecording()
         }
+
+        // Slow motion belongs to Video only; hand the camera back before the new mode binds.
+        if (slowMode != null) leaveSlowMotion(rebind = false)
 
         currentMode = mode
         cameraManager.currentCameraMode = mode
@@ -2687,7 +2716,105 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    /** Switches slow motion on in [mode], or off with null. Video mode, rear camera only. */
+    private fun setSlowMotion(mode: com.motorola.pixelcamera.core.SlowMotionCamera.Mode?) {
+        if (mode == slowMode || slowModeSwitching || slowMotion.isRecording || cameraManager.isRecordingVideo()) return
+        if (mode == null) {
+            leaveSlowMotion(rebind = true)
+            return
+        }
+        if (cameraManager.isFrontCamera()) {
+            showHint("Slow motion uses the rear camera")
+            return
+        }
+        slowModeSwitching = true
+        slowMode = mode
+        updateVideoQsUi()
+        updateZoomPillVisibility()
+        cameraManager.releaseCamera()
+        val view = binding.slowMotionPreview
+        fitSlowMotionPreview()
+        view.visibility = View.VISIBLE
+        val start = { texture: android.graphics.SurfaceTexture ->
+            slowMotion.open(mode, texture) { ok ->
+                slowModeSwitching = false
+                if (ok) {
+                    showHint("Slow motion ${mode.label} · needs bright light · no sound")
+                } else {
+                    showHint("Slow motion is not available")
+                    leaveSlowMotion(rebind = true)
+                }
+            }
+        }
+        val ready = view.surfaceTexture
+        if (view.isAvailable && ready != null) {
+            start(ready)
+        } else {
+            view.surfaceTextureListener = object : android.view.TextureView.SurfaceTextureListener {
+                override fun onSurfaceTextureAvailable(texture: android.graphics.SurfaceTexture, w: Int, h: Int) {
+                    view.surfaceTextureListener = null
+                    start(texture)
+                }
+                override fun onSurfaceTextureSizeChanged(texture: android.graphics.SurfaceTexture, w: Int, h: Int) {}
+                override fun onSurfaceTextureDestroyed(texture: android.graphics.SurfaceTexture) = true
+                override fun onSurfaceTextureUpdated(texture: android.graphics.SurfaceTexture) {}
+            }
+        }
+    }
+
+    /** Ends slow motion, saving any video in progress, and gives the camera back to the normal preview. */
+    private fun leaveSlowMotion(rebind: Boolean) {
+        if (slowMode == null) return
+        if (slowMotion.isRecording) stopVideoRecordingUi()
+        slowMode = null
+        slowModeSwitching = true
+        updateVideoQsUi()
+        updateZoomPillVisibility()
+        binding.slowMotionPreview.surfaceTextureListener = null
+        slowMotion.close {
+            slowModeSwitching = false
+            binding.slowMotionPreview.visibility = View.GONE
+            loadLatestGalleryThumbnail()
+            if (rebind) cameraManager.bindCameraUseCases()
+        }
+    }
+
+    /** The slow-motion picture is 16:9, shown upright and whole inside the viewfinder area. */
+    private fun fitSlowMotionPreview() {
+        val parent = binding.slowMotionPreview.parent as View
+        val pw = parent.width
+        val ph = parent.height
+        if (pw == 0 || ph == 0) return
+        val w = minOf(pw, ph * 9 / 16)
+        binding.slowMotionPreview.layoutParams = android.widget.FrameLayout.LayoutParams(w, w * 16 / 9, android.view.Gravity.CENTER)
+    }
+
+    private fun handleSlowMotionShutter() {
+        if (slowModeSwitching) return
+        if (slowMotion.isRecording) {
+            stopVideoRecordingUi()
+            slowMotion.stopRecording { uri ->
+                if (uri != null) loadLatestGalleryThumbnail() else showHint("Slow-motion video was not saved")
+            }
+        } else {
+            slowMotion.startRecording { ok ->
+                if (ok) {
+                    startVideoRecordingUi()
+                    // Pausing and stills are not part of the slow-motion session.
+                    binding.btnVideoPause.visibility = View.GONE
+                    binding.btnVideoSnapshot.visibility = View.GONE
+                } else {
+                    showHint("Failed to start recording")
+                }
+            }
+        }
+    }
+
     private fun handleVideoShutter() {
+        if (slowMode != null) {
+            handleSlowMotionShutter()
+            return
+        }
         if (cameraManager.isRecordingVideo()) {
             // Stop recording
             stopVideoRecordingUi()
@@ -2829,6 +2956,7 @@ class MainActivity : AppCompatActivity() {
         reticleAutoHideJob?.cancel()
         reticleAutoHideJob = null
         stopVideoRecordingUi()
+        slowMotion.release()
     }
 
     companion object {

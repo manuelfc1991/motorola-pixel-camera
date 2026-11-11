@@ -29,6 +29,14 @@
             android:layout_width="match_parent"
             android:layout_height="match_parent" />
 
+        <!-- Slow motion runs its own camera session; its picture is drawn here. -->
+        <TextureView
+            android:id="@+id/slowMotionPreview"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:layout_gravity="center"
+            android:visibility="gone" />
+
         <!-- Google Pixel Selfie Warm Ring Light Overlay -->
         <FrameLayout
             android:id="@+id/overlaySelfieRing"
@@ -1939,6 +1947,76 @@
                                         android:textSize="12sp" />
                                 </LinearLayout>
                             </LinearLayout>
+                            <!-- Slow motion -->
+                            <LinearLayout
+                                android:id="@+id/rowQsSlowMotion"
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:orientation="vertical"
+                                android:paddingVertical="8dp">
+
+                                <TextView
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:text="Slow motion"
+                                    android:textColor="@color/pixel_text_white"
+                                    android:textSize="13sp" />
+
+                                <TextView
+                                    android:id="@+id/tvQsSlowMotionSubtitle"
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:layout_marginTop="2dp"
+                                    android:layout_marginBottom="8dp"
+                                    android:text="Off"
+                                    android:textColor="@color/pixel_accent_blue"
+                                    android:textSize="14sp"
+                                    android:textStyle="bold" />
+
+                                <LinearLayout
+                                    android:layout_width="match_parent"
+                                    android:layout_height="38dp"
+                                    android:background="@drawable/bg_segmented_container"
+                                    android:orientation="horizontal"
+                                    android:padding="3dp">
+
+                                    <TextView
+                                        android:id="@+id/btnQsSlowOff"
+                                        android:layout_width="0dp"
+                                        android:layout_height="match_parent"
+                                        android:layout_weight="1"
+                                        android:clickable="true"
+                                        android:focusable="true"
+                                        android:gravity="center"
+                                        android:text="Off"
+                                        android:textColor="@color/pixel_text_white"
+                                        android:textSize="12sp" />
+
+                                    <TextView
+                                        android:id="@+id/btnQsSlow4x"
+                                        android:layout_width="0dp"
+                                        android:layout_height="match_parent"
+                                        android:layout_weight="1"
+                                        android:clickable="true"
+                                        android:focusable="true"
+                                        android:gravity="center"
+                                        android:text="4× · 1080p"
+                                        android:textColor="@color/pixel_text_white"
+                                        android:textSize="12sp" />
+
+                                    <TextView
+                                        android:id="@+id/btnQsSlow8x"
+                                        android:layout_width="0dp"
+                                        android:layout_height="match_parent"
+                                        android:layout_weight="1"
+                                        android:clickable="true"
+                                        android:focusable="true"
+                                        android:gravity="center"
+                                        android:text="8× · 720p"
+                                        android:textColor="@color/pixel_text_white"
+                                        android:textSize="12sp" />
+                                </LinearLayout>
+                            </LinearLayout>
 
                             <!-- Row 2: Resolution Selection -->
                             <LinearLayout
@@ -1957,7 +2035,7 @@
                                     <TextView
                                         android:layout_width="wrap_content"
                                         android:layout_height="wrap_content"
-                                        android:text="Selfie resolution"
+                                        android:text="Resolution"
                                         android:textColor="@color/pixel_text_white"
                                         android:textSize="13sp" />
 
