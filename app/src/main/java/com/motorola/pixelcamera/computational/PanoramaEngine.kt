@@ -3,9 +3,6 @@ package com.motorola.pixelcamera.computational
 import android.content.ContentValues
 import android.content.Context
 import android.graphics.Bitmap
-import android.graphics.Canvas
-import android.graphics.Color
-import android.graphics.Paint
 import android.hardware.Sensor
 import android.hardware.SensorEvent
 import android.hardware.SensorEventListener
@@ -15,7 +12,6 @@ import android.os.Build
 import android.os.Environment
 import android.provider.MediaStore
 import android.util.Log
-import com.motorola.pixelcamera.hardware.DimensityOptimizer
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.ByteArrayOutputStream
@@ -23,38 +19,33 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import kotlin.math.atan2
-import kotlin.math.cos
-import kotlin.math.sin
-import kotlin.math.tan
 
 /**
- * High-Speed Gyro-Stabilized Cylindrical Panorama Stitching Engine.
- *
- * Implements:
- * 1. Real-time gyroscope & rotation-vector azimuth yaw tracking (0° to 180°)
- * 2. Real-time cylindrical projection transform compensating for wide-angle planar distortion
- * 3. Overlap seam blending with linear feathering across consecutive frames
- * 4. Google Photosphere / Cylindrical Panorama XMP metadata injection (GPano:UsePanoramaViewer="True")
+ * Panorama capture: follows the turn of the phone with the rotation sensor, hands frames to
+ * [PanoramaStitcher] (which lines them up by the picture), and saves the result with the
+ * Photo Sphere tags gallery apps use to show it as a panorama.
  */
 class PanoramaEngine(private val context: Context) : SensorEventListener {
 
     private val sensorManager = context.getSystemService(Context.SENSOR_SERVICE) as SensorManager
     private val rotationSensor = sensorManager.getDefaultSensor(Sensor.TYPE_ROTATION_VECTOR)
-        ?: sensorManager.getDefaultSensor(Sensor.TYPE_ORIENTATION)
 
-    private var isRecording = false
-    private var startYaw = 0f
-    private var lastCapturedYaw = 0f
-    private var currentSweptDegrees = 0f
+    @Volatile private var isRecording = false
+    /** Turn since the start in degrees, signed (right is positive), not wrapped. */
+    @Volatile private var yaw = 0f
+    private var lastHeading = Float.NaN
+    @Volatile private var currentSweptDegrees = 0f
     private val maxSweptDegrees = 180f
 
-    // Pano accumulator canvas
-    private var panoBitmap: Bitmap? = null
-    private var panoCanvas: Canvas? = null
-    private val panoPaint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
-    private var currentPanoWidth = 0
-    private var panoHeight = 0
-    private var frameCount = 0
+    /**
+     * Focal length as a share of the frame width with the phone upright (lens focal length over
+     * the sensor's short side). Set by the camera for the lens in use; refined from the matches.
+     */
+    @Volatile var focalToWidth = DEFAULT_FOCAL_TO_WIDTH
+
+    private val lock = Any()
+    private var stitcher: PanoramaStitcher? = null
+    @Volatile private var strip: Bitmap? = null
 
     // Callback for live UI tracking
     var onPanoramaProgress: ((degrees: Float, progressPercent: Int, stripPreview: Bitmap?) -> Unit)? = null
@@ -65,17 +56,12 @@ class PanoramaEngine(private val context: Context) : SensorEventListener {
      * Start panoramic recording session
      */
     fun startCapture() {
-        isRecording = true
-        startYaw = Float.NaN
-        lastCapturedYaw = 0f
+        synchronized(lock) { stitcher = null }
+        strip = null
+        yaw = 0f
+        lastHeading = Float.NaN
         currentSweptDegrees = 0f
-        currentPanoWidth = 0
-        panoHeight = 0
-        frameCount = 0
-        panoBitmap?.recycle()
-        panoBitmap = null
-        panoCanvas = null
-
+        isRecording = true
         rotationSensor?.let {
             sensorManager.registerListener(this, it, SensorManager.SENSOR_DELAY_GAME)
         }
@@ -83,170 +69,67 @@ class PanoramaEngine(private val context: Context) : SensorEventListener {
     }
 
     override fun onSensorChanged(event: SensorEvent?) {
-        if (!isRecording || event == null) return
-
-        if (event.sensor.type == Sensor.TYPE_ROTATION_VECTOR) {
-            val rotationMatrix = FloatArray(9)
-            SensorManager.getRotationMatrixFromVector(rotationMatrix, event.values)
-            val orientation = FloatArray(3)
-            SensorManager.getOrientation(rotationMatrix, orientation)
-            val yaw = Math.toDegrees(orientation[0].toDouble()).toFloat()
-
-            if (startYaw.isNaN()) {
-                startYaw = yaw
-                lastCapturedYaw = yaw
-            }
-
-            var diff = yaw - startYaw
-            while (diff < -180f) diff += 360f
-            while (diff > 180f) diff -= 360f
-            currentSweptDegrees = kotlin.math.abs(diff).coerceAtMost(maxSweptDegrees)
-
-            val progressPercent = ((currentSweptDegrees / maxSweptDegrees) * 100).toInt().coerceIn(0, 100)
-            onPanoramaProgress?.invoke(currentSweptDegrees, progressPercent, panoBitmap)
+        if (!isRecording || event == null || event.sensor.type != Sensor.TYPE_ROTATION_VECTOR) return
+        val r = FloatArray(9)
+        SensorManager.getRotationMatrixFromVector(r, event.values)
+        // Compass heading of where the camera points (out of the back of the phone). Unlike the
+        // azimuth of getOrientation, this stays steady with the phone held upright.
+        val east = -r[2]
+        val north = -r[5]
+        if (east * east + north * north < 0.05f) return   // pointing at the floor or the sky
+        val heading = Math.toDegrees(atan2(east.toDouble(), north.toDouble())).toFloat()
+        if (!lastHeading.isNaN()) {
+            var step = heading - lastHeading
+            while (step < -180f) step += 360f
+            while (step > 180f) step -= 360f
+            yaw += step
         }
+        lastHeading = heading
+        currentSweptDegrees = kotlin.math.abs(yaw).coerceAtMost(maxSweptDegrees)
+        onPanoramaProgress?.invoke(currentSweptDegrees, progressPercent(), strip)
     }
 
     override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {}
 
-    /**
-     * Ingests a new incoming viewfinder / camera frame during pan sweep.
-     * Stitches using cylindrical remapping and overlap feathering.
-     */
+    private fun progressPercent(): Int {
+        if (stitcher?.isFull == true) return 100
+        return ((currentSweptDegrees / maxSweptDegrees) * 100).toInt().coerceIn(0, 100)
+    }
+
+    /** Whether a frame now would be used; lets the camera skip converting the others. */
+    fun wantsFrame(): Boolean {
+        if (!isRecording) return false
+        val s = stitcher ?: return true
+        return s.wantsFrame(yaw)
+    }
+
+    /** Takes one upright viewfinder frame during the sweep. */
     fun processIncomingFrame(frame: Bitmap) {
         if (!isRecording) return
-
-        // Downscale frame slightly for ultra-fast, real-time stitch without frame drops
-        val w = (frame.width / 2) * 2
-        val h = (frame.height / 2) * 2
-
-        // Initialize pano canvas on first frame
-        if (panoBitmap == null) {
-            panoHeight = h
-            val maxEstimatedWidth = (w * 6).coerceAtMost(7680)
-            panoBitmap = Bitmap.createBitmap(maxEstimatedWidth, h, Bitmap.Config.ARGB_8888)
-            panoCanvas = Canvas(panoBitmap!!)
-
-            val cylFirst = applyCylindricalProjection(frame)
-            panoCanvas?.drawBitmap(cylFirst, 0f, 0f, panoPaint)
-            currentPanoWidth = cylFirst.width
-            frameCount = 1
-            cylFirst.recycle()
-            return
-        }
-
-        // Only stitch if rotated by at least ~4-6 degrees since last stitch
-        val yawDelta = kotlin.math.abs(currentSweptDegrees - lastCapturedYaw)
-        if (yawDelta < 4.0f && frameCount > 0) {
-            return
-        }
-        lastCapturedYaw = currentSweptDegrees
-
-        val cylFrame = applyCylindricalProjection(frame)
-        val overlap = (cylFrame.width * 0.28f).toInt().coerceAtLeast(40)
-        val shiftX = (cylFrame.width - overlap).coerceAtLeast(1)
-
-        val canvas = panoCanvas ?: return
-        val currentBmp = panoBitmap ?: return
-
-        if (currentPanoWidth + shiftX > currentBmp.width - 20) {
-            // Reached maximum width buffer
-            return
-        }
-
-        // Seam blending across overlap zone
-        blendSeam(currentBmp, cylFrame, currentPanoWidth - overlap, overlap)
-
-        // Draw remaining non-overlapping portion
-        val srcRect = android.graphics.Rect(overlap, 0, cylFrame.width, cylFrame.height)
-        val dstRect = android.graphics.Rect(currentPanoWidth, 0, currentPanoWidth + (cylFrame.width - overlap), panoHeight)
-        canvas.drawBitmap(cylFrame, srcRect, dstRect, panoPaint)
-
-        currentPanoWidth += (cylFrame.width - overlap)
-        frameCount++
-        cylFrame.recycle()
-
-        val progressPercent = ((currentSweptDegrees / maxSweptDegrees) * 100).toInt().coerceIn(0, 100)
-        onPanoramaProgress?.invoke(currentSweptDegrees, progressPercent, panoBitmap)
-    }
-
-    /**
-     * Applies cylindrical projection mapping to correct wide-angle distortion:
-     * x' = f * atan((x - w/2) / f) + w/2
-     * y' = (y - h/2) / sqrt(1 + ((x - w/2)/f)^2) + h/2
-     */
-    private fun applyCylindricalProjection(src: Bitmap): Bitmap {
-        val w = src.width
-        val h = src.height
-        val output = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
-        val f = w * 0.85f // Approximate focal length for Motorola HM2 lens
-
-        val inPixels = IntArray(w * h)
-        val outPixels = IntArray(w * h)
-        src.getPixels(inPixels, 0, w, 0, 0, w, h)
-
-        val halfW = w / 2f
-        val halfH = h / 2f
-
-        for (y in 0 until h) {
-            val yOffset = y * w
-            val dy = y - halfH
-
-            for (x in 0 until w) {
-                val dx = x - halfW
-                // Forward cylindrical mapping lookup
-                val rad = dx / f
-                val srcX = (f * tan(rad) + halfW).toInt()
-                val scaleY = kotlin.math.cos(rad)
-                val srcY = (dy / scaleY + halfH).toInt()
-
-                if (srcX in 0 until w && srcY in 0 until h) {
-                    outPixels[yOffset + x] = inPixels[srcY * w + srcX]
-                } else {
-                    outPixels[yOffset + x] = Color.BLACK
+        val used = synchronized(lock) {
+            if (!isRecording) return
+            val s = stitcher?.takeIf { it.frameW == frame.width && it.frameH == frame.height }
+                ?: PanoramaStitcher(
+                    frame.width, frame.height,
+                    focalPx = frame.width * focalToWidth,
+                    pixelsPerDegree = (frame.width * focalToWidth * Math.PI / 180.0).toFloat(),
+                    maxSweepDegrees = maxSweptDegrees,
+                ).also { stitcher = it }
+            if (!s.wantsFrame(yaw)) return
+            val pixels = IntArray(frame.width * frame.height)
+            frame.getPixels(pixels, 0, frame.width, 0, 0, frame.width, frame.height)
+            val t0 = android.os.SystemClock.elapsedRealtime()
+            val ok = s.add(pixels, yaw)
+            if (ok) {
+                Log.d(TAG, "frame ${s.frameCount} at ${"%.1f".format(yaw)}° in ${android.os.SystemClock.elapsedRealtime() - t0} ms, " +
+                    "${"%.2f".format(s.pixelsPerDegree)} px/°")
+                s.preview(STRIP_HEIGHT)?.let { p ->
+                    strip = Bitmap.createBitmap(p.pixels, p.width, p.height, Bitmap.Config.ARGB_8888)
                 }
             }
+            ok
         }
-        output.setPixels(outPixels, 0, w, 0, 0, w, h)
-        return output
-    }
-
-    /**
-     * Smooth linear alpha feathering over the overlap seam
-     */
-    private fun blendSeam(target: Bitmap, source: Bitmap, startX: Int, overlapWidth: Int) {
-        val h = target.height
-        val targetPixels = IntArray(overlapWidth * h)
-        val sourcePixels = IntArray(overlapWidth * h)
-
-        target.getPixels(targetPixels, 0, overlapWidth, startX, 0, overlapWidth, h)
-        source.getPixels(sourcePixels, 0, overlapWidth, 0, 0, overlapWidth, h)
-
-        for (x in 0 until overlapWidth) {
-            val alpha = x.toFloat() / overlapWidth
-            val invAlpha = 1.0f - alpha
-
-            for (y in 0 until h) {
-                val idx = y * overlapWidth + x
-                val p1 = targetPixels[idx]
-                val p2 = sourcePixels[idx]
-
-                val r1 = (p1 shr 16) and 0xFF
-                val g1 = (p1 shr 8) and 0xFF
-                val b1 = p1 and 0xFF
-
-                val r2 = (p2 shr 16) and 0xFF
-                val g2 = (p2 shr 8) and 0xFF
-                val b2 = p2 and 0xFF
-
-                val r = (r1 * invAlpha + r2 * alpha).toInt().coerceIn(0, 255)
-                val g = (g1 * invAlpha + g2 * alpha).toInt().coerceIn(0, 255)
-                val b = (b1 * invAlpha + b2 * alpha).toInt().coerceIn(0, 255)
-
-                targetPixels[idx] = (0xFF shl 24) or (r shl 16) or (g shl 8) or b
-            }
-        }
-        target.setPixels(targetPixels, 0, overlapWidth, startX, 0, overlapWidth, h)
+        if (used) onPanoramaProgress?.invoke(currentSweptDegrees, progressPercent(), strip)
     }
 
     /**
@@ -258,15 +141,16 @@ class PanoramaEngine(private val context: Context) : SensorEventListener {
             sensorManager.unregisterListener(this@PanoramaEngine)
         } catch (ignored: Exception) {}
 
-        val pano = panoBitmap ?: return@withContext null
-        // A sweep under ~15 degrees is just the same view stitched onto itself.
-        if (currentPanoWidth < 200 || frameCount < 2 || currentSweptDegrees < MIN_SWEEP_DEGREES) {
-            Log.w(TAG, "Panorama was too short to save ($currentPanoWidth px)")
-            return@withContext null
-        }
-
-        // Crop to valid stitched area
-        val cropped = Bitmap.createBitmap(pano, 0, 0, currentPanoWidth, panoHeight)
+        val image = synchronized(lock) {
+            val s = stitcher
+            stitcher = null
+            if (s == null || s.frameCount < 2 || currentSweptDegrees < MIN_SWEEP_DEGREES) {
+                Log.w(TAG, "Panorama was too short to save (${s?.frameCount ?: 0} frames, ${currentSweptDegrees.toInt()}°)")
+                null
+            } else s.result()
+        } ?: return@withContext null
+        strip = null
+        val cropped = Bitmap.createBitmap(image.pixels, image.width, image.height, Bitmap.Config.ARGB_8888)
 
         // Inject Photosphere XMP metadata into JPEG
         val timeStamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())
@@ -286,7 +170,7 @@ class PanoramaEngine(private val context: Context) : SensorEventListener {
 
         try {
             val jpegStream = ByteArrayOutputStream()
-            cropped.compress(Bitmap.CompressFormat.JPEG, 98, jpegStream)
+            cropped.compress(Bitmap.CompressFormat.JPEG, 95, jpegStream)
             val jpegBytes = jpegStream.toByteArray()
 
             val fullPanoWidth = if (currentSweptDegrees > 10f) {
@@ -330,8 +214,6 @@ class PanoramaEngine(private val context: Context) : SensorEventListener {
             return@withContext null
         } finally {
             cropped.recycle()
-            panoBitmap?.recycle()
-            panoBitmap = null
         }
     }
 
@@ -387,13 +269,15 @@ class PanoramaEngine(private val context: Context) : SensorEventListener {
         try {
             sensorManager.unregisterListener(this)
         } catch (ignored: Exception) {}
-        panoBitmap?.recycle()
-        panoBitmap = null
-        panoCanvas = null
+        synchronized(lock) { stitcher = null }
+        strip = null
     }
 
     companion object {
         private const val TAG = "PanoramaEngine"
         private const val MIN_SWEEP_DEGREES = 15f
+        /** Main camera: 5.88 mm lens on a 6.3 mm tall sensor. */
+        private const val DEFAULT_FOCAL_TO_WIDTH = 0.93f
+        private const val STRIP_HEIGHT = 120
     }
 }
