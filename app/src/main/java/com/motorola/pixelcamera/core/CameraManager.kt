@@ -602,11 +602,14 @@ class CameraManager(private val context: Context) {
         if (currentCameraMode != CameraMode.VIDEO || camera == null) { stopExposureAssist(); return }
         samplePreviewLuma { luma ->
             if (!exposureAssist.active || camera == null) return@samplePreviewLuma
+            var settled = false
             if (luma != null) {
                 // The exposure slider still works: each stop doubles the brightness aimed for.
                 val stops = getExposureCompensationIndex() * getExposureCompensationStep()
                 val target = (VideoExposureAssist.TARGET_LUMA * Math.pow(2.0, stops * 0.6)).toFloat().coerceIn(40f, 200f)
-                when (val step = exposureAssist.onBrightness(luma, target)) {
+                val step = exposureAssist.onBrightness(luma, target)
+                settled = step == VideoExposureAssist.Step.Hold
+                when (step) {
                     is VideoExposureAssist.Step.Iso -> applyVideoFps()
                     VideoExposureAssist.Step.HandBack -> {
                         Log.i(TAG, "Scene is bright again: exposure back to the driver")
@@ -619,7 +622,11 @@ class CameraManager(private val context: Context) {
                 assistToldTooDark = true
                 onVideoTooDark?.invoke()
             }
-            if (exposureAssist.active) mainHandler.postDelayed(assistTick, ASSIST_INTERVAL_MS)
+            // Reading the preview back costs the recorder a frame now and then, so once the
+            // brightness has settled it is only checked occasionally.
+            if (exposureAssist.active) {
+                mainHandler.postDelayed(assistTick, if (settled) ASSIST_SETTLED_INTERVAL_MS else ASSIST_INTERVAL_MS)
+            }
         }
     }
 
@@ -1406,6 +1413,7 @@ class CameraManager(private val context: Context) {
         const val CAMERA_ULTRAWIDE = "3"
         private const val NIGHT_HANDHELD_CAPTURES = 2
         private const val ASSIST_INTERVAL_MS = 250L
+        private const val ASSIST_SETTLED_INTERVAL_MS = 2000L
         private const val ASSIST_MAX_ISO_4K = 2800
         private const val LOW_LIGHT_ISO = 800
         private const val LOW_LIGHT_ISO_HIGH = 3200
