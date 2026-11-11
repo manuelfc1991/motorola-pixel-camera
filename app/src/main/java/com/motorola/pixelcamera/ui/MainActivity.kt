@@ -391,7 +391,7 @@ class MainActivity : AppCompatActivity() {
 
             override fun onFling(e1: MotionEvent?, e2: MotionEvent, velocityX: Float, velocityY: Float): Boolean {
                 if (e1 != null && (e1.x - e2.x > 140) && kotlin.math.abs(velocityX) > 200) {
-                    openInAppPhotoPreview()
+                    openLastShotInGallery()
                     return true
                 }
                 return false
@@ -826,204 +826,18 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private var previewLastX = 0f
-    private var previewLastY = 0f
-    private var isPreviewDragging = false
-
-    private fun setupPhotoPreviewInteractions() {
-        binding.btnPreviewBack.setOnClickListener {
-            closeInAppPhotoPreview()
-        }
-
-        binding.btnPreviewShare.setOnClickListener {
-            val uri = latestCapturedUri ?: latestGalleryUri ?: return@setOnClickListener
-            val shareIntent = Intent(Intent.ACTION_SEND).apply {
-                type = "image/jpeg"
-                putExtra(Intent.EXTRA_STREAM, uri)
-                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-            }
-            startActivity(Intent.createChooser(shareIntent, "Share Pixel Photo"))
-        }
-
-        val scaleDetector = ScaleGestureDetector(this, object : ScaleGestureDetector.SimpleOnScaleGestureListener() {
-            override fun onScale(detector: ScaleGestureDetector): Boolean {
-                val currentScale = binding.ivPreviewPhoto.scaleX
-                val factor = detector.scaleFactor
-                val targetScale = (currentScale * factor).coerceIn(1.0f, 4.0f)
-                binding.ivPreviewPhoto.scaleX = targetScale
-                binding.ivPreviewPhoto.scaleY = targetScale
-                if (targetScale <= 1.05f) {
-                    binding.ivPreviewPhoto.translationX = 0f
-                    binding.ivPreviewPhoto.translationY = 0f
-                }
-                return true
-            }
-        })
-
-        val gestureDetector = GestureDetector(this, object : GestureDetector.SimpleOnGestureListener() {
-            override fun onDoubleTap(e: MotionEvent): Boolean {
-                val targetScale = if (binding.ivPreviewPhoto.scaleX > 1.5f) 1.0f else 2.5f
-                binding.ivPreviewPhoto.animate()
-                    .scaleX(targetScale)
-                    .scaleY(targetScale)
-                    .translationX(0f)
-                    .translationY(0f)
-                    .setDuration(220)
-                    .start()
-                return true
-            }
-
-            override fun onFling(e1: MotionEvent?, e2: MotionEvent, velocityX: Float, velocityY: Float): Boolean {
-                if (e1 != null && (e2.x - e1.x > 140) && kotlin.math.abs(velocityX) > 200 && binding.ivPreviewPhoto.scaleX <= 1.05f) {
-                    closeInAppPhotoPreview()
-                    return true
-                }
-                return false
-            }
-        })
-
-        binding.ivPreviewPhoto.setOnTouchListener { _, event ->
-            scaleDetector.onTouchEvent(event)
-            gestureDetector.onTouchEvent(event)
-
-            if (binding.ivPreviewPhoto.scaleX > 1.05f) {
-                when (event.actionMasked) {
-                    MotionEvent.ACTION_DOWN -> {
-                        previewLastX = event.rawX
-                        previewLastY = event.rawY
-                        isPreviewDragging = true
-                    }
-                    MotionEvent.ACTION_MOVE -> {
-                        if (isPreviewDragging) {
-                            val dx = event.rawX - previewLastX
-                            val dy = event.rawY - previewLastY
-                            previewLastX = event.rawX
-                            previewLastY = event.rawY
-                            binding.ivPreviewPhoto.translationX += dx
-                            binding.ivPreviewPhoto.translationY += dy
-                        }
-                    }
-                    MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
-                        isPreviewDragging = false
-                    }
-                }
-            }
-            true
-        }
-    }
-
-    private fun openInAppPhotoPreview() {
+    /** Opens the last photo or video in the phone's gallery app. */
+    private fun openLastShotInGallery() {
         val uri = latestCapturedUri ?: latestGalleryUri
         if (uri == null) {
             showHint("No photo in gallery yet")
             return
         }
-
-        lifecycleScope.launch(Dispatchers.IO) {
-            try {
-                val bitmap = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-                    val source = ImageDecoder.createSource(contentResolver, uri)
-                    ImageDecoder.decodeBitmap(source) { decoder, info, _ ->
-                        decoder.isMutableRequired = false
-                        decoder.allocator = ImageDecoder.ALLOCATOR_SOFTWARE
-                        // A 32 MP photo at full size is past what a view may draw (100 MB).
-                        var sample = 1
-                        while (maxOf(info.size.width, info.size.height) / sample > MAX_PREVIEW_EDGE) sample *= 2
-                        decoder.setTargetSampleSize(sample)
-                    }
-                } else {
-                    contentResolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it) }
-                }
-
-                val isMotion = MotionPhotoEngine.isMotionPhoto(this@MainActivity, uri)
-                val displayName = runCatching {
-                    contentResolver.query(uri, arrayOf(MediaStore.MediaColumns.DISPLAY_NAME), null, null, null)?.use { c ->
-                        if (c.moveToFirst()) c.getString(0) else null
-                    }
-                }.getOrNull()
-
-                if (bitmap != null) {
-                    withContext(Dispatchers.Main) {
-                        binding.ivPreviewPhoto.setImageBitmap(bitmap)
-                        binding.ivPreviewPhoto.visibility = View.VISIBLE
-                        binding.vvPreviewMotion.visibility = View.GONE
-                        binding.ivPreviewPhoto.scaleX = 1.0f
-                        binding.ivPreviewPhoto.scaleY = 1.0f
-                        binding.ivPreviewPhoto.translationX = 0f
-                        binding.ivPreviewPhoto.translationY = 0f
-
-                        binding.tvPreviewTitle.text = displayName ?: "Captured Photo"
-                        val motionTag = if (isMotion) " • Motion Photo" else ""
-                        binding.tvPreviewDetails.text = "${bitmap.width} × ${bitmap.height} • Motorola Edge 20 Fusion$motionTag"
-
-                        if (isMotion) {
-                            binding.btnPreviewMotionToggle.visibility = View.VISIBLE
-                            binding.tvPreviewMotionLabel.text = "Motion"
-                            binding.ivPreviewMotionIcon.setImageResource(R.drawable.ic_play_arrow)
-
-                            binding.btnPreviewMotionToggle.setOnClickListener {
-                                if (binding.vvPreviewMotion.isPlaying) {
-                                    binding.vvPreviewMotion.pause()
-                                    binding.vvPreviewMotion.visibility = View.GONE
-                                    binding.ivPreviewPhoto.visibility = View.VISIBLE
-                                    binding.tvPreviewMotionLabel.text = "Motion"
-                                    binding.ivPreviewMotionIcon.setImageResource(R.drawable.ic_play_arrow)
-                                } else {
-                                    lifecycleScope.launch(Dispatchers.IO) {
-                                        val tempPlay = File(cacheDir, "preview_motion.mp4")
-                                        if (MotionPhotoEngine.extractMotionVideo(this@MainActivity, uri, tempPlay)) {
-                                            withContext(Dispatchers.Main) {
-                                                binding.vvPreviewMotion.setVideoPath(tempPlay.absolutePath)
-                                                binding.vvPreviewMotion.setOnPreparedListener { mp ->
-                                                    mp.isLooping = true
-                                                    binding.vvPreviewMotion.visibility = View.VISIBLE
-                                                    binding.ivPreviewPhoto.visibility = View.INVISIBLE
-                                                    binding.vvPreviewMotion.start()
-                                                    binding.tvPreviewMotionLabel.text = "Pause"
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        } else {
-                            binding.btnPreviewMotionToggle.visibility = View.GONE
-                        }
-
-                        binding.overlayPhotoPreview.alpha = 0f
-                        binding.overlayPhotoPreview.visibility = View.VISIBLE
-                        binding.overlayPhotoPreview.animate()
-                            .alpha(1f)
-                            .setDuration(220)
-                            .start()
-                    }
-                }
-            } catch (e: Exception) {
-                withContext(Dispatchers.Main) {
-                    showHint("Could not open preview: ${e.message}")
-                }
-            }
+        val view = Intent(Intent.ACTION_VIEW).apply {
+            setDataAndType(uri, contentResolver.getType(uri) ?: "image/*")
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
         }
-    }
-
-    private fun closeInAppPhotoPreview() {
-        if (binding.overlayPhotoPreview.visibility == View.VISIBLE) {
-            try {
-                if (binding.vvPreviewMotion.isPlaying) {
-                    binding.vvPreviewMotion.stopPlayback()
-                }
-            } catch (ignored: Exception) {}
-            binding.vvPreviewMotion.visibility = View.GONE
-            binding.ivPreviewPhoto.visibility = View.VISIBLE
-            binding.overlayPhotoPreview.animate()
-                .alpha(0f)
-                .setDuration(180)
-                .withEndAction {
-                    binding.overlayPhotoPreview.visibility = View.GONE
-                    binding.ivPreviewPhoto.setImageDrawable(null)
-                }
-                .start()
-        }
+        runCatching { startActivity(view) }.onFailure { showHint("No gallery app to open this") }
     }
 
     private fun setupListeners() {
@@ -1634,10 +1448,9 @@ class MainActivity : AppCompatActivity() {
 
         // Gallery Thumbnail Click
         binding.ivGalleryThumbnail.setOnClickListener {
-            openInAppPhotoPreview()
+            openLastShotInGallery()
         }
 
-        setupPhotoPreviewInteractions()
     }
 
     private fun toggleQuickSettings() {
@@ -1848,12 +1661,6 @@ class MainActivity : AppCompatActivity() {
     }
 
     override fun onKeyDown(keyCode: Int, event: KeyEvent?): Boolean {
-        if (keyCode == KeyEvent.KEYCODE_BACK) {
-            if (binding.overlayPhotoPreview.visibility == View.VISIBLE) {
-                closeInAppPhotoPreview()
-                return true
-            }
-        }
         return when (keyCode) {
             KeyEvent.KEYCODE_VOLUME_DOWN, KeyEvent.KEYCODE_VOLUME_UP, KeyEvent.KEYCODE_CAMERA -> {
                 if (event?.repeatCount == 0) {
@@ -3056,7 +2863,6 @@ class MainActivity : AppCompatActivity() {
         private const val LOW_LIGHT_POLL_MS = 700L
         private const val QR_RESULT_MS = 4000L
         private const val MAX_HOLD_BURST = 30
-        private const val MAX_PREVIEW_EDGE = 4096
         private val REQUIRED_PERMISSIONS = arrayOf(
             Manifest.permission.CAMERA,
             Manifest.permission.RECORD_AUDIO
