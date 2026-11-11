@@ -31,8 +31,8 @@ internal object PortraitMath {
     /** The focus counts as on a person when one's body centre is within width / this of it. */
     private const val PERSON_FOCUS_DIVISOR = 3
 
-    /** Parts of the object within width / this of its kept part survive the depth cut. */
-    private const val EDGE_RESTORE_DIVISOR = 40
+    /** A cut-off piece up to this share of the kept subject's area counts as part of it. */
+    private const val SMALL_PART_SHARE = 0.04f
 
     /** A detected person only counts when the mask comes within width / this of them. */
     private const val PERSON_REACH_DIVISOR = 10
@@ -188,13 +188,31 @@ internal object PortraitMath {
             val gatedSeed = nearest(gated, w, fx, fy)
             if (gatedSeed >= 0) {
                 val front = flood(gated, w, h, gatedSeed)
-                // The depth map is soft at outlines, so thin parts at the silhouette (an ear, a
-                // finger) read as background. Give back whatever of the object lies right beside
-                // the part that was kept.
-                val reach = max(1, w / EDGE_RESTORE_DIVISOR)
-                val near = boxBlur(FloatArray(solid.size) { if (front[it]) 1f else 0f }, w, h, reach)
+                // The depth map is soft at outlines, so small parts at the silhouette (an ear, a
+                // finger) read as background and get cut. Give those back. A large piece that was
+                // cut is a different object behind the subject and stays out entirely.
                 val whole = region
-                region = BooleanArray(solid.size) { front[it] || (whole[it] && near[it] > 0f) }
+                val smallPart = max(1, (front.count { it } * SMALL_PART_SHARE).toInt())
+                val lost = BooleanArray(solid.size) { whole[it] && !front[it] }
+                region = front
+                // One shared queue: after a piece is walked, queue[0 until tail] lists its pixels.
+                val queue = IntArray(solid.size)
+                for (start in lost.indices) {
+                    if (!lost[start]) continue
+                    var head = 0
+                    var tail = 0
+                    queue[tail++] = start
+                    lost[start] = false
+                    while (head < tail) {
+                        val i = queue[head++]
+                        val x = i % w
+                        if (x > 0 && lost[i - 1]) { lost[i - 1] = false; queue[tail++] = i - 1 }
+                        if (x < w - 1 && lost[i + 1]) { lost[i + 1] = false; queue[tail++] = i + 1 }
+                        if (i >= w && lost[i - w]) { lost[i - w] = false; queue[tail++] = i - w }
+                        if (i < solid.size - w && lost[i + w]) { lost[i + w] = false; queue[tail++] = i + w }
+                    }
+                    if (tail <= smallPart) for (k in 0 until tail) region[queue[k]] = true
+                }
             }
         }
         for (i in into.indices) if (region[i]) into[i] = true
