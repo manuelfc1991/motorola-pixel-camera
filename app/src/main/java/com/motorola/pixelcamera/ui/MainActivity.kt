@@ -8,6 +8,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.SharedPreferences
 import android.content.pm.PackageManager
+import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.ImageDecoder
 import android.graphics.Rect
@@ -816,40 +817,61 @@ class MainActivity : AppCompatActivity() {
 
     private fun loadLatestGalleryThumbnail() {
         lifecycleScope.launch(Dispatchers.IO) {
-            val projection = arrayOf(
-                MediaStore.Images.Media._ID,
-                MediaStore.Images.Media.DATE_ADDED
-            )
-            val sortOrder = "${MediaStore.Images.Media.DATE_ADDED} DESC"
             val queryUri = MediaStore.Images.Media.EXTERNAL_CONTENT_URI
-
             try {
-                contentResolver.query(queryUri, projection, null, null, sortOrder)?.use { cursor ->
+                // RAW files are saved next to their JPEG; the thumbnail shows the JPEG.
+                contentResolver.query(
+                    queryUri, arrayOf(MediaStore.Images.Media._ID),
+                    "${MediaStore.Images.Media.MIME_TYPE} != ?", arrayOf("image/x-adobe-dng"),
+                    "${MediaStore.Images.Media.DATE_ADDED} DESC"
+                )?.use { cursor ->
                     if (cursor.moveToFirst()) {
-                        val idColumn = cursor.getColumnIndexOrThrow(MediaStore.Images.Media._ID)
-                        val id = cursor.getLong(idColumn)
-                        val contentUri = ContentUris.withAppendedId(queryUri, id)
-
-                        val thumbnail = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                            contentResolver.loadThumbnail(contentUri, Size(120, 120), null)
-                        } else {
-                            @Suppress("DEPRECATION")
-                            MediaStore.Images.Thumbnails.getThumbnail(
-                                contentResolver, id,
-                                MediaStore.Images.Thumbnails.MINI_KIND, null
-                            )
-                        }
+                        val contentUri = ContentUris.withAppendedId(queryUri, cursor.getLong(0))
                         latestGalleryUri = contentUri
+                        val thumbnail = uprightThumbnail(contentUri, 160)
                         if (thumbnail != null) {
-                            runOnUiThread {
-                                binding.ivGalleryThumbnail.setImageBitmap(thumbnail)
-                            }
+                            runOnUiThread { binding.ivGalleryThumbnail.setImageBitmap(thumbnail) }
                         }
                     }
                 }
             } catch (e: Exception) {
                 // Ignore if permission not granted yet or no photos exist
             }
+        }
+    }
+
+    /**
+     * A small copy of a photo turned the way it is meant to be seen. Photos are stored sideways
+     * with a rotation tag (selfies also mirrored), which the system thumbnail does not always apply.
+     */
+    private fun uprightThumbnail(uri: android.net.Uri, size: Int): Bitmap? {
+        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        contentResolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, bounds) }
+        if (bounds.outWidth <= 0 || bounds.outHeight <= 0) return null
+        var sample = 1
+        while (minOf(bounds.outWidth, bounds.outHeight) / (sample * 2) >= size) sample *= 2
+        val bitmap = contentResolver.openInputStream(uri)?.use {
+            BitmapFactory.decodeStream(it, null, BitmapFactory.Options().apply { inSampleSize = sample })
+        } ?: return null
+        val orientation = contentResolver.openInputStream(uri)?.use {
+            androidx.exifinterface.media.ExifInterface(it).getAttributeInt(
+                androidx.exifinterface.media.ExifInterface.TAG_ORIENTATION,
+                androidx.exifinterface.media.ExifInterface.ORIENTATION_NORMAL
+            )
+        } ?: androidx.exifinterface.media.ExifInterface.ORIENTATION_NORMAL
+        val m = android.graphics.Matrix()
+        when (orientation) {
+            androidx.exifinterface.media.ExifInterface.ORIENTATION_ROTATE_90 -> m.postRotate(90f)
+            androidx.exifinterface.media.ExifInterface.ORIENTATION_ROTATE_180 -> m.postRotate(180f)
+            androidx.exifinterface.media.ExifInterface.ORIENTATION_ROTATE_270 -> m.postRotate(270f)
+            androidx.exifinterface.media.ExifInterface.ORIENTATION_FLIP_HORIZONTAL -> m.postScale(-1f, 1f)
+            androidx.exifinterface.media.ExifInterface.ORIENTATION_FLIP_VERTICAL -> m.postScale(1f, -1f)
+            androidx.exifinterface.media.ExifInterface.ORIENTATION_TRANSPOSE -> { m.postRotate(90f); m.postScale(-1f, 1f) }
+            androidx.exifinterface.media.ExifInterface.ORIENTATION_TRANSVERSE -> { m.postRotate(270f); m.postScale(-1f, 1f) }
+            else -> return bitmap
+        }
+        return Bitmap.createBitmap(bitmap, 0, 0, bitmap.width, bitmap.height, m, true).also {
+            if (it !== bitmap) bitmap.recycle()
         }
     }
 
