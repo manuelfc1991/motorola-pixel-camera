@@ -70,6 +70,23 @@ class PortraitMathTest {
     }
 
     @Test
+    fun `a second person at the same distance stays, one far behind does not`() {
+        val w = 90
+        val h = 40
+        fun inBox(i: Int, x0: Int, x1: Int) = i % w in x0..x1 && i / w in 5..34
+        // Focused person, a friend beside them, and a passer-by in the distance.
+        val alpha = FloatArray(w * h) { if (inBox(it, 5, 24) || inBox(it, 35, 54) || inBox(it, 65, 84)) 1f else 0f }
+        val depth = FloatArray(w * h) { if (inBox(it, 65, 84)) 0.2f else 0.8f }
+        val people = floatArrayOf(45f / w, 0.5f, 75f / w, 0.5f)
+
+        val kept = PortraitMath.isolateSubject(alpha, depth, w, h, focusX = 14f / w, focusY = 0.5f, people)
+
+        assertEquals(1f, kept[20 * w + 14], 1e-6f)  // focused person
+        assertEquals(1f, kept[20 * w + 45], 1e-6f)  // friend at the same distance
+        assertEquals(0f, kept[20 * w + 75], 1e-6f)  // passer-by far behind
+    }
+
+    @Test
     fun `transpose swaps rows and columns and back`() {
         val src = floatArrayOf(1f, 2f, 3f, 4f, 5f, 6f) // 3 wide, 2 tall
         val flipped = PortraitMath.transpose(src, 3, 2) // 2 wide, 3 tall

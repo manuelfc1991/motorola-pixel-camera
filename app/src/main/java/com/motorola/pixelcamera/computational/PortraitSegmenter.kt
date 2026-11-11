@@ -24,16 +24,26 @@ import java.util.concurrent.Executors
 object PortraitSegmenter {
 
     /** Subject mask and depth on one small grid. Either map may be missing, never both. */
-    class SubjectMap(val width: Int, val height: Int, val alpha: FloatArray?, val depth: FloatArray?)
+    class SubjectMap(
+        val width: Int, val height: Int, val alpha: FloatArray?, val depth: FloatArray?,
+        /** Body centres of the people found, as x, y pairs in 0..1. Empty without the pose model. */
+        val people: FloatArray = FloatArray(0)
+    )
 
     private const val TAG = "PortraitSegmenter"
     private const val DIR = "gmodels"
     private const val SEGMENT_MODEL = "$DIR/subject_segmenter.tflite"
     private const val MATTING_MODEL = "$DIR/portrait_matting.tflite"
     private const val DEPTH_MODEL = "$DIR/depth.tflite"
+    private const val POSE_MODEL = "$DIR/pose.tflite"
 
     private const val SEGMENT_SIZE = 512
     private const val DEPTH_SIZE = 384
+    private const val POSE_SIZE = 256
+    private const val POSE_MAX_PEOPLE = 100
+    private const val POSE_KEYPOINTS = 17
+    private const val PERSON_MIN_SCORE = 0.2f
+    private const val KEYPOINT_MIN_SCORE = 0.3f
     /** The matting model's fixed input: 768 wide, 1024 tall. */
     private const val MATTE_SHORT = 768
     private const val MATTE_LONG = 1024
@@ -62,7 +72,7 @@ object PortraitSegmenter {
         modelThread.execute {
             synchronized(lock) {
                 try {
-                    for (asset in listOf(SEGMENT_MODEL, MATTING_MODEL, DEPTH_MODEL)) interpreter(appContext, asset)
+                    for (asset in listOf(SEGMENT_MODEL, MATTING_MODEL, DEPTH_MODEL, POSE_MODEL)) interpreter(appContext, asset)
                 } catch (e: Exception) {
                     Log.w(TAG, "Portrait model warm-up failed", e)
                 }
@@ -89,8 +99,11 @@ object PortraitSegmenter {
             val alpha = coarse?.let { refine(context, pixels, it, w, h, landscape) ?: it }
             val t2 = SystemClock.elapsedRealtime()
             val depth = depth(context, pixels, w, h)
-            Log.i(TAG, "segment ${t1 - t0} ms, matting ${t2 - t1} ms, depth ${SystemClock.elapsedRealtime() - t2} ms")
-            if (alpha == null && depth == null) null else SubjectMap(w, h, alpha, depth)
+            val t3 = SystemClock.elapsedRealtime()
+            val people = if (alpha == null) FloatArray(0) else people(context, pixels, w, h)
+            Log.i(TAG, "segment ${t1 - t0} ms, matting ${t2 - t1} ms, depth ${t3 - t2} ms, " +
+                "pose ${SystemClock.elapsedRealtime() - t3} ms (${people.size / 2} people)")
+            if (alpha == null && depth == null) null else SubjectMap(w, h, alpha, depth, people)
         } catch (e: Exception) {
             Log.w(TAG, "Portrait models failed, falling back to radial blur", e)
             null
@@ -152,6 +165,59 @@ object PortraitSegmenter {
         val raw = FloatArray(DEPTH_SIZE * DEPTH_SIZE)
         outBuf.asFloatBuffer().get(raw)
         return PortraitMath.resizeBilinear(PortraitMath.normalise(raw), DEPTH_SIZE, DEPTH_SIZE, w, h)
+    }
+
+    /** Body centres (x, y in 0..1) of the people the pose model finds. */
+    private fun people(context: Context, pixels: IntArray, w: Int, h: Int): FloatArray {
+        val model = interpreter(context, POSE_MODEL) ?: return FloatArray(0)
+        val small = resizePixels(pixels, w, h, POSE_SIZE, POSE_SIZE)
+        val inBuf = ByteBuffer.allocateDirect(small.size * 3).order(ByteOrder.nativeOrder())
+        for (p in small) {
+            inBuf.put((p shr 16).toByte())
+            inBuf.put((p shr 8).toByte())
+            inBuf.put(p.toByte())
+        }
+        inBuf.rewind()
+
+        // Outputs are told apart by shape; of the two per-person lists the last one is the score.
+        val outputs = HashMap<Int, Any>()
+        var pointsIndex = -1
+        var pointScoresIndex = -1
+        var scoresIndex = -1
+        for (i in 0 until model.outputTensorCount) {
+            val shape = model.getOutputTensor(i).shape()
+            outputs[i] = floatBuffer(model.getOutputTensor(i).numElements())
+            when {
+                shape.size == 4 && shape[3] == 2 -> pointsIndex = i
+                shape.size == 3 && shape[2] == POSE_KEYPOINTS -> pointScoresIndex = i
+                shape.size == 2 -> scoresIndex = i
+            }
+        }
+        if (pointsIndex < 0 || pointScoresIndex < 0 || scoresIndex < 0) return FloatArray(0)
+        model.runForMultipleInputsOutputs(arrayOf<Any>(inBuf), outputs)
+
+        fun floats(index: Int) = (outputs[index] as ByteBuffer).apply { rewind() }.asFloatBuffer()
+        val scores = floats(scoresIndex)
+        val points = floats(pointsIndex)
+        val pointScores = floats(pointScoresIndex)
+        val centres = ArrayList<Float>()
+        for (person in 0 until POSE_MAX_PEOPLE) {
+            if (scores.get(person) < PERSON_MIN_SCORE) continue
+            var sumX = 0f
+            var sumY = 0f
+            var count = 0
+            for (k in 0 until POSE_KEYPOINTS) {
+                if (pointScores.get(person * POSE_KEYPOINTS + k) < KEYPOINT_MIN_SCORE) continue
+                // Keypoints come as (y, x).
+                sumY += points.get((person * POSE_KEYPOINTS + k) * 2)
+                sumX += points.get((person * POSE_KEYPOINTS + k) * 2 + 1)
+                count++
+            }
+            if (count == 0) continue
+            centres.add((sumX / count).coerceIn(0f, 1f))
+            centres.add((sumY / count).coerceIn(0f, 1f))
+        }
+        return centres.toFloatArray()
     }
 
     private fun interpreter(context: Context, asset: String): Interpreter? {
