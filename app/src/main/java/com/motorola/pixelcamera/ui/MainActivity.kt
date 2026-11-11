@@ -1765,7 +1765,10 @@ class MainActivity : AppCompatActivity() {
 
     /** 16:9 photos and video are letterboxed so the viewfinder shows exactly what is saved. */
     private fun applyPreviewScale() {
-        val wide = cameraManager.aspectRatio == AspectRatio.RATIO_16_9 || currentMode == CameraMode.VIDEO
+        // Video fills the viewfinder: the frame is a little taller than the screen area, so about
+        // 4% at the top and bottom of the recording lies outside the preview. A 16:9 photo is
+        // shown whole, because a photo's framing has to be exact.
+        val wide = cameraManager.aspectRatio == AspectRatio.RATIO_16_9 && currentMode != CameraMode.VIDEO
         binding.viewFinder.scaleType = if (wide) {
             androidx.camera.view.PreviewView.ScaleType.FIT_CENTER
         } else {
@@ -2645,7 +2648,7 @@ class MainActivity : AppCompatActivity() {
     private fun viewToImagePoint(x: Float, y: Float): PointF {
         val vw = binding.viewFinder.width.toFloat().coerceAtLeast(1f)
         val vh = binding.viewFinder.height.toFloat().coerceAtLeast(1f)
-        val wide = cameraManager.aspectRatio == AspectRatio.RATIO_16_9
+        val wide = cameraManager.aspectRatio == AspectRatio.RATIO_16_9 || currentMode == CameraMode.VIDEO
         val imageAspect = if (wide) 9f / 16f else 3f / 4f   // portrait width / height
         val viewAspect = vw / vh
         // Fraction of the image seen across each view axis (>1 means the view shows bars)
@@ -2835,14 +2838,14 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    /** The slow-motion picture is 16:9, shown upright and whole inside the viewfinder area. */
+    /** The slow-motion picture is 16:9, shown upright and filling the viewfinder area. */
     private fun fitSlowMotionPreview() {
         val parent = binding.slowMotionPreview.parent as View
         val pw = parent.width
         val ph = parent.height
         if (pw == 0 || ph == 0) return
-        val w = minOf(pw, ph * 9 / 16)
-        binding.slowMotionPreview.layoutParams = android.widget.FrameLayout.LayoutParams(w, w * 16 / 9, android.view.Gravity.CENTER)
+        // Fills the width like the normal video preview; the card clips what overhangs.
+        binding.slowMotionPreview.layoutParams = android.widget.FrameLayout.LayoutParams(pw, pw * 16 / 9, android.view.Gravity.CENTER)
     }
 
     private fun setLowLightVideo(enabled: Boolean) {
