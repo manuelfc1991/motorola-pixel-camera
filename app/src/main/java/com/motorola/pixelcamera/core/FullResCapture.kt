@@ -22,6 +22,7 @@ import android.os.SystemClock
 import android.util.Log
 import android.util.Size
 import android.view.Surface
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withTimeoutOrNull
@@ -157,7 +158,8 @@ object FullResCapture {
             val opened = CompletableDeferred<CameraDevice?>()
             try {
                 manager.openCamera(cameraId, object : CameraDevice.StateCallback() {
-                    override fun onOpened(camera: CameraDevice) { opened.complete(camera) }
+                    // Opened after the caller gave up (timeout): nobody would ever close it.
+                    override fun onOpened(camera: CameraDevice) { if (!opened.complete(camera)) camera.close() }
                     override fun onDisconnected(camera: CameraDevice) { camera.close(); opened.complete(null) }
                     override fun onError(camera: CameraDevice, error: Int) { camera.close(); opened.complete(null) }
                 }, handler)
@@ -167,7 +169,13 @@ object FullResCapture {
                 Log.e(TAG, "Camera cannot be opened", e)
                 return null
             }
-            opened.await()?.let { return it }
+            val camera = try {
+                opened.await()
+            } catch (e: CancellationException) {
+                opened.cancel()
+                throw e
+            }
+            camera?.let { return it }
             Log.w(TAG, "Camera $cameraId busy, attempt ${attempt + 1}")
             delay(OPEN_RETRY_MS)
         }

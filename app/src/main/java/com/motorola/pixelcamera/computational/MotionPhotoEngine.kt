@@ -2,26 +2,28 @@ package com.motorola.pixelcamera.computational
 
 import android.content.Context
 import android.graphics.Bitmap
-import android.graphics.Color
+import android.graphics.Canvas
+import android.graphics.Matrix
+import android.graphics.Paint
+import android.graphics.Rect
+import android.media.Image
 import android.media.MediaCodec
 import android.media.MediaCodecInfo
 import android.media.MediaFormat
 import android.media.MediaMuxer
 import android.net.Uri
 import android.util.Log
-import com.motorola.pixelcamera.hardware.DimensityOptimizer
+import androidx.camera.core.ImageProxy
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.ByteArrayOutputStream
 import java.io.File
-import java.nio.ByteBuffer
-import java.util.concurrent.ConcurrentLinkedQueue
 
 /**
  * Google Camera 9.7 Motion Photo & Top Shot Engine.
  *
  * Implements:
- * 1. Rolling ring buffer of low-latency viewfinder preview frames (~15-20 frames)
+ * 1. Rolling buffer of the last 1.5 s of viewfinder frames, 15 a second, in reused bitmaps
  * 2. Asynchronous hardware AVC (H.264) video encoding via MediaCodec & MediaMuxer
  * 3. Google Motion Photo XMP metadata container injection (GCamera:MotionPhoto="1", GCamera:MicroVideoOffset)
  * 4. MP4 micro-video extraction and seamless looping playback
@@ -29,64 +31,104 @@ import java.util.concurrent.ConcurrentLinkedQueue
 object MotionPhotoEngine {
 
     private const val TAG = "MotionPhotoEngine"
-    private const val MAX_RING_BUFFER_SIZE = 24
-    private const val VIDEO_WIDTH = 960
-    private const val VIDEO_HEIGHT = 720
-    private const val FRAME_RATE = 30
+    /** Frames kept from before the shutter: 1.5 s at [FRAME_RATE]. */
+    private const val MAX_RING_BUFFER_SIZE = 23
+    /** Enough for a smooth loop; every viewfinder frame (30 a second) only made heat. */
+    private const val FRAME_RATE = 15
+    private const val FRAME_INTERVAL_NS = 1_000_000_000L / FRAME_RATE - 5_000_000L
     private const val BIT_RATE = 4_000_000
+    private const val POOL_SIZE = 3
 
-    private val ringBuffer = ConcurrentLinkedQueue<Bitmap>()
+    /** One viewfinder frame, upright, with the time it was seen. */
+    class MotionFrame(val bitmap: Bitmap, val timestampNs: Long)
+
+    private val lock = Any()
+    private val ring = ArrayDeque<MotionFrame>()
+    /** Bitmaps of frames that fell out of the ring, reused so steady running allocates nothing. */
+    private val pool = ArrayDeque<Bitmap>()
+    private var scratch: Bitmap? = null
+    private var lastTimestampNs = 0L
+    private val paint = Paint(Paint.FILTER_BITMAP_FLAG)
+    private val matrix = Matrix()
 
     /**
-     * Feed preview frame into the circular rolling buffer.
-     * Downscales to efficient 720p/540p resolution for minimal memory footprint.
+     * Offers a viewfinder frame (RGBA ImageAnalysis output). Only about [FRAME_RATE] a second are
+     * kept; the rest return at once without being touched.
      */
-    fun pushPreviewFrame(frame: Bitmap) {
+    fun offerFrame(image: ImageProxy) {
+        val ts = image.imageInfo.timestamp
+        if (ts - lastTimestampNs in 0 until FRAME_INTERVAL_NS) return
+        lastTimestampNs = ts
         try {
-            // Keep preview frame downscaled
-            val scaled = if (frame.width > VIDEO_WIDTH || frame.height > VIDEO_HEIGHT) {
-                val scale = minOf(VIDEO_WIDTH.toFloat() / frame.width, VIDEO_HEIGHT.toFloat() / frame.height)
-                val targetW = ((frame.width * scale).toInt() / 2) * 2 // Must be even
-                val targetH = ((frame.height * scale).toInt() / 2) * 2
-                Bitmap.createScaledBitmap(frame, targetW, targetH, true)
+            val w = image.width
+            val h = image.height
+            val plane = image.planes[0]
+            val stride = plane.rowStride / plane.pixelStride
+            val buffer = plane.buffer
+            buffer.rewind()
+            val raw = scratch?.takeIf { it.width == stride && it.height == h }
+                ?: Bitmap.createBitmap(stride, h, Bitmap.Config.ARGB_8888).also { scratch?.recycle(); scratch = it }
+            val source = if (buffer.remaining() >= raw.byteCount) {
+                raw.copyPixelsFromBuffer(buffer); raw
             } else {
-                frame.copy(frame.config ?: Bitmap.Config.ARGB_8888, false)
+                image.toBitmap()   // last row shorter than the stride: let CameraX unpack it
             }
-
-            ringBuffer.offer(scaled)
-            while (ringBuffer.size > MAX_RING_BUFFER_SIZE) {
-                ringBuffer.poll()?.recycle()
+            val rotation = image.imageInfo.rotationDegrees
+            val outW = if (rotation % 180 == 0) w else h
+            val outH = if (rotation % 180 == 0) h else w
+            val target = synchronized(lock) {
+                pool.removeFirstOrNull()?.takeIf { it.width == outW && it.height == outH && !it.isRecycled }
+            } ?: Bitmap.createBitmap(outW, outH, Bitmap.Config.ARGB_8888)
+            matrix.reset()
+            matrix.postTranslate(-w / 2f, -h / 2f)
+            matrix.postRotate(rotation.toFloat())
+            matrix.postTranslate(outW / 2f, outH / 2f)
+            val canvas = Canvas(target)
+            canvas.concat(matrix)
+            canvas.drawBitmap(source, Rect(0, 0, w, h), Rect(0, 0, w, h), paint)
+            if (source !== raw) source.recycle()
+            synchronized(lock) {
+                ring.addLast(MotionFrame(target, ts))
+                while (ring.size > MAX_RING_BUFFER_SIZE) giveBack(ring.removeFirst().bitmap)
             }
         } catch (e: Exception) {
             Log.w(TAG, "Frame push warning: ${e.message}")
         }
     }
 
-    /**
-     * Snapshot current rolling frames and clear.
-     */
-    fun snapshotFrames(): List<Bitmap> {
-        val list = mutableListOf<Bitmap>()
-        while (ringBuffer.isNotEmpty()) {
-            ringBuffer.poll()?.let { list.add(it) }
-        }
-        return list
+    /** Must hold [lock]. */
+    private fun giveBack(bitmap: Bitmap) {
+        if (pool.size < POOL_SIZE && !bitmap.isRecycled) pool.addLast(bitmap) else bitmap.recycle()
+    }
+
+    /** Takes the frames gathered so far; the buffer starts again empty. */
+    fun snapshotFrames(): List<MotionFrame> = synchronized(lock) {
+        val list = ring.toList()
+        ring.clear()
+        list
+    }
+
+    /** Hands frames from [snapshotFrames] back once they are no longer needed. */
+    fun recycleFrames(frames: List<MotionFrame>) = synchronized(lock) {
+        frames.forEach { giveBack(it.bitmap) }
+    }
+
+    /** Drops every buffered frame, for when motion photos are off or the mode has no use for them. */
+    fun clear() = synchronized(lock) {
+        if (ring.isEmpty() && pool.isEmpty() && scratch == null) return
+        ring.forEach { it.bitmap.recycle() }
+        ring.clear()
+        pool.forEach { it.recycle() }
+        pool.clear()
+        scratch?.recycle()
+        scratch = null
     }
 
     /**
-     * Clear all frames in buffer
-     */
-    fun clear() {
-        while (ringBuffer.isNotEmpty()) {
-            ringBuffer.poll()?.recycle()
-        }
-    }
-
-    /**
-     * Encodes a list of bitmap frames to an MP4 video file using hardware MediaCodec
+     * Encodes [frames] to an H.264 MP4 using the hardware encoder, timed as they were seen.
      */
     suspend fun encodeFramesToMp4(
-        frames: List<Bitmap>,
+        frames: List<MotionFrame>,
         outputFile: File
     ): Boolean = withContext(Dispatchers.IO) {
         if (frames.size < 4) {
@@ -94,15 +136,17 @@ object MotionPhotoEngine {
             return@withContext false
         }
 
-        val width = (frames[0].width / 2) * 2
-        val height = (frames[0].height / 2) * 2
+        val width = (frames[0].bitmap.width / 2) * 2
+        val height = (frames[0].bitmap.height / 2) * 2
+        val t0 = frames[0].timestampNs
 
         var codec: MediaCodec? = null
         var muxer: MediaMuxer? = null
+        var muxerStarted = false
 
-        try {
+        val ok = try {
             val format = MediaFormat.createVideoFormat(MediaFormat.MIMETYPE_VIDEO_AVC, width, height).apply {
-                setInteger(MediaFormat.KEY_COLOR_FORMAT, MediaCodecInfo.CodecCapabilities.COLOR_FormatYUV420SemiPlanar)
+                setInteger(MediaFormat.KEY_COLOR_FORMAT, MediaCodecInfo.CodecCapabilities.COLOR_FormatYUV420Flexible)
                 setInteger(MediaFormat.KEY_BIT_RATE, BIT_RATE)
                 setInteger(MediaFormat.KEY_FRAME_RATE, FRAME_RATE)
                 setInteger(MediaFormat.KEY_I_FRAME_INTERVAL, 1)
@@ -111,144 +155,100 @@ object MotionPhotoEngine {
             codec = MediaCodec.createEncoderByType(MediaFormat.MIMETYPE_VIDEO_AVC)
             codec.configure(format, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE)
             codec.start()
-
             muxer = MediaMuxer(outputFile.absolutePath, MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4)
-            var videoTrackIndex = -1
-            var muxerStarted = false
 
-            val bufferInfo = MediaCodec.BufferInfo()
-            val frameDurationUs = 1_000_000L / FRAME_RATE
-            var frameIndex = 0
-
-            for (frame in frames) {
-                val inputIndex = codec.dequeueInputBuffer(10_000L)
-                if (inputIndex >= 0) {
-                    val inputBuffer = codec.getInputBuffer(inputIndex) ?: continue
-                    inputBuffer.clear()
-
-                    val nv12 = bitmapToNV12(frame, width, height)
-                    inputBuffer.put(nv12)
-
-                    val isLast = (frameIndex == frames.size - 1)
-                    val flags = if (isLast) MediaCodec.BUFFER_FLAG_END_OF_STREAM else 0
-                    val presentationTimeUs = frameIndex * frameDurationUs
-
-                    codec.queueInputBuffer(inputIndex, 0, nv12.size, presentationTimeUs, flags)
-                    frameIndex++
-                }
-
-                // Drain output from codec
-                var outIndex = codec.dequeueOutputBuffer(bufferInfo, 2000L)
-                while (outIndex >= 0) {
-                    val outBuffer = codec.getOutputBuffer(outIndex)
-                    if (outBuffer != null && bufferInfo.size > 0) {
-                        if (!muxerStarted && videoTrackIndex >= 0) {
-                            muxer.start()
-                            muxerStarted = true
-                        }
-                        if (muxerStarted) {
-                            outBuffer.position(bufferInfo.offset)
-                            outBuffer.limit(bufferInfo.offset + bufferInfo.size)
-                            muxer.writeSampleData(videoTrackIndex, outBuffer, bufferInfo)
-                        }
+            var track = -1
+            val info = MediaCodec.BufferInfo()
+            val argb = IntArray(width * height)
+            var next = 0
+            var outputDone = false
+            var idle = 0
+            // Feed and drain in one loop: a busy encoder delays a frame instead of dropping it.
+            while (!outputDone && idle < 300) {
+                if (next < frames.size) {
+                    val inputIndex = codec.dequeueInputBuffer(10_000L)
+                    if (inputIndex >= 0) {
+                        val image = codec.getInputImage(inputIndex) ?: throw IllegalStateException("encoder gave no input image")
+                        val frame = frames[next]
+                        frame.bitmap.getPixels(argb, 0, width, 0, 0, width, height)
+                        writeYuv(argb, width, height, image)
+                        val last = next == frames.size - 1
+                        codec.queueInputBuffer(
+                            inputIndex, 0, width * height * 3 / 2,
+                            ((frame.timestampNs - t0) / 1000L).coerceAtLeast(0L),
+                            if (last) MediaCodec.BUFFER_FLAG_END_OF_STREAM else 0
+                        )
+                        next++
                     }
-                    codec.releaseOutputBuffer(outIndex, false)
-                    outIndex = codec.dequeueOutputBuffer(bufferInfo, 0)
                 }
-
-                if (outIndex == MediaCodec.INFO_OUTPUT_FORMAT_CHANGED) {
-                    val newFormat = codec.outputFormat
-                    videoTrackIndex = muxer.addTrack(newFormat)
-                    muxer.start()
-                    muxerStarted = true
+                val outIndex = codec.dequeueOutputBuffer(info, 10_000L)
+                when {
+                    outIndex == MediaCodec.INFO_OUTPUT_FORMAT_CHANGED -> {
+                        track = muxer.addTrack(codec.outputFormat)
+                        muxer.start()
+                        muxerStarted = true
+                    }
+                    outIndex >= 0 -> {
+                        idle = 0
+                        val out = codec.getOutputBuffer(outIndex)
+                        val config = (info.flags and MediaCodec.BUFFER_FLAG_CODEC_CONFIG) != 0
+                        if (out != null && info.size > 0 && muxerStarted && !config) {
+                            out.position(info.offset)
+                            out.limit(info.offset + info.size)
+                            muxer.writeSampleData(track, out, info)
+                        }
+                        codec.releaseOutputBuffer(outIndex, false)
+                        if ((info.flags and MediaCodec.BUFFER_FLAG_END_OF_STREAM) != 0) outputDone = true
+                    }
+                    else -> idle++
                 }
             }
-
-            // Drain remaining EOS buffers
-            var eosReached = false
-            var drainAttempts = 0
-            while (!eosReached && drainAttempts < 30) {
-                val outIndex = codec.dequeueOutputBuffer(bufferInfo, 10_000L)
-                if (outIndex >= 0) {
-                    val outBuffer = codec.getOutputBuffer(outIndex)
-                    if (outBuffer != null && bufferInfo.size > 0 && muxerStarted) {
-                        outBuffer.position(bufferInfo.offset)
-                        outBuffer.limit(bufferInfo.offset + bufferInfo.size)
-                        muxer.writeSampleData(videoTrackIndex, outBuffer, bufferInfo)
-                    }
-                    codec.releaseOutputBuffer(outIndex, false)
-                    if ((bufferInfo.flags and MediaCodec.BUFFER_FLAG_END_OF_STREAM) != 0) {
-                        eosReached = true
-                    }
-                } else if (outIndex == MediaCodec.INFO_OUTPUT_FORMAT_CHANGED && !muxerStarted) {
-                    val newFormat = codec.outputFormat
-                    videoTrackIndex = muxer.addTrack(newFormat)
-                    muxer.start()
-                    muxerStarted = true
-                }
-                drainAttempts++
-            }
-
-            return@withContext outputFile.exists() && outputFile.length() > 1024
+            if (!outputDone) Log.w(TAG, "Encoder did not finish (${next}/${frames.size} frames in)")
+            muxerStarted && outputDone
         } catch (e: Exception) {
             Log.e(TAG, "Hardware AVC encoding error", e)
-            return@withContext false
+            false
         } finally {
-            try {
-                codec?.stop()
-                codec?.release()
-            } catch (ignored: Exception) {}
-            try {
-                muxer?.stop()
-                muxer?.release()
-            } catch (ignored: Exception) {}
+            // Each step on its own: a failed stop must not keep the hardware encoder from being released.
+            runCatching { codec?.stop() }
+            runCatching { codec?.release() }
+            if (muxerStarted) runCatching { muxer?.stop() }
+            runCatching { muxer?.release() }
         }
+        if (!ok) outputFile.delete()
+        ok
     }
 
-    /**
-     * Converts a Bitmap to NV12 (YUV420SemiPlanar) byte array.
-     */
-    private fun bitmapToNV12(bitmap: Bitmap, width: Int, height: Int): ByteArray {
-        val totalPixels = width * height
-        val nv12 = ByteArray(totalPixels * 3 / 2)
-        val argb = IntArray(totalPixels)
-
-        val src = if (bitmap.width == width && bitmap.height == height) {
-            bitmap
-        } else {
-            Bitmap.createScaledBitmap(bitmap, width, height, true)
-        }
-        src.getPixels(argb, 0, width, 0, 0, width, height)
-
-        var yIndex = 0
-        var uvIndex = totalPixels
-
+    /** Writes ARGB pixels into an encoder input image, whatever its plane layout. */
+    private fun writeYuv(argb: IntArray, width: Int, height: Int, image: Image) {
+        val yPlane = image.planes[0]
+        val uPlane = image.planes[1]
+        val vPlane = image.planes[2]
+        val yBuf = yPlane.buffer
+        val uBuf = uPlane.buffer
+        val vBuf = vPlane.buffer
+        val yRow = yPlane.rowStride
+        val yPix = yPlane.pixelStride
+        val uRow = uPlane.rowStride
+        val uPix = uPlane.pixelStride
+        val vRow = vPlane.rowStride
+        val vPix = vPlane.pixelStride
         for (j in 0 until height) {
             for (i in 0 until width) {
-                val pixel = argb[j * width + i]
-                val r = (pixel shr 16) and 0xFF
-                val g = (pixel shr 8) and 0xFF
-                val b = pixel and 0xFF
-
-                // RGB to Y
-                var y = ((66 * r + 129 * g + 25 * b + 128) shr 8) + 16
-                if (y < 16) y = 16 else if (y > 235) y = 235
-                nv12[yIndex++] = y.toByte()
-
-                // Subsampled UV (every 2x2 block)
+                val p = argb[j * width + i]
+                val r = (p shr 16) and 0xFF
+                val g = (p shr 8) and 0xFF
+                val b = p and 0xFF
+                val y = (((66 * r + 129 * g + 25 * b + 128) shr 8) + 16).coerceIn(16, 235)
+                yBuf.put(j * yRow + i * yPix, y.toByte())
                 if (j % 2 == 0 && i % 2 == 0) {
-                    var u = ((-38 * r - 74 * g + 112 * b + 128) shr 8) + 128
-                    var v = ((112 * r - 94 * g - 18 * b + 128) shr 8) + 128
-
-                    if (u < 16) u = 16 else if (u > 240) u = 240
-                    if (v < 16) v = 16 else if (v > 240) v = 240
-
-                    nv12[uvIndex++] = u.toByte()
-                    nv12[uvIndex++] = v.toByte()
+                    val u = (((-38 * r - 74 * g + 112 * b + 128) shr 8) + 128).coerceIn(16, 240)
+                    val v = (((112 * r - 94 * g - 18 * b + 128) shr 8) + 128).coerceIn(16, 240)
+                    uBuf.put((j / 2) * uRow + (i / 2) * uPix, u.toByte())
+                    vBuf.put((j / 2) * vRow + (i / 2) * vPix, v.toByte())
                 }
             }
         }
-        return nv12
     }
 
     /**
