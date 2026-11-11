@@ -30,7 +30,9 @@ import androidx.camera.video.VideoCapture
 import androidx.camera.view.PreviewView
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.LifecycleOwner
-import com.motorola.pixelcamera.computational.AstrophotographyEngine
+import com.motorola.pixelcamera.computational.AstroStack
+import com.motorola.pixelcamera.computational.FrameStack
+import com.motorola.pixelcamera.computational.LongExposureStack
 import com.motorola.pixelcamera.computational.ColourCleanup
 import com.motorola.pixelcamera.computational.HdrProcessor
 import com.motorola.pixelcamera.computational.MotionPhotoEngine
@@ -43,6 +45,12 @@ import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.joinAll
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.sync.withPermit
 import com.motorola.pixelcamera.hardware.DimensityOptimizer
 import kotlinx.coroutines.withContext
 import java.io.ByteArrayOutputStream
@@ -190,7 +198,40 @@ class CameraManager(private val context: Context) {
         }
 
     @OptIn(ExperimentalCamera2Interop::class)
+    /** Photos and bursts in progress; while any run, a settings rebind waits for them. */
+    private val capturesRunning = java.util.concurrent.atomic.AtomicInteger(0)
+    @Volatile private var rebindPending = false
+
+    /** Runs a capture with the camera held: a rebind asked for meanwhile happens right after. */
+    private suspend fun <T> holdingCamera(block: suspend () -> T): T {
+        capturesRunning.incrementAndGet()
+        try {
+            return block()
+        } finally {
+            if (capturesRunning.decrementAndGet() == 0 && rebindPending) {
+                rebindPending = false
+                ContextCompat.getMainExecutor(context).execute { bindCameraUseCases() }
+            }
+        }
+    }
+
+    /**
+     * Binds the use cases for the current mode and settings. A settings change during a photo or
+     * burst would unbind the camera under it, so that rebind is held until the capture is done.
+     */
     fun bindCameraUseCases(
+        lifecycleOwner: LifecycleOwner? = null,
+        previewView: PreviewView? = null
+    ) {
+        if (lifecycleOwner == null && previewView == null && capturesRunning.get() > 0) {
+            rebindPending = true
+            Log.i(TAG, "Rebind held until the capture finishes")
+            return
+        }
+        bindNow(lifecycleOwner, previewView)
+    }
+
+    private fun bindNow(
         lifecycleOwner: LifecycleOwner? = null,
         previewView: PreviewView? = null
     ) {
@@ -798,7 +839,7 @@ class CameraManager(private val context: Context) {
         portraitFocusX: Float = 0.5f,
         portraitFocusY: Float = 0.45f,
         onProgress: (CaptureProgress) -> Unit
-    ): Uri? = withContext(Dispatchers.IO) {
+    ): Uri? = holdingCamera { withContext(Dispatchers.IO) {
         val capture = imageCapture ?: return@withContext null
         if (mode != CameraMode.PANORAMA) playSound(android.media.MediaActionSound.SHUTTER_CLICK)
 
@@ -820,6 +861,43 @@ class CameraManager(private val context: Context) {
             val frames = decoding.awaitAll().filterNotNull()
             Log.i(TAG, "Burst of $count: capture=${tCaptured - t0}ms decode tail=${android.os.SystemClock.elapsedRealtime() - tCaptured}ms")
             frames
+        }
+
+        /**
+         * Takes [count] frames and hands each to [stack] as soon as it is decoded, then frees it,
+         * so no more than two full-size frames are ever in memory. Returns how many went in.
+         */
+        suspend fun burstInto(count: Int, stack: FrameStack): Int = coroutineScope {
+            val mirror = mirrorEnabled
+            onProgress(CaptureProgress.Frames(0, count))
+            val decodes = Semaphore(2)
+            val adding = Mutex()
+            val jobs = (0 until count).mapNotNull { i ->
+                val jpeg = runCatching { takeJpegFrame(capture) }.getOrNull()
+                onProgress(CaptureProgress.Frames(i + 1, count))
+                jpeg?.let {
+                    launch(DimensityOptimizer.computationDispatcher) {
+                        decodes.withPermit {
+                            val bitmap = runCatching { it.decode(mirror) }.getOrNull() ?: return@withPermit
+                            try {
+                                adding.withLock { stack.add(bitmap) }
+                            } finally {
+                                bitmap.recycle()
+                            }
+                        }
+                    }
+                }
+            }
+            onProgress(CaptureProgress.Processing)
+            jobs.joinAll()
+            stack.count
+        }
+
+        /** Saves the merge of [stack], or a plain photo when no frame made it in. */
+        suspend fun saveStack(stack: FrameStack): Uri? {
+            val merged = withContext(DimensityOptimizer.computationDispatcher) { stack.result() }
+                ?: return takePictureDirect(capture)
+            return try { saveBitmapToMediaStore(merged) } finally { merged.recycle() }
         }
 
         suspend fun single(): Uri? {
@@ -913,17 +991,20 @@ class CameraManager(private val context: Context) {
             CameraMode.NIGHT_SIGHT -> {
                 // Handheld: each capture is already a 6-frame MediaTek MFNR merge (~1.5s in the HAL),
                 // so more captures only add hold time and hand drift.
-                val frames = burst(if (isAstrophotographyActive) 8 else NIGHT_HANDHELD_CAPTURES)
-                when {
-                    frames.isEmpty() -> takePictureDirect(capture)
-                    isAstrophotographyActive -> saveBitmapToMediaStore(AstrophotographyEngine.processAstroStack(frames))
-                    else -> saveBitmapToMediaStore(NightSightEngine.processNightSight(frames))
+                if (isAstrophotographyActive) {
+                    val stack = AstroStack()
+                    burstInto(ASTRO_FRAMES, stack)
+                    saveStack(stack)
+                } else {
+                    val frames = burst(NIGHT_HANDHELD_CAPTURES)
+                    if (frames.isEmpty()) takePictureDirect(capture)
+                    else saveBitmapToMediaStore(NightSightEngine.processNightSight(frames))
                 }
             }
             CameraMode.LONG_EXPOSURE -> {
-                val frames = burst(12)
-                if (frames.isNotEmpty()) saveBitmapToMediaStore(HdrProcessor.blendLongExposure(frames))
-                else takePictureDirect(capture)
+                val stack = LongExposureStack()
+                burstInto(LONG_EXPOSURE_FRAMES, stack)
+                saveStack(stack)
             }
             CameraMode.PANORAMA -> {
                 if (panoramaEngine.isCapturing()) {
@@ -937,7 +1018,7 @@ class CameraManager(private val context: Context) {
             // Video is handled by startRecording / stopRecording
             CameraMode.VIDEO -> takePictureDirect(capture)
         }
-    }
+    } }
 
     fun startPanoramaCapture() {
         panoramaFocalToWidth()?.let { panoramaEngine.focalToWidth = it }
@@ -1037,7 +1118,7 @@ class CameraManager(private val context: Context) {
         val jpeg = try {
             FullResCapture.capture(context, CAMERA_FRONT, size, exposureIndex)
         } finally {
-            withContext(Dispatchers.Main) { bindCameraUseCases() }
+            withContext(Dispatchers.Main) { bindNow() }
         }
         if (jpeg == null) {
             Log.w(TAG, "Full-size capture failed, taking the normal photo")
@@ -1232,7 +1313,7 @@ class CameraManager(private val context: Context) {
      *
      * With RAW on, each shot is a RAW and JPEG pair written by the camera itself, which is slower.
      */
-    suspend fun captureBurst(isHeld: () -> Boolean, max: Int, onShot: suspend (Int) -> Unit): Uri? = coroutineScope {
+    suspend fun captureBurst(isHeld: () -> Boolean, max: Int, onShot: suspend (Int) -> Unit): Uri? = holdingCamera { coroutineScope {
         val capture = imageCapture ?: return@coroutineScope null
         val raw = capture.outputFormat == ImageCapture.OUTPUT_FORMAT_RAW_JPEG
         val mirror = mirrorEnabled
@@ -1258,7 +1339,7 @@ class CameraManager(private val context: Context) {
         for (save in saves) save.await()?.let { last = it }
         Log.i(TAG, "Burst: $taken photos in ${android.os.SystemClock.elapsedRealtime() - started} ms (raw=$raw)")
         last
-    }
+    } }
 
     /** One captured JPEG, copied out of the camera buffer so the camera can take the next frame. */
     private class JpegFrame(val bytes: ByteArray, val rotationDegrees: Int) {
@@ -1269,7 +1350,9 @@ class CameraManager(private val context: Context) {
                 postRotate(rotationDegrees.toFloat())
                 if (mirror) postScale(-1f, 1f)
             }
+            // Free the unrotated copy at once: two full-size frames per decode were the peak.
             return Bitmap.createBitmap(bitmap, 0, 0, bitmap.width, bitmap.height, matrix, true)
+                .also { if (it !== bitmap) bitmap.recycle() }
         }
     }
 
@@ -1414,6 +1497,8 @@ class CameraManager(private val context: Context) {
         const val CAMERA_FRONT = "1"
         const val CAMERA_ULTRAWIDE = "3"
         private const val NIGHT_HANDHELD_CAPTURES = 2
+        private const val ASTRO_FRAMES = 8
+        private const val LONG_EXPOSURE_FRAMES = 12
         private const val DARK_4K_ISO_LIMIT = 2500
         private const val QR_SCAN_INTERVAL_MS = 300L
         private const val BURST_PENDING_SAVES = 3
