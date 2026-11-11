@@ -204,6 +204,7 @@ class MainActivity : AppCompatActivity() {
                     } else if (System.currentTimeMillis() - stillStartTime >= 2500L) {
                         if (!cameraManager.isAstrophotographyActive) {
                             cameraManager.isAstrophotographyActive = true
+                            updateProControlsButton()
                             binding.tvHdrBadge.text = "★ ASTROPHOTOGRAPHY"
                             binding.tvHdrBadge.setTextColor(ContextCompat.getColor(this@MainActivity, R.color.pixel_accent_yellow))
                         }
@@ -214,6 +215,7 @@ class MainActivity : AppCompatActivity() {
                         cameraManager.isAstrophotographyActive = false
                         binding.tvHdrBadge.text = "NIGHT SIGHT"
                         binding.tvHdrBadge.setTextColor(ContextCompat.getColor(this@MainActivity, R.color.pixel_pill_text_active))
+                        updateProControlsButton()
                     }
                 }
             }
@@ -345,6 +347,7 @@ class MainActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
+        hideStatusBar()
 
         prefs = getSharedPreferences(SettingsActivity.PREFS_NAME, Context.MODE_PRIVATE)
         cameraManager = CameraManager(this)
@@ -352,7 +355,11 @@ class MainActivity : AppCompatActivity() {
         sensorManager = getSystemService(Context.SENSOR_SERVICE) as? SensorManager
         accelerometer = sensorManager?.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)
         lightSensor = sensorManager?.getDefaultSensor(Sensor.TYPE_LIGHT)
-        gridMode = prefs.getInt(SettingsActivity.KEY_GRID_MODE, 1)
+        // Grid off unless chosen, as Google Camera. Switched off once when the look changed to match it.
+        if (!prefs.getBoolean(KEY_GC_LOOK_APPLIED, false)) {
+            prefs.edit().putInt(SettingsActivity.KEY_GRID_MODE, 0).putBoolean(KEY_GC_LOOK_APPLIED, true).apply()
+        }
+        gridMode = prefs.getInt(SettingsActivity.KEY_GRID_MODE, 0)
 
         // Live Histogram callback for Pro Mode
         cameraManager.onHistogramUpdate = { r, g, b ->
@@ -410,6 +417,20 @@ class MainActivity : AppCompatActivity() {
         } else {
             permissionLauncher.launch(REQUIRED_PERMISSIONS + OPTIONAL_PERMISSIONS)
         }
+    }
+
+    /** Full screen like Google Camera: the layout is measured from the top of the screen. */
+    private fun hideStatusBar() {
+        androidx.core.view.WindowCompat.setDecorFitsSystemWindows(window, false)
+        androidx.core.view.WindowInsetsControllerCompat(window, window.decorView).apply {
+            hide(androidx.core.view.WindowInsetsCompat.Type.statusBars())
+            systemBarsBehavior = androidx.core.view.WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+        }
+    }
+
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        super.onWindowFocusChanged(hasFocus)
+        if (hasFocus) hideStatusBar()
     }
 
     override fun onResume() {
@@ -642,6 +663,11 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun updateVideoQsUi() {
+        updateMiniBadge()
+        if (currentMode == CameraMode.VIDEO) {
+            selectModeUi(if (slowMode != null) binding.modeSlowMotion else binding.modeVideo)
+            updateProControlsButton()
+        }
         val isUhd = cameraManager.currentVideoResolution == CameraManager.VideoResolution.UHD
         val is60 = cameraManager.currentVideoFps == CameraManager.VideoFps.FPS_60
 
@@ -1151,12 +1177,7 @@ class MainActivity : AppCompatActivity() {
         }
 
         // Tier 3: Pro Controls Button (ic_tune)
-        binding.btnProControls.setOnClickListener {
-            val show = binding.proControlPanel.visibility != View.VISIBLE
-            binding.proControlPanel.visibility = if (show) View.VISIBLE else View.GONE
-            binding.histogramView.visibility = if (show) View.VISIBLE else View.GONE
-            updateProControlsButton()
-        }
+        binding.btnProControls.setOnClickListener { onSlidersButton() }
 
         // Tier 1: Shutter Button
         binding.btnShutter.setOnClickListener {
@@ -1232,6 +1253,9 @@ class MainActivity : AppCompatActivity() {
             setMode(CameraMode.PANORAMA, binding.modePanorama)
         }
         binding.modePro.setOnClickListener { setMode(CameraMode.PRO, binding.modePro) }
+        binding.modeVideo.setOnClickListener { chooseCarouselItem(binding.modeVideo) }
+        binding.modeSlowMotion.setOnClickListener { chooseCarouselItem(binding.modeSlowMotion) }
+        binding.chipBottomRight.setOnClickListener { onBottomRightChip() }
         setupModeCarousel()
 
         // Portrait Aperture Slider (f/1.4 - f/16)
@@ -1585,6 +1609,18 @@ class MainActivity : AppCompatActivity() {
         // 4% at the top and bottom of the recording lies outside the preview. A 16:9 photo is
         // shown whole, because a photo's framing has to be exact.
         val wide = cameraManager.aspectRatio == AspectRatio.RATIO_16_9 && currentMode != CameraMode.VIDEO
+        // Google Camera: every frame starts 71dp from the top; 16:9 and video run on down behind the controls.
+        val tall = wide || currentMode == CameraMode.VIDEO
+        (binding.viewFinderCard.layoutParams as androidx.constraintlayout.widget.ConstraintLayout.LayoutParams).let { lp ->
+            val ratio = if (tall) "9:16" else "3:4"
+            val top = resources.getDimensionPixelSize(R.dimen.gc_preview_top)
+            if (lp.dimensionRatio != ratio || lp.topMargin != top) {
+                lp.dimensionRatio = ratio
+                lp.topMargin = top
+                binding.viewFinderCard.layoutParams = lp
+            }
+        }
+        updateMiniBadge()
         binding.viewFinder.scaleType = if (wide) {
             androidx.camera.view.PreviewView.ScaleType.FIT_CENTER
         } else {
@@ -1684,6 +1720,7 @@ class MainActivity : AppCompatActivity() {
             setMode(CameraMode.CAMERA, binding.modeCamera)
         }
         updatePhotoVideoToggle(isVideo = false)
+        padCarousel()
     }
 
     private fun switchToVideoMode() {
@@ -1691,21 +1728,36 @@ class MainActivity : AppCompatActivity() {
             setMode(CameraMode.VIDEO, binding.modeVideo)
         }
         updatePhotoVideoToggle(isVideo = true)
+        padCarousel()
+    }
+
+    /** Top-left badge, as Google Camera's minibar: the video format while in Video. */
+    private fun updateMiniBadge() {
+        val badge = binding.tvMiniBadge
+        if (currentMode != CameraMode.VIDEO) {
+            badge.visibility = View.GONE
+            return
+        }
+        badge.text = when (cameraManager.currentVideoResolution) {
+            CameraManager.VideoResolution.UHD -> "4K"
+            else -> "FHD"
+        }
+        badge.visibility = View.VISIBLE
     }
 
     private fun updatePhotoVideoToggle(isVideo: Boolean) {
         if (isVideo) {
             binding.btnToggleVideo.setBackgroundResource(R.drawable.bg_toggle_item_active)
-            ImageViewCompat.setImageTintList(binding.btnToggleVideo, ContextCompat.getColorStateList(this, R.color.pixel_icon_active))
+            ImageViewCompat.setImageTintList(binding.btnToggleVideo, ContextCompat.getColorStateList(this, R.color.gc_toggle_icon_active))
 
             binding.btnToggleCamera.background = null
-            ImageViewCompat.setImageTintList(binding.btnToggleCamera, ContextCompat.getColorStateList(this, R.color.pixel_text_white))
+            ImageViewCompat.setImageTintList(binding.btnToggleCamera, ContextCompat.getColorStateList(this, R.color.gc_icon))
         } else {
             binding.btnToggleCamera.setBackgroundResource(R.drawable.bg_toggle_item_active)
-            ImageViewCompat.setImageTintList(binding.btnToggleCamera, ContextCompat.getColorStateList(this, R.color.pixel_icon_active))
+            ImageViewCompat.setImageTintList(binding.btnToggleCamera, ContextCompat.getColorStateList(this, R.color.gc_toggle_icon_active))
 
             binding.btnToggleVideo.background = null
-            ImageViewCompat.setImageTintList(binding.btnToggleVideo, ContextCompat.getColorStateList(this, R.color.pixel_text_white))
+            ImageViewCompat.setImageTintList(binding.btnToggleVideo, ContextCompat.getColorStateList(this, R.color.gc_icon))
         }
     }
 
@@ -1858,16 +1910,9 @@ class MainActivity : AppCompatActivity() {
         binding.modeCarousel.viewTreeObserver.addOnGlobalLayoutListener(object : android.view.ViewTreeObserver.OnGlobalLayoutListener {
             override fun onGlobalLayout() {
                 val halfScreen = binding.modeCarousel.width / 2
-                if (halfScreen > 0 && binding.modeLongExposure.width > 0 && binding.modePro.width > 0) {
+                if (halfScreen > 0 && binding.modeCamera.width > 0) {
                     binding.modeCarousel.viewTreeObserver.removeOnGlobalLayoutListener(this)
-                    val padStart = (halfScreen - binding.modeLongExposure.width / 2).coerceAtLeast(0)
-                    val padEnd = (halfScreen - binding.modePro.width / 2).coerceAtLeast(0)
-                    binding.modeCarouselContent.setPadding(padStart, 0, padEnd, 0)
-
-                    // Immediately center current active mode (Photo) on start
-                    binding.modeCarouselContent.post {
-                        centerModeView(getCurrentActiveModeView(), smooth = false)
-                    }
+                    padCarousel()
                 }
             }
         })
@@ -1905,8 +1950,51 @@ class MainActivity : AppCompatActivity() {
             CameraMode.CAMERA -> binding.modeCamera
             CameraMode.NIGHT_SIGHT -> binding.modeNightSight
             CameraMode.PANORAMA -> binding.modePanorama
-            CameraMode.PRO -> binding.modePro
+            // Manual controls are Photo's sliders panel, as in Google Camera.
+            CameraMode.PRO -> binding.modeCamera
+            CameraMode.VIDEO -> if (slowMode != null) binding.modeSlowMotion else binding.modeVideo
             else -> binding.modeCamera
+        }
+    }
+
+    /** The mode names shown: photo modes, or (as Google Camera) the video modes once Video is chosen. */
+    private fun carouselItems(): List<TextView> =
+        if (currentMode == CameraMode.VIDEO) listOf(binding.modeVideo, binding.modeSlowMotion)
+        else listOf(binding.modePortrait, binding.modeCamera, binding.modeNightSight, binding.modePanorama, binding.modeLongExposure)
+
+    private val allCarouselItems: List<TextView>
+        get() = listOf(
+            binding.modePortrait, binding.modeCamera, binding.modeNightSight, binding.modePanorama,
+            binding.modeLongExposure, binding.modePro, binding.modeVideo, binding.modeSlowMotion
+        )
+
+    /** Shows the photo or the video mode names, padded so the first and last can sit in the middle. */
+    private fun padCarousel() {
+        val shown = carouselItems()
+        for (v in allCarouselItems) v.visibility = if (v in shown) View.VISIBLE else View.GONE
+        binding.modeCarouselContent.post {
+            val half = binding.modeCarousel.width / 2
+            val padStart = (half - shown.first().width / 2).coerceAtLeast(0)
+            val padEnd = (half - shown.last().width / 2).coerceAtLeast(0)
+            binding.modeCarouselContent.setPadding(padStart, 0, padEnd, 0)
+            binding.modeCarouselContent.post { selectModeUi(getCurrentActiveModeView(), smoothScroll = false) }
+        }
+    }
+
+    /** Acts on a mode name chosen by tap or swipe. */
+    private fun chooseCarouselItem(view: TextView) {
+        when (view) {
+            binding.modeVideo -> {
+                if (slowMode != null) setSlowMotion(null) else selectModeUi(view)
+            }
+            binding.modeSlowMotion -> {
+                if (slowMode == null) setSlowMotion(lastSlowMotionSpeed) else selectModeUi(view)
+            }
+            binding.modePortrait -> setMode(CameraMode.PORTRAIT, view)
+            binding.modeNightSight -> setMode(CameraMode.NIGHT_SIGHT, view)
+            binding.modePanorama -> setMode(CameraMode.PANORAMA, view)
+            binding.modeLongExposure -> setMode(CameraMode.LONG_EXPOSURE, view)
+            else -> setMode(CameraMode.CAMERA, binding.modeCamera)
         }
     }
 
@@ -1935,56 +2023,36 @@ class MainActivity : AppCompatActivity() {
         }
         val currentCenter = binding.modeCarousel.scrollX + halfScreen
 
-        val modeItems = listOf(
-            Pair(binding.modeLongExposure, CameraMode.LONG_EXPOSURE),
-            Pair(binding.modePortrait, CameraMode.PORTRAIT),
-            Pair(binding.modeCamera, CameraMode.CAMERA),
-            Pair(binding.modeNightSight, CameraMode.NIGHT_SIGHT),
-            Pair(binding.modePanorama, CameraMode.PANORAMA),
-            Pair(binding.modePro, CameraMode.PRO)
-        )
-
-        var closestView = binding.modeCamera
-        var closestMode = CameraMode.CAMERA
+        var closestView = getCurrentActiveModeView()
         var minDistance = Int.MAX_VALUE
-
-        for ((view, mode) in modeItems) {
+        for (view in carouselItems()) {
             if (view.width <= 0) continue
-            val viewCenter = view.left + view.width / 2
-            val distance = kotlin.math.abs(viewCenter - currentCenter)
+            val distance = kotlin.math.abs(view.left + view.width / 2 - currentCenter)
             if (distance < minDistance) {
                 minDistance = distance
                 closestView = view
-                closestMode = mode
             }
         }
 
         centerModeView(closestView, smooth = true)
-        if (currentMode != closestMode) {
-            setMode(closestMode, closestView)
+        if (closestView != getCurrentActiveModeView()) {
+            chooseCarouselItem(closestView)
             binding.modeCarousel.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK)
         }
     }
 
-    private fun selectModeUi(selectedView: TextView, smoothScroll: Boolean = true) {
-        val modeViews = listOf(
-            binding.modeLongExposure,
-            binding.modePortrait,
-            binding.modeCamera,
-            binding.modeNightSight,
-            binding.modePanorama,
-            binding.modePro
-        )
-
-        for (v in modeViews) {
+    private fun selectModeUi(view: TextView, smoothScroll: Boolean = true) {
+        // Pro shows as Photo: its controls are Photo's sliders panel.
+        val selectedView = if (view == binding.modePro) binding.modeCamera else view
+        for (v in allCarouselItems) {
             if (v == selectedView) {
                 v.setBackgroundResource(R.drawable.bg_mode_pill_active)
-                v.setTextColor(ContextCompat.getColor(this, R.color.pixel_accent_sand_text))
-                v.setTypeface(null, android.graphics.Typeface.BOLD)
+                v.setTextColor(ContextCompat.getColor(this, R.color.gc_mode_pill_text))
+                v.typeface = android.graphics.Typeface.create("sans-serif-medium", android.graphics.Typeface.NORMAL)
             } else {
                 v.background = null
                 v.setTextColor(ContextCompat.getColor(this, R.color.pixel_text_white))
-                v.setTypeface(null, android.graphics.Typeface.NORMAL)
+                v.typeface = android.graphics.Typeface.create("sans-serif", android.graphics.Typeface.NORMAL)
             }
         }
         centerModeView(selectedView, smooth = smoothScroll)
@@ -2040,6 +2108,7 @@ class MainActivity : AppCompatActivity() {
         when (mode) {
             CameraMode.NIGHT_SIGHT, CameraMode.LONG_EXPOSURE -> binding.btnShutter.setImageResource(R.drawable.bg_shutter_night)
             CameraMode.VIDEO -> binding.btnShutter.setImageResource(R.drawable.bg_shutter_video)
+            CameraMode.PORTRAIT -> binding.btnShutter.setImageResource(R.drawable.bg_shutter_portrait)
             else -> binding.btnShutter.setImageResource(R.drawable.bg_shutter_button)
         }
 
@@ -2068,7 +2137,7 @@ class MainActivity : AppCompatActivity() {
                 binding.tvHdrBadge.setTextColor(ContextCompat.getColor(this, R.color.pixel_pill_text_active))
                 binding.proControlPanel.visibility = View.GONE
                 binding.histogramView.visibility = View.GONE
-                binding.overlayPortraitAperture.visibility = View.VISIBLE
+                binding.overlayPortraitAperture.visibility = View.GONE
                 binding.overlayPanoramaGuide.visibility = View.GONE
             }
             CameraMode.PRO -> {
@@ -2120,15 +2189,64 @@ class MainActivity : AppCompatActivity() {
     }
 
     /** The manual-controls button belongs to Pro mode only; it is highlighted while the panel is open. */
+    /**
+     * Bottom right, as Google Camera: the sliders button in Photo (manual controls) and Portrait
+     * (blur), a moon chip in Night Sight, the speed in Slow Motion, nothing elsewhere.
+     */
     private fun updateProControlsButton() {
+        val chip = binding.chipBottomRight
+        when {
+            currentMode == CameraMode.NIGHT_SIGHT -> {
+                chip.text = if (cameraManager.isAstrophotographyActive) "Astro" else "Auto"
+                chip.setCompoundDrawablesRelativeWithIntrinsicBounds(R.drawable.ic_moon, 0, 0, 0)
+                chip.visibility = View.VISIBLE
+            }
+            currentMode == CameraMode.VIDEO && slowMode != null -> {
+                chip.text = if (slowMode == com.motorola.pixelcamera.core.SlowMotionCamera.Mode.X8) "1/8×" else "1/4×"
+                chip.setCompoundDrawablesRelativeWithIntrinsicBounds(0, 0, 0, 0)
+                chip.visibility = View.VISIBLE
+            }
+            else -> chip.visibility = View.GONE
+        }
+        val sliders = currentMode == CameraMode.CAMERA || currentMode == CameraMode.PRO || currentMode == CameraMode.PORTRAIT
         // INVISIBLE keeps its slot, so the photo/video toggle stays centred
-        binding.btnProControls.visibility = if (currentMode == CameraMode.PRO) View.VISIBLE else View.INVISIBLE
-        val panelOpen = binding.proControlPanel.visibility == View.VISIBLE
+        binding.btnProControls.visibility = if (sliders && chip.visibility != View.VISIBLE) View.VISIBLE else View.INVISIBLE
+        val panelOpen = binding.proControlPanel.visibility == View.VISIBLE ||
+            binding.overlayPortraitAperture.visibility == View.VISIBLE
         binding.btnProControls.setBackgroundResource(if (panelOpen) R.drawable.bg_qs_btn_active else R.drawable.bg_settings_circle)
         ImageViewCompat.setImageTintList(
             binding.btnProControls,
             ContextCompat.getColorStateList(this, if (panelOpen) R.color.pixel_icon_active else R.color.pixel_text_white)
         )
+    }
+
+    /** Sliders: Photo opens manual controls (Pro underneath), Portrait the blur strength. */
+    private fun onSlidersButton() {
+        when (currentMode) {
+            CameraMode.PORTRAIT -> {
+                val show = binding.overlayPortraitAperture.visibility != View.VISIBLE
+                binding.overlayPortraitAperture.visibility = if (show) View.VISIBLE else View.GONE
+                updateProControlsButton()
+            }
+            CameraMode.CAMERA -> setMode(CameraMode.PRO, binding.modePro)
+            CameraMode.PRO -> setMode(CameraMode.CAMERA, binding.modeCamera)
+            else -> {}
+        }
+    }
+
+    /** Night Sight: what the next shot will do. Slow Motion: switch between 1/4 and 1/8 speed. */
+    private fun onBottomRightChip() {
+        when {
+            currentMode == CameraMode.NIGHT_SIGHT -> showHint(
+                if (cameraManager.isAstrophotographyActive) "Astrophotography: phone is steady" else "Night Sight · rest the phone for astrophotography"
+            )
+            currentMode == CameraMode.VIDEO && slowMode != null && !slowMotion.isRecording && !slowModeSwitching -> {
+                val next = if (slowMode == com.motorola.pixelcamera.core.SlowMotionCamera.Mode.X8)
+                    com.motorola.pixelcamera.core.SlowMotionCamera.Mode.X4 else com.motorola.pixelcamera.core.SlowMotionCamera.Mode.X8
+                lastSlowMotionSpeed = next
+                leaveSlowMotion(rebind = false) { setSlowMotion(next) }
+            }
+        }
     }
 
     private fun showFocusReticleAndSlider(x: Float, y: Float) {
@@ -2572,21 +2690,20 @@ class MainActivity : AppCompatActivity() {
         lowLightJob?.cancel()
         lowLightJob = lifecycleScope.launch {
             while (isActive) {
-                if (!captureChipHeldByCapture) {
-                    when {
-                        isCapturing || cameraManager.multiFrameCount() <= 1 -> binding.tvCaptureChip.visibility = View.GONE
-                        cameraManager.isLowLightBurst() ->
-                            showCaptureChip("Low light · multi-frame", R.drawable.ic_moon, duringCapture = false)
-                        else -> showCaptureChip("Zoom · multi-frame", 0, duringCapture = false)
-                    }
-                }
+                // Google Camera says nothing about the next shot over the viewfinder; only a
+                // capture in progress shows a chip.
+                if (!captureChipHeldByCapture) binding.tvCaptureChip.visibility = View.GONE
                 delay(LOW_LIGHT_POLL_MS)
             }
         }
     }
 
     /** Switches slow motion on in [mode], or off with null. Video mode, rear camera only. */
+    /** Speed Slow Motion opens with, from the last one chosen. */
+    private var lastSlowMotionSpeed = com.motorola.pixelcamera.core.SlowMotionCamera.Mode.X4
+
     private fun setSlowMotion(mode: com.motorola.pixelcamera.core.SlowMotionCamera.Mode?) {
+        if (mode != null) lastSlowMotionSpeed = mode
         if (mode == slowMode || slowModeSwitching || slowMotion.isRecording || cameraManager.isRecordingVideo()) return
         if (mode == null) {
             leaveSlowMotion(rebind = true)
@@ -2896,6 +3013,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     companion object {
+        private const val KEY_GC_LOOK_APPLIED = "gc_look_applied"
         private const val HINT_DURATION_MS = 3000L
         private const val LOW_LIGHT_POLL_MS = 700L
         private const val QR_RESULT_MS = 4000L

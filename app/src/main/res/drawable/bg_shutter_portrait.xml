@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Portrait: grey disc with a white centre. -->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item>
+        <shape android:shape="oval">
+            <stroke android:width="3.2dp" android:color="#FFFFFF" />
+            <solid android:color="@android:color/transparent" />
+        </shape>
+    </item>
+    <item android:bottom="9.6dp" android:left="9.6dp" android:right="9.6dp" android:top="9.6dp">
+        <shape android:shape="oval"><solid android:color="#757575" /></shape>
+    </item>
+    <item android:bottom="24dp" android:left="24dp" android:right="24dp" android:top="24dp">
+        <shape android:shape="oval"><solid android:color="#FFFFFF" /></shape>
+    </item>
+</layer-list>

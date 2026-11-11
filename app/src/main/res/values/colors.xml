@@ -22,4 +22,12 @@
     <color name="pixel_indicator_glow">#4CAF50</color>
     <color name="pixel_grid_line">#26FFFFFF</color>
     <color name="transparent">#00000000</color>
+    <!-- Google Camera palette (sampled from its screens) -->
+    <color name="gc_mode_pill">#7FCFFF</color>
+    <color name="gc_mode_pill_text">#003355</color>
+    <color name="gc_toggle_active">#A8C7FA</color>
+    <color name="gc_toggle_icon_active">#062E6F</color>
+    <color name="gc_button_bg">#202020</color>
+    <color name="gc_icon">#E3E3E3</color>
+    <color name="gc_zoom_row">#B31D1D1D</color>
 </resources>

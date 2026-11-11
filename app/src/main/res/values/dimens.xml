@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Google Camera layout on a 1080x2400, 400 dpi screen (measured from its screens). -->
+    <dimen name="gc_preview_top">71dp</dimen>
+    <dimen name="gc_zoom_top">546dp</dimen>
+    <dimen name="gc_deck_top">660dp</dimen>
+</resources>

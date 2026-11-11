@@ -8,18 +8,17 @@
     android:layout_height="match_parent"
     android:background="@color/pixel_black">
 
-    <!-- ROUNDED VIEWFINDER FRAME (Signature Google Pixel Rounded Viewfinder) -->
+    <!-- Viewfinder: starts 71dp from the top, 4:3 (9:16 for 16:9 and video),
+         square corners, as Google Camera. -->
     <androidx.cardview.widget.CardView
         android:id="@+id/viewFinderCard"
         android:layout_width="0dp"
         android:layout_height="0dp"
-        android:layout_marginHorizontal="4dp"
-        android:layout_marginTop="4dp"
-        android:layout_marginBottom="6dp"
+        android:layout_marginTop="@dimen/gc_preview_top"
         app:cardBackgroundColor="@color/pixel_black"
-        app:cardCornerRadius="28dp"
+        app:cardCornerRadius="0dp"
         app:cardElevation="0dp"
-        app:layout_constraintBottom_toTopOf="@+id/bottomDeck"
+        app:layout_constraintDimensionRatio="3:4"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toTopOf="parent">
@@ -137,6 +136,7 @@
         android:id="@+id/topBar"
         android:layout_width="match_parent"
         android:layout_height="48dp"
+        android:visibility="invisible"
         android:gravity="center_vertical"
         android:orientation="horizontal"
         android:paddingHorizontal="16dp"
@@ -231,6 +231,24 @@
             android:src="@drawable/ic_flash_off"
             app:tint="@color/pixel_text_secondary" />
     </LinearLayout>
+
+    <!-- Top-left mini badge, as Google Camera's minibar: the video format in Video. -->
+    <TextView
+        android:id="@+id/tvMiniBadge"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="19dp"
+        android:layout_marginTop="39dp"
+        android:background="@drawable/bg_mini_badge"
+        android:paddingHorizontal="3dp"
+        android:paddingVertical="1dp"
+        android:text="FHD"
+        android:textColor="#000000"
+        android:textSize="8sp"
+        android:textStyle="bold"
+        android:visibility="gone"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent" />
 
     <!-- Video Recording Indicator Banner -->
     <LinearLayout
@@ -382,7 +400,8 @@
             android:shadowColor="#80000000"
             android:shadowDx="1"
             android:shadowDy="1"
-            android:shadowRadius="2" />
+            android:shadowRadius="2" 
+            android:visibility="gone"/>
     </FrameLayout>
 
     <!-- Real-time RGB Histogram Overlay -->
@@ -876,10 +895,10 @@
         android:id="@+id/zoomPillContainer"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:layout_marginBottom="12dp"
+        android:layout_marginTop="@dimen/gc_zoom_top"
         android:gravity="center"
         android:orientation="vertical"
-        app:layout_constraintBottom_toBottomOf="@+id/viewFinderCard"
+        app:layout_constraintTop_toTopOf="parent"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent">
 
@@ -887,44 +906,46 @@
         <LinearLayout
             android:id="@+id/layoutLensToggles"
             android:layout_width="wrap_content"
-            android:layout_height="32dp"
-            android:layout_marginBottom="4dp"
-            android:background="@drawable/bg_pill_container"
-            android:backgroundTint="#73202124"
+            android:layout_height="36dp"
+            android:layout_marginBottom="12dp"
+            android:background="@drawable/bg_gc_zoom_row"
             android:elevation="6dp"
             android:gravity="center"
             android:orientation="horizontal"
-            android:paddingHorizontal="4dp">
+            android:paddingHorizontal="2dp">
 
             <TextView
                 android:id="@+id/btnZoomUltrawide"
-                android:layout_width="34dp"
-                android:layout_height="28dp"
+                android:layout_width="32dp"
+                android:layout_height="32dp"
+                android:layout_marginHorizontal="3dp"
                 android:gravity="center"
                 android:text="0.6"
                 android:textColor="@color/pixel_text_secondary"
-                android:textSize="11sp"
+                android:textSize="12sp"
                 android:textStyle="bold" />
 
             <TextView
                 android:id="@+id/btnLens10"
-                android:layout_width="34dp"
-                android:layout_height="28dp"
+                android:layout_width="32dp"
+                android:layout_height="32dp"
+                android:layout_marginHorizontal="3dp"
                 android:background="@drawable/bg_zoom_pill_active"
                 android:gravity="center"
                 android:text="1.0"
                 android:textColor="@color/pixel_pill_text_active"
-                android:textSize="11sp"
+                android:textSize="12sp"
                 android:textStyle="bold" />
 
             <TextView
                 android:id="@+id/btnLens20"
-                android:layout_width="34dp"
-                android:layout_height="28dp"
+                android:layout_width="32dp"
+                android:layout_height="32dp"
+                android:layout_marginHorizontal="3dp"
                 android:gravity="center"
                 android:text="2.0"
                 android:textColor="@color/pixel_text_secondary"
-                android:textSize="11sp"
+                android:textSize="12sp"
                 android:textStyle="bold" />
         </LinearLayout>
 
@@ -932,18 +953,18 @@
         <LinearLayout
             android:id="@+id/layoutZoomMultiplier"
             android:layout_width="wrap_content"
-            android:layout_height="34dp"
-            android:background="@drawable/bg_pill_container"
-            android:backgroundTint="#73202124"
+            android:layout_height="36dp"
+            android:background="@drawable/bg_gc_zoom_row"
             android:elevation="6dp"
             android:gravity="center"
             android:orientation="horizontal"
-            android:paddingHorizontal="4dp">
+            android:paddingHorizontal="2dp">
 
             <TextView
                 android:id="@+id/btnZoom1x"
                 android:layout_width="32dp"
-                android:layout_height="28dp"
+                android:layout_height="32dp"
+                android:layout_marginHorizontal="3dp"
                 android:background="@drawable/bg_zoom_pill_active"
                 android:gravity="center"
                 android:text="1×"
@@ -954,7 +975,8 @@
             <TextView
                 android:id="@+id/btnZoom2x"
                 android:layout_width="32dp"
-                android:layout_height="28dp"
+                android:layout_height="32dp"
+                android:layout_marginHorizontal="3dp"
                 android:gravity="center"
                 android:text="2"
                 android:textColor="@color/pixel_text_secondary"
@@ -964,7 +986,8 @@
             <TextView
                 android:id="@+id/btnZoom5x"
                 android:layout_width="32dp"
-                android:layout_height="28dp"
+                android:layout_height="32dp"
+                android:layout_marginHorizontal="3dp"
                 android:gravity="center"
                 android:text="5"
                 android:textColor="@color/pixel_text_secondary"
@@ -2536,26 +2559,25 @@
         android:id="@+id/bottomDeck"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:background="@color/pixel_black"
+        android:layout_marginTop="@dimen/gc_deck_top"
         android:orientation="vertical"
-        android:paddingBottom="16dp"
-        app:layout_constraintBottom_toBottomOf="parent">
+        app:layout_constraintTop_toTopOf="parent">
 
         <!-- TIER 1: SHUTTER DECK (Gallery Circle, Concentric Shutter, Rotating Flip) -->
         <androidx.constraintlayout.widget.ConstraintLayout
             android:id="@+id/shutterDeck"
             android:layout_width="match_parent"
-            android:layout_height="96dp">
+            android:layout_height="120dp">
 
             <!-- Gallery Circle Button (56dp circle preview) -->
             <androidx.cardview.widget.CardView
                 android:id="@+id/cardGalleryThumbnail"
-                android:layout_width="56dp"
-                android:layout_height="56dp"
-                android:layout_marginStart="36dp"
+                android:layout_width="52dp"
+                android:layout_height="52dp"
+                android:layout_marginStart="68dp"
                 app:cardBackgroundColor="#202124"
-                app:cardCornerRadius="28dp"
-                app:cardElevation="2dp"
+                app:cardCornerRadius="26dp"
+                app:cardElevation="0dp"
                 app:layout_constraintBottom_toBottomOf="parent"
                 app:layout_constraintStart_toStartOf="parent"
                 app:layout_constraintTop_toTopOf="parent">
@@ -2568,6 +2590,17 @@
                     android:scaleType="centerCrop" />
             </androidx.cardview.widget.CardView>
 
+            <!-- White ring around the thumbnail, as Google Camera -->
+            <View
+                android:id="@+id/viewThumbnailRing"
+                android:layout_width="52dp"
+                android:layout_height="52dp"
+                android:background="@drawable/bg_gc_ring"
+                android:elevation="1dp"
+                app:layout_constraintBottom_toBottomOf="@+id/cardGalleryThumbnail"
+                app:layout_constraintEnd_toEndOf="@+id/cardGalleryThumbnail"
+                app:layout_constraintStart_toStartOf="@+id/cardGalleryThumbnail"
+                app:layout_constraintTop_toTopOf="@+id/cardGalleryThumbnail" />
             <!-- Google Pixel HDR+ Processing Spinner Ring around Gallery Circle -->
             <ProgressBar
                 android:id="@+id/progressThumbnailSpin"
@@ -2584,10 +2617,11 @@
             <!-- THE ICONIC GOOGLE PIXEL SHUTTER BUTTON (Concentric white rings) -->
             <ImageView
                 android:id="@+id/btnShutter"
-                android:layout_width="86dp"
-                android:layout_height="86dp"
+                android:layout_width="102dp"
+                android:layout_height="102dp"
                 android:clickable="true"
                 android:focusable="true"
+                android:padding="13dp"
                 android:src="@drawable/bg_shutter_button"
                 app:layout_constraintBottom_toBottomOf="parent"
                 app:layout_constraintEnd_toEndOf="parent"
@@ -2637,7 +2671,7 @@
                 android:max="1000"
                 android:visibility="invisible"
                 app:indicatorColor="@color/pixel_accent_blue"
-                app:indicatorSize="88dp"
+                app:indicatorSize="82dp"
                 app:layout_constraintBottom_toBottomOf="@+id/btnShutter"
                 app:layout_constraintEnd_toEndOf="@+id/btnShutter"
                 app:layout_constraintStart_toStartOf="@+id/btnShutter"
@@ -2662,10 +2696,10 @@
             <!-- Camera Switcher (56dp circle with 180° rotation on tap) -->
             <ImageView
                 android:id="@+id/btnSwitchCamera"
-                android:layout_width="56dp"
-                android:layout_height="56dp"
-                android:layout_marginEnd="36dp"
-                android:background="@drawable/bg_camera_switch_circle"
+                android:layout_width="52dp"
+                android:layout_height="52dp"
+                android:layout_marginEnd="68dp"
+                android:background="@drawable/bg_gc_ring"
                 android:clickable="true"
                 android:focusable="true"
                 android:padding="14dp"
@@ -2681,8 +2715,8 @@
         <HorizontalScrollView
             android:id="@+id/modeCarousel"
             android:layout_width="match_parent"
-            android:layout_height="44dp"
-            android:layout_marginTop="2dp"
+            android:layout_height="50dp"
+            android:layout_marginTop="8dp"
             android:clipToPadding="false"
             android:overScrollMode="never"
             android:scrollbars="none">
@@ -2695,72 +2729,80 @@
                 android:orientation="horizontal">
 
                 <TextView
-                    android:id="@+id/modeLongExposure"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:paddingHorizontal="14dp"
-                    android:paddingVertical="7dp"
-                    android:text="Long Exposure"
-                    android:textColor="@color/pixel_text_white"
-                    android:textSize="13sp" />
-
-                <TextView
                     android:id="@+id/modePortrait"
                     android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:paddingHorizontal="14dp"
-                    android:paddingVertical="7dp"
+                    android:layout_height="36dp"
+                    android:gravity="center"
+                    android:paddingHorizontal="18dp"
                     android:text="@string/mode_portrait"
                     android:textColor="@color/pixel_text_white"
-                    android:textSize="13sp" />
-
-                <!-- Default Active Mode: Photo (Elongated Sand Pill) -->
+                    android:textSize="14sp" />
                 <TextView
                     android:id="@+id/modeCamera"
                     android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
+                    android:layout_height="36dp"
+                    android:gravity="center"
                     android:background="@drawable/bg_mode_pill_active"
-                    android:paddingHorizontal="20dp"
-                    android:paddingVertical="7dp"
+                    android:paddingHorizontal="18dp"
                     android:text="@string/mode_camera"
                     android:textColor="@color/pixel_accent_sand_text"
-                    android:textSize="13sp"
-                    android:textStyle="bold" />
-
+                    android:textSize="14sp" />
                 <TextView
                     android:id="@+id/modeNightSight"
                     android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:paddingHorizontal="14dp"
-                    android:paddingVertical="7dp"
+                    android:layout_height="36dp"
+                    android:gravity="center"
+                    android:paddingHorizontal="18dp"
                     android:text="@string/mode_night_sight"
                     android:textColor="@color/pixel_text_white"
-                    android:textSize="13sp" />
-
+                    android:textSize="14sp" />
                 <TextView
                     android:id="@+id/modePanorama"
                     android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:paddingHorizontal="14dp"
-                    android:paddingVertical="7dp"
+                    android:layout_height="36dp"
+                    android:gravity="center"
+                    android:paddingHorizontal="18dp"
                     android:text="Panorama"
                     android:textColor="@color/pixel_text_white"
-                    android:textSize="13sp" />
-
+                    android:textSize="14sp" />
+                <TextView
+                    android:id="@+id/modeLongExposure"
+                    android:layout_width="wrap_content"
+                    android:layout_height="36dp"
+                    android:gravity="center"
+                    android:paddingHorizontal="18dp"
+                    android:text="Long Exposure"
+                    android:textColor="@color/pixel_text_white"
+                    android:textSize="14sp" />
                 <TextView
                     android:id="@+id/modePro"
                     android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:paddingHorizontal="14dp"
-                    android:paddingVertical="7dp"
+                    android:layout_height="36dp"
+                    android:gravity="center"
+                    android:paddingHorizontal="18dp"
                     android:text="@string/mode_pro"
                     android:textColor="@color/pixel_text_white"
-                    android:textSize="13sp" />
-
+                    android:textSize="14sp"
+                    android:visibility="gone" />
                 <TextView
                     android:id="@+id/modeVideo"
                     android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
+                    android:layout_height="36dp"
+                    android:gravity="center"
+                    android:paddingHorizontal="18dp"
+                    android:text="Video"
+                    android:textColor="@color/pixel_text_white"
+                    android:textSize="14sp"
+                    android:visibility="gone" />
+                <TextView
+                    android:id="@+id/modeSlowMotion"
+                    android:layout_width="wrap_content"
+                    android:layout_height="36dp"
+                    android:gravity="center"
+                    android:paddingHorizontal="18dp"
+                    android:text="Slow Motion"
+                    android:textColor="@color/pixel_text_white"
+                    android:textSize="14sp"
                     android:visibility="gone" />
             </LinearLayout>
         </HorizontalScrollView>
@@ -2769,19 +2811,19 @@
         <androidx.constraintlayout.widget.ConstraintLayout
             android:id="@+id/bottomNavBar"
             android:layout_width="match_parent"
-            android:layout_height="52dp"
-            android:layout_marginTop="4dp">
+            android:layout_height="66dp"
+            android:layout_marginTop="6dp">
 
             <!-- Bottom Left: Circular Settings Gear Button -->
             <ImageView
                 android:id="@+id/btnBottomSettings"
                 android:layout_width="44dp"
                 android:layout_height="44dp"
-                android:layout_marginStart="24dp"
+                android:layout_marginStart="16dp"
                 android:background="@drawable/bg_settings_circle"
                 android:clickable="true"
                 android:focusable="true"
-                android:padding="11dp"
+                android:padding="10dp"
                 android:src="@drawable/ic_settings"
                 app:layout_constraintBottom_toBottomOf="parent"
                 app:layout_constraintStart_toStartOf="parent"
@@ -2791,12 +2833,11 @@
             <!-- Bottom Center: Material You Photo / Video Pill Toggle -->
             <LinearLayout
                 android:id="@+id/togglePhotoVideo"
-                android:layout_width="88dp"
-                android:layout_height="40dp"
+                android:layout_width="wrap_content"
+                android:layout_height="44dp"
                 android:background="@drawable/bg_photo_video_toggle"
                 android:gravity="center"
                 android:orientation="horizontal"
-                android:padding="3dp"
                 app:layout_constraintBottom_toBottomOf="parent"
                 app:layout_constraintEnd_toEndOf="parent"
                 app:layout_constraintStart_toStartOf="parent"
@@ -2805,37 +2846,55 @@
                 <!-- Camera Mode Tab -->
                 <ImageView
                     android:id="@+id/btnToggleCamera"
-                    android:layout_width="40dp"
-                    android:layout_height="match_parent"
+                    android:layout_width="44dp"
+                    android:layout_height="44dp"
                     android:background="@drawable/bg_toggle_item_active"
                     android:clickable="true"
                     android:focusable="true"
-                    android:padding="7dp"
+                    android:padding="12dp"
                     android:src="@drawable/ic_camera"
                     app:tint="@color/pixel_icon_active" />
 
                 <!-- Video Mode Tab -->
                 <ImageView
                     android:id="@+id/btnToggleVideo"
-                    android:layout_width="40dp"
-                    android:layout_height="match_parent"
+                    android:layout_width="44dp"
+                    android:layout_height="44dp"
+                    android:layout_marginStart="3dp"
                     android:clickable="true"
                     android:focusable="true"
-                    android:padding="7dp"
+                    android:padding="12dp"
                     android:src="@drawable/ic_videocam"
                     app:tint="@color/pixel_text_white" />
             </LinearLayout>
 
+            <!-- Bottom right, Night Sight and Slow Motion: a chip in place of the sliders button -->
+            <TextView
+                android:id="@+id/chipBottomRight"
+                android:layout_width="wrap_content"
+                android:layout_height="44dp"
+                android:layout_marginEnd="16dp"
+                android:background="@drawable/bg_photo_video_toggle"
+                android:drawablePadding="4dp"
+                android:gravity="center"
+                android:minWidth="44dp"
+                android:paddingHorizontal="12dp"
+                android:textColor="@color/gc_icon"
+                android:textSize="13sp"
+                android:visibility="gone"
+                app:layout_constraintBottom_toBottomOf="parent"
+                app:layout_constraintEnd_toEndOf="parent"
+                app:layout_constraintTop_toTopOf="parent" />
             <!-- Bottom Right: Circular Pro Controls Button (ic_tune) -->
             <ImageView
                 android:id="@+id/btnProControls"
                 android:layout_width="44dp"
                 android:layout_height="44dp"
-                android:layout_marginEnd="24dp"
+                android:layout_marginEnd="16dp"
                 android:background="@drawable/bg_settings_circle"
                 android:clickable="true"
                 android:focusable="true"
-                android:padding="11dp"
+                android:padding="10dp"
                 android:src="@drawable/ic_tune"
                 app:layout_constraintBottom_toBottomOf="parent"
                 app:layout_constraintEnd_toEndOf="parent"
