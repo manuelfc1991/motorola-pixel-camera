@@ -410,14 +410,13 @@ class MainActivity : AppCompatActivity() {
         selectProTab(ProTab.ISO)
         binding.tvSensorInfo.text = MAIN_SENSOR_LABEL
         setGridType(gridMode)
-        // Rows for features this phone cannot deliver through the public camera API:
-        // 108 MP output (driver tops out at 12 MP) and manual lens selection.
-        (binding.btnQsRes12.parent.parent as View).visibility = View.GONE
+        // Manual lens selection is not available through the camera API on this phone.
         (binding.btnQsLensAuto.parent.parent as View).visibility = View.GONE
     }
 
     private fun syncSettings() {
         cameraManager.isRawEnabled = prefs.getBoolean(SettingsActivity.KEY_RAW_ENABLED, false)
+        cameraManager.fullResFront = prefs.getBoolean(SettingsActivity.KEY_FRONT_FULL_RES, false)
         hdrMode = prefs.getInt(SettingsActivity.KEY_HDR_MODE, 0).coerceIn(0, 2)
         cameraManager.hdrPlusMode = hdrMode
         cameraManager.shutterSoundEnabled = prefs.getBoolean(SettingsActivity.KEY_CAMERA_SOUNDS, true)
@@ -518,6 +517,14 @@ class MainActivity : AppCompatActivity() {
         binding.tvQsRawSubtitle.text = if (isRaw) "RAW (DNG) + JPEG • Photo and Pro" else "JPEG only"
         setQsButtonActive(binding.btnQsRawOff, !isRaw)
         setQsButtonActive(binding.btnQsRawOn, isRaw)
+
+        // Selfie resolution row: only the front sensor can leave pixel binning on this phone.
+        val fullRes = cameraManager.fullResFront
+        (binding.btnQsRes12.parent.parent as View).visibility =
+            if (cameraManager.isFrontCamera() && cameraManager.isFullResSupported()) View.VISIBLE else View.GONE
+        binding.tvQsResSubtitle.text = if (fullRes) "32 MP • Photo mode, in good light" else "8 MP"
+        setQsTextButtonActive(binding.btnQsRes12, !fullRes)
+        setQsTextButtonActive(binding.btnQsRes108, fullRes)
 
         // 3. Top Shot row
         when (hdrMode) {
@@ -982,6 +989,8 @@ class MainActivity : AppCompatActivity() {
         }
 
         // Quick Settings (Pro tab): RAW + JPEG
+        binding.btnQsRes12.setOnClickListener { setFrontFullRes(false) }
+        binding.btnQsRes108.setOnClickListener { setFrontFullRes(true) }
         binding.btnQsRawOff.setOnClickListener { setQuickRaw(false) }
         binding.btnQsRawOn.setOnClickListener { setQuickRaw(true) }
 
@@ -1668,7 +1677,7 @@ class MainActivity : AppCompatActivity() {
         cameraManager.switchCamera()
         val isFront = cameraManager.isFrontCamera()
         updateZoomPillVisibility()
-        binding.tvSensorInfo.text = if (isFront) FRONT_SENSOR_LABEL else MAIN_SENSOR_LABEL
+        updateSensorLabel()
         if (!isFront) {
             selectZoomPill(binding.btnZoom1x)
         }
@@ -1860,6 +1869,24 @@ class MainActivity : AppCompatActivity() {
             }
         } catch (e: Exception) {
             binding.tvStorageInfo.text = "Storage OK"
+        }
+    }
+
+    private fun setFrontFullRes(enabled: Boolean) {
+        if (isModeChangeBlocked()) return
+        cameraManager.fullResFront = enabled
+        prefs.edit().putBoolean(SettingsActivity.KEY_FRONT_FULL_RES, enabled).apply()
+        updateQuickSettingsUi()
+        updateSensorLabel()
+        if (enabled) showHint("32 MP selfies in good light · 8 MP when it is dim")
+    }
+
+    /** Sensor chip for the plain 1x view of whichever camera is active. */
+    private fun updateSensorLabel() {
+        binding.tvSensorInfo.text = when {
+            !cameraManager.isFrontCamera() -> MAIN_SENSOR_LABEL
+            cameraManager.isFullResActive(currentMode) -> "32MP FRONT"
+            else -> FRONT_SENSOR_LABEL
         }
     }
 
@@ -2109,6 +2136,7 @@ class MainActivity : AppCompatActivity() {
         // Update Tier 3 Toggle Pill
         updatePhotoVideoToggle(isVideo = (mode == CameraMode.VIDEO))
 
+        if (cameraManager.isFrontCamera()) updateSensorLabel()
         // Update Pixel Shutter color per mode
         when (mode) {
             CameraMode.NIGHT_SIGHT, CameraMode.LONG_EXPOSURE -> binding.btnShutter.setImageResource(R.drawable.bg_shutter_night)
