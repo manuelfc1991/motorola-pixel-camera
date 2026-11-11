@@ -1,16 +1,16 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Recording: white ring with a red stop square. -->
+<!-- Recording, as Google Camera: white ring filled red, a white stop square. -->
 <layer-list xmlns:android="http://schemas.android.com/apk/res/android">
     <item>
         <shape android:shape="oval">
+            <solid android:color="#CC584F" />
             <stroke android:width="3.2dp" android:color="#FFFFFF" />
-            <solid android:color="@android:color/transparent" />
         </shape>
     </item>
-    <item android:bottom="26dp" android:left="26dp" android:right="26dp" android:top="26dp">
+    <item android:bottom="28dp" android:left="28dp" android:right="28dp" android:top="28dp">
         <shape android:shape="rectangle">
-            <solid android:color="#F2564B" />
-            <corners android:radius="4dp" />
+            <solid android:color="#FFFFFF" />
+            <corners android:radius="3dp" />
         </shape>
     </item>
 </layer-list>

@@ -250,40 +250,36 @@
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toTopOf="parent" />
 
-    <!-- Video Recording Indicator Banner -->
+    <!-- Recording time, as Google Camera: a red pill where the mode row was. -->
     <LinearLayout
         android:id="@+id/videoRecordingBanner"
         android:layout_width="wrap_content"
-        android:layout_height="34dp"
-        android:layout_marginTop="8dp"
-        android:background="@drawable/bg_pill_container"
-        android:backgroundTint="#D9181A1D"
+        android:layout_height="30dp"
+        android:layout_marginTop="@dimen/gc_rec_pill_top"
+        android:background="@drawable/bg_gc_rec_pill"
         android:elevation="10dp"
-        android:gravity="center_vertical"
+        android:gravity="center"
         android:orientation="horizontal"
-        android:paddingHorizontal="14dp"
+        android:paddingHorizontal="12dp"
         android:visibility="gone"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@+id/topBar"
+        app:layout_constraintTop_toTopOf="parent"
         tools:visibility="visible">
 
         <View
             android:id="@+id/viewRecordingDot"
-            android:layout_width="10dp"
-            android:layout_height="10dp"
-            android:background="@drawable/bg_pill_container"
-            android:backgroundTint="@color/pixel_shutter_video" />
+            android:layout_width="0dp"
+            android:layout_height="0dp"
+            android:visibility="gone" />
 
         <TextView
             android:id="@+id/tvVideoTimer"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_marginStart="8dp"
-            android:fontFamily="sans-serif-medium"
             android:text="00:00"
-            android:textColor="@color/pixel_text_white"
-            android:textSize="13sp" />
+            android:textColor="@android:color/white"
+            android:textSize="14sp" />
 
         <!-- Real-time Directional Audio Zoom Indicator -->
         <TextView
@@ -299,6 +295,7 @@
             android:paddingHorizontal="8dp"
             android:paddingVertical="2dp"
             android:text="AUDIO ZOOM 1.0×"
+            android:tag="hidden-while-recording"
             android:textColor="@color/pixel_accent_cyan"
             android:textSize="11sp"
             android:textStyle="bold"
@@ -2903,14 +2900,12 @@
 
             <ImageView
                 android:id="@+id/btnVideoSnapshot"
-                android:layout_width="56dp"
-                android:layout_height="56dp"
-                android:background="@drawable/bg_camera_switch_circle"
+                android:layout_width="52dp"
+                android:layout_height="52dp"
+                android:background="@drawable/bg_gc_snapshot"
                 android:clickable="true"
                 android:contentDescription="Take a photo while recording"
                 android:focusable="true"
-                android:padding="14dp"
-                android:src="@drawable/ic_camera"
                 android:visibility="gone"
                 app:layout_constraintBottom_toBottomOf="@+id/btnSwitchCamera"
                 app:layout_constraintEnd_toEndOf="@+id/btnSwitchCamera"
