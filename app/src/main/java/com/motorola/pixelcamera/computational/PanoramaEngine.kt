@@ -91,6 +91,9 @@ class PanoramaEngine(private val context: Context) : SensorEventListener {
 
     override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {}
 
+    /** Which way the sweep goes: 1 right, -1 left, 0 not yet clear. */
+    val direction: Int get() = when { yaw > 3f -> 1; yaw < -3f -> -1; else -> 0 }
+
     private fun progressPercent(): Int {
         if (stitcher?.isFull == true) return 100
         return ((currentSweptDegrees / maxSweptDegrees) * 100).toInt().coerceIn(0, 100)

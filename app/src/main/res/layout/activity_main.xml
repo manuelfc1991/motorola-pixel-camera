@@ -8,18 +8,17 @@
     android:layout_height="match_parent"
     android:background="@color/pixel_black">
 
-    <!-- ROUNDED VIEWFINDER FRAME (Signature Google Pixel Rounded Viewfinder) -->
+    <!-- Viewfinder: starts 71dp from the top, 4:3 (9:16 for 16:9 and video),
+         square corners, as Google Camera. -->
     <androidx.cardview.widget.CardView
         android:id="@+id/viewFinderCard"
         android:layout_width="0dp"
         android:layout_height="0dp"
-        android:layout_marginHorizontal="4dp"
-        android:layout_marginTop="4dp"
-        android:layout_marginBottom="6dp"
+        android:layout_marginTop="@dimen/gc_preview_top"
         app:cardBackgroundColor="@color/pixel_black"
-        app:cardCornerRadius="28dp"
+        app:cardCornerRadius="0dp"
         app:cardElevation="0dp"
-        app:layout_constraintBottom_toTopOf="@+id/bottomDeck"
+        app:layout_constraintDimensionRatio="3:4"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toTopOf="parent">
@@ -137,6 +136,7 @@
         android:id="@+id/topBar"
         android:layout_width="match_parent"
         android:layout_height="48dp"
+        android:visibility="invisible"
         android:gravity="center_vertical"
         android:orientation="horizontal"
         android:paddingHorizontal="16dp"
@@ -231,6 +231,24 @@
             android:src="@drawable/ic_flash_off"
             app:tint="@color/pixel_text_secondary" />
     </LinearLayout>
+
+    <!-- Top-left mini badge, as Google Camera's minibar: the video format in Video. -->
+    <TextView
+        android:id="@+id/tvMiniBadge"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="19dp"
+        android:layout_marginTop="39dp"
+        android:background="@drawable/bg_mini_badge"
+        android:paddingHorizontal="3dp"
+        android:paddingVertical="1dp"
+        android:text="FHD"
+        android:textColor="#000000"
+        android:textSize="8sp"
+        android:textStyle="bold"
+        android:visibility="gone"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent" />
 
     <!-- Video Recording Indicator Banner -->
     <LinearLayout
@@ -382,7 +400,8 @@
             android:shadowColor="#80000000"
             android:shadowDx="1"
             android:shadowDy="1"
-            android:shadowRadius="2" />
+            android:shadowRadius="2" 
+            android:visibility="gone"/>
     </FrameLayout>
 
     <!-- Real-time RGB Histogram Overlay -->
@@ -631,99 +650,96 @@
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent" />
 
-    <!-- PANORAMA MODE GUIDANCE OVERLAY -->
+    <!-- Panorama, as Google Camera: the picture only in a band between two thin white lines,
+         black above and below, an arrow each side. While sweeping, the arrow you follow stays
+         and the stitched strip fills the band's foot; messages appear in the chip at the top. -->
     <androidx.constraintlayout.widget.ConstraintLayout
         android:id="@+id/overlayPanoramaGuide"
         android:layout_width="0dp"
         android:layout_height="0dp"
-        android:elevation="7dp"
         android:visibility="gone"
-        app:layout_constraintBottom_toBottomOf="@+id/viewFinderCard"
-        app:layout_constraintEnd_toEndOf="@+id/viewFinderCard"
-        app:layout_constraintStart_toStartOf="@+id/viewFinderCard"
-        app:layout_constraintTop_toTopOf="@+id/viewFinderCard">
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent">
 
-        <!-- Center Horizontal Alignment Tracking Line -->
         <View
-            android:id="@+id/linePanoramaHorizon"
+            android:id="@+id/panoMaskTop"
             android:layout_width="0dp"
-            android:layout_height="2dp"
-            android:background="#66FFFFFF"
-            app:layout_constraintBottom_toBottomOf="parent"
+            android:layout_height="@dimen/gc_pano_band_top"
+            android:background="@android:color/black"
             app:layout_constraintEnd_toEndOf="parent"
             app:layout_constraintStart_toStartOf="parent"
             app:layout_constraintTop_toTopOf="parent" />
 
-        <!-- Target Center Circle Reticle -->
         <View
-            android:id="@+id/reticlePanoramaCenter"
-            android:layout_width="16dp"
-            android:layout_height="16dp"
-            android:background="@drawable/bg_pill_container"
-            android:backgroundTint="@color/pixel_accent_yellow"
-            app:layout_constraintBottom_toBottomOf="parent"
+            android:id="@+id/panoLineTop"
+            android:layout_width="0dp"
+            android:layout_height="1dp"
+            android:background="@android:color/white"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toBottomOf="@+id/panoMaskTop" />
+
+        <View
+            android:id="@+id/panoLineBottom"
+            android:layout_width="0dp"
+            android:layout_height="1dp"
+            android:layout_marginTop="@dimen/gc_pano_band_bottom"
+            android:background="@android:color/white"
             app:layout_constraintEnd_toEndOf="parent"
             app:layout_constraintStart_toStartOf="parent"
             app:layout_constraintTop_toTopOf="parent" />
 
-        <!-- Directional Pan Arrow -->
+        <View
+            android:layout_width="0dp"
+            android:layout_height="0dp"
+            android:background="@android:color/black"
+            app:layout_constraintBottom_toTopOf="@+id/panoDeckTop"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toBottomOf="@+id/panoLineBottom" />
+
+        <Space
+            android:id="@+id/panoDeckTop"
+            android:layout_width="0dp"
+            android:layout_height="0dp"
+            android:layout_marginTop="@dimen/gc_deck_top"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toTopOf="parent" />
+
+        <ImageView
+            android:id="@+id/ivPanoramaArrowLeft"
+            android:layout_width="36dp"
+            android:layout_height="36dp"
+            android:layout_marginStart="54dp"
+            android:rotation="180"
+            android:src="@drawable/ic_panorama_arrow"
+            app:layout_constraintBottom_toTopOf="@+id/panoLineBottom"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toBottomOf="@+id/panoLineTop"
+            app:tint="@android:color/white" />
+
         <ImageView
             android:id="@+id/ivPanoramaArrow"
-            android:layout_width="32dp"
-            android:layout_height="32dp"
-            android:layout_marginStart="24dp"
+            android:layout_width="36dp"
+            android:layout_height="36dp"
+            android:layout_marginEnd="54dp"
             android:src="@drawable/ic_panorama_arrow"
-            app:layout_constraintBottom_toBottomOf="parent"
-            app:layout_constraintStart_toEndOf="@+id/reticlePanoramaCenter"
-            app:layout_constraintTop_toTopOf="parent"
-            app:tint="@color/pixel_accent_cyan" />
-
-        <!-- Prompt Text Pill -->
-        <TextView
-            android:id="@+id/tvPanoramaPrompt"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginBottom="24dp"
-            android:background="@drawable/bg_pill_container"
-            android:backgroundTint="#CC181A1D"
-            android:paddingHorizontal="16dp"
-            android:paddingVertical="6dp"
-            android:text="Pan steadily along the line"
-            android:textColor="@color/pixel_text_white"
-            android:textSize="13sp"
-            android:textStyle="bold"
-            app:layout_constraintBottom_toTopOf="@+id/linePanoramaHorizon"
+            app:layout_constraintBottom_toTopOf="@+id/panoLineBottom"
             app:layout_constraintEnd_toEndOf="parent"
-            app:layout_constraintStart_toStartOf="parent" />
+            app:layout_constraintTop_toBottomOf="@+id/panoLineTop"
+            app:tint="@android:color/white" />
 
-        <!-- Sweep Angle & Progress Badge -->
-        <TextView
-            android:id="@+id/tvPanoramaAngle"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="20dp"
-            android:background="@drawable/bg_pill_container"
-            android:backgroundTint="#CC181A1D"
-            android:paddingHorizontal="14dp"
-            android:paddingVertical="4dp"
-            android:text="0° / 180°"
-            android:textColor="@color/pixel_accent_yellow"
-            android:textSize="12sp"
-            android:textStyle="bold"
-            app:layout_constraintEnd_toEndOf="parent"
-            app:layout_constraintStart_toStartOf="parent"
-            app:layout_constraintTop_toBottomOf="@+id/linePanoramaHorizon" />
-
-        <!-- Bottom Live Panoramic Preview Strip & Progress Bar -->
+        <!-- The stitched picture so far, along the band's foot while sweeping. -->
         <FrameLayout
+            android:id="@+id/panoStripFrame"
             android:layout_width="0dp"
-            android:layout_height="44dp"
-            android:layout_marginHorizontal="24dp"
-            android:layout_marginBottom="16dp"
-            android:background="@drawable/bg_pill_container"
-            android:backgroundTint="#DD121316"
-            android:padding="3dp"
-            app:layout_constraintBottom_toBottomOf="parent"
+            android:layout_height="64dp"
+            android:layout_marginHorizontal="16dp"
+            android:layout_marginBottom="12dp"
+            android:visibility="gone"
+            app:layout_constraintBottom_toTopOf="@+id/panoLineBottom"
             app:layout_constraintEnd_toEndOf="parent"
             app:layout_constraintStart_toStartOf="parent">
 
@@ -731,144 +747,414 @@
                 android:id="@+id/ivPanoramaStrip"
                 android:layout_width="match_parent"
                 android:layout_height="match_parent"
-                android:scaleType="fitCenter" />
+                android:scaleType="fitStart" />
 
             <ProgressBar
                 android:id="@+id/pbPanoramaProgress"
                 style="?android:attr/progressBarStyleHorizontal"
                 android:layout_width="match_parent"
-                android:layout_height="4dp"
+                android:layout_height="3dp"
                 android:layout_gravity="bottom"
                 android:max="100"
-                android:progress="0"
-                android:progressTint="@color/pixel_accent_yellow" />
+                android:progressTint="@color/gc_mode_pill" />
         </FrameLayout>
+
+        <!-- Google Camera's message chip: dark, full width, a magenta dot. -->
+        <TextView
+            android:id="@+id/tvPanoramaPrompt"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginHorizontal="16dp"
+            android:layout_marginTop="83dp"
+            android:background="@drawable/bg_gc_chip"
+            android:drawableStart="@drawable/ic_magenta_dot"
+            android:drawablePadding="12dp"
+            android:gravity="center"
+            android:minHeight="56dp"
+            android:paddingHorizontal="20dp"
+            android:paddingVertical="12dp"
+            android:textColor="@color/gc_icon"
+            android:textSize="14sp"
+            android:visibility="gone"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toTopOf="parent" />
+
+        <TextView
+            android:id="@+id/tvPanoramaAngle"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:visibility="gone"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toTopOf="parent" />
     </androidx.constraintlayout.widget.ConstraintLayout>
 
-    <!-- Pro Manual Controls Drawer (Shutter, ISO, Focus, WB, EV) -->
+    <!-- Manual controls, as Google Camera: the current values across the top of the frame,
+         a ruler slider where the zoom rows sit, and round buttons in place of the mode row. -->
+    <LinearLayout
+        android:id="@+id/proInfoRow"
+        android:layout_width="wrap_content"
+        android:layout_height="40dp"
+        android:layout_marginTop="66dp"
+        android:elevation="6dp"
+        android:gravity="center"
+        android:orientation="horizontal"
+        android:visibility="gone"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent">
+
+        <TextView
+            android:id="@+id/tvProInfoFocus"
+            android:layout_width="wrap_content"
+            android:layout_height="match_parent"
+            android:layout_marginHorizontal="12dp"
+            android:clickable="true"
+            android:focusable="true"
+            android:gravity="center"
+            android:maxLines="1"
+            android:text="Auto focus"
+            android:textColor="@color/gc_icon"
+            android:textSize="14sp" />
+
+        <TextView
+            android:id="@+id/tvProInfoShutter"
+            android:layout_width="wrap_content"
+            android:layout_height="match_parent"
+            android:layout_marginHorizontal="12dp"
+            android:clickable="true"
+            android:focusable="true"
+            android:gravity="center"
+            android:maxLines="1"
+            android:text="Ⓐ 1/60s"
+            android:textColor="@color/gc_icon"
+            android:textSize="14sp" />
+
+        <TextView
+            android:id="@+id/tvProInfoIso"
+            android:layout_width="wrap_content"
+            android:layout_height="match_parent"
+            android:layout_marginHorizontal="12dp"
+            android:clickable="true"
+            android:focusable="true"
+            android:gravity="center"
+            android:maxLines="1"
+            android:text="Ⓐ ISO 100"
+            android:textColor="@color/gc_icon"
+            android:textSize="14sp" />
+
+        <TextView
+            android:id="@+id/tvProInfoWb"
+            android:layout_width="wrap_content"
+            android:layout_height="match_parent"
+            android:layout_marginHorizontal="12dp"
+            android:clickable="true"
+            android:focusable="true"
+            android:gravity="center"
+            android:maxLines="1"
+            android:text="Auto WB"
+            android:textColor="@color/gc_icon"
+            android:textSize="14sp" />
+
+        <TextView
+            android:id="@+id/tvProInfoEv"
+            android:layout_width="wrap_content"
+            android:layout_height="match_parent"
+            android:layout_marginHorizontal="12dp"
+            android:clickable="true"
+            android:focusable="true"
+            android:gravity="center"
+            android:maxLines="1"
+            android:text="±0"
+            android:textColor="@color/gc_icon"
+            android:textSize="14sp" />
+
+    </LinearLayout>
+
+    <LinearLayout
+        android:id="@+id/proSliderRow"
+        android:layout_width="wrap_content"
+        android:layout_height="48dp"
+        android:layout_marginStart="15dp"
+        android:layout_marginTop="@dimen/gc_pro_slider_top"
+        android:elevation="6dp"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:visibility="gone"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent">
+
+        <!-- Auto for the control being set; blue while it is automatic. -->
+        <TextView
+            android:id="@+id/btnProReset"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:background="@drawable/bg_gc_pro_btn"
+            android:clickable="true"
+            android:focusable="true"
+            android:gravity="center"
+            android:text="A"
+            android:textColor="@color/gc_icon"
+            android:textSize="18sp"
+            android:textStyle="bold" />
+
+        <LinearLayout
+            android:layout_width="276dp"
+            android:layout_height="48dp"
+            android:layout_marginStart="15dp"
+            android:background="@drawable/bg_gc_pill"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:paddingHorizontal="6dp">
+
+            <TextView
+                android:id="@+id/tvRulerMin"
+                android:layout_width="40dp"
+                android:layout_height="40dp"
+                android:clickable="true"
+                android:focusable="true"
+                android:gravity="center"
+                android:maxLines="1"
+                android:textColor="@color/gc_toggle_active"
+                android:textSize="11sp" />
+
+            <com.motorola.pixelcamera.ui.RulerSliderView
+                android:id="@+id/sbProSlider"
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_weight="1" />
+
+            <TextView
+                android:id="@+id/tvRulerMax"
+                android:layout_width="40dp"
+                android:layout_height="40dp"
+                android:clickable="true"
+                android:focusable="true"
+                android:gravity="center"
+                android:maxLines="1"
+                android:textColor="@color/gc_toggle_active"
+                android:textSize="11sp" />
+        </LinearLayout>
+    </LinearLayout>
+
     <LinearLayout
         android:id="@+id/proControlPanel"
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginBottom="4dp"
-        android:background="#E6121417"
+        android:layout_height="0dp"
+        android:layout_marginTop="@dimen/gc_pro_bar_top"
+        android:background="@android:color/black"
+        android:clickable="true"
         android:elevation="6dp"
         android:orientation="vertical"
-        android:paddingHorizontal="16dp"
-        android:paddingVertical="10dp"
         android:visibility="gone"
-        app:layout_constraintBottom_toTopOf="@+id/zoomPillContainer">
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintTop_toTopOf="parent">
 
-        <!-- Active Control Row: Value Label + Slider + Reset Button -->
-        <LinearLayout
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="2dp"
+            android:background="#333333" />
+
+        <!-- Tap or drag down to close, as Google Camera. -->
+        <FrameLayout
+            android:id="@+id/proPanelHandle"
+            android:layout_width="match_parent"
+            android:layout_height="34dp">
+
+            <View
+                android:layout_width="36dp"
+                android:layout_height="4dp"
+                android:layout_gravity="center_horizontal"
+                android:layout_marginTop="14dp"
+                android:background="@drawable/bg_gc_handle" />
+        </FrameLayout>
+
+        <HorizontalScrollView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:gravity="center_vertical"
-            android:orientation="horizontal">
+            android:scrollbars="none">
 
-            <TextView
-                android:id="@+id/tvProParamValue"
-                android:layout_width="95dp"
-                android:layout_height="wrap_content"
-                android:text="ISO AUTO"
-                android:textColor="@color/pixel_accent_cyan"
-                android:textSize="13sp"
-                android:textStyle="bold" />
-
-            <SeekBar
-                android:id="@+id/sbProSlider"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:max="8"
-                android:progress="0"
-                android:progressTint="@color/pixel_accent_cyan"
-                android:thumbTint="@color/pixel_accent_cyan" />
-
-            <TextView
-                android:id="@+id/btnProReset"
+            <LinearLayout
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_marginStart="8dp"
-                android:background="@drawable/bg_pill_container"
-                android:backgroundTint="#33FFFFFF"
-                android:paddingHorizontal="8dp"
-                android:paddingVertical="4dp"
-                android:text="AUTO"
-                android:textColor="@color/pixel_text_white"
-                android:textSize="11sp"
-                android:textStyle="bold" />
-        </LinearLayout>
+                android:orientation="horizontal">
 
-        <!-- Parameter Tabs Selector: [ ISO | S | FOCUS | WB | EV ] -->
-        <LinearLayout
-            android:id="@+id/layoutProTabs"
-            android:layout_width="match_parent"
-            android:layout_height="32dp"
-            android:layout_marginTop="8dp"
-            android:gravity="center"
-            android:orientation="horizontal">
+                <LinearLayout
+                    android:id="@+id/btnProResetAll"
+                    android:layout_width="88dp"
+                    android:layout_height="wrap_content"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:gravity="center_horizontal"
+                    android:orientation="vertical">
 
-            <TextView
-                android:id="@+id/tabProIso"
-                android:layout_width="0dp"
-                android:layout_height="match_parent"
-                android:layout_weight="1"
-                android:background="@drawable/bg_zoom_pill_active"
-                android:gravity="center"
-                android:text="ISO"
-                android:textColor="@color/pixel_pill_text_active"
-                android:textSize="11sp"
-                android:textStyle="bold" />
+                    <ImageView
+                        android:id="@+id/icProResetAll"
+                        android:layout_width="56dp"
+                        android:layout_height="56dp"
+                        android:background="@drawable/bg_gc_pro_circle"
+                        android:padding="16dp"
+                        android:src="@drawable/ic_pro_reset"
+                        app:tint="@color/gc_icon" />
 
-            <TextView
-                android:id="@+id/tabProShutter"
-                android:layout_width="0dp"
-                android:layout_height="match_parent"
-                android:layout_marginStart="4dp"
-                android:layout_weight="1"
-                android:gravity="center"
-                android:text="S"
-                android:textColor="@color/pixel_text_secondary"
-                android:textSize="11sp"
-                android:textStyle="bold" />
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="8dp"
+                        android:maxLines="1"
+                        android:text="Reset all"
+                        android:textColor="@color/gc_qs_icon"
+                        android:textSize="13sp" />
+                </LinearLayout>
 
-            <TextView
-                android:id="@+id/tabProFocus"
-                android:layout_width="0dp"
-                android:layout_height="match_parent"
-                android:layout_marginStart="4dp"
-                android:layout_weight="1"
-                android:gravity="center"
-                android:text="FOCUS"
-                android:textColor="@color/pixel_text_secondary"
-                android:textSize="11sp"
-                android:textStyle="bold" />
+                <View
+                    android:layout_width="2dp"
+                    android:layout_height="28dp"
+                    android:layout_marginTop="14dp"
+                    android:background="#5C5F5E" />
 
-            <TextView
-                android:id="@+id/tabProWb"
-                android:layout_width="0dp"
-                android:layout_height="match_parent"
-                android:layout_marginStart="4dp"
-                android:layout_weight="1"
-                android:gravity="center"
-                android:text="WB"
-                android:textColor="@color/pixel_text_secondary"
-                android:textSize="11sp"
-                android:textStyle="bold" />
+                <LinearLayout
+                    android:id="@+id/tabProFocus"
+                    android:layout_width="88dp"
+                    android:layout_height="wrap_content"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:gravity="center_horizontal"
+                    android:orientation="vertical">
 
-            <TextView
-                android:id="@+id/tabProEv"
-                android:layout_width="0dp"
-                android:layout_height="match_parent"
-                android:layout_marginStart="4dp"
-                android:layout_weight="1"
-                android:gravity="center"
-                android:text="EV"
-                android:textColor="@color/pixel_text_secondary"
-                android:textSize="11sp"
-                android:textStyle="bold" />
-        </LinearLayout>
+                    <ImageView
+                        android:id="@+id/icProFocus"
+                        android:layout_width="56dp"
+                        android:layout_height="56dp"
+                        android:background="@drawable/bg_gc_pro_circle"
+                        android:padding="16dp"
+                        android:src="@drawable/ic_pro_focus"
+                        app:tint="@color/gc_icon" />
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="8dp"
+                        android:maxLines="1"
+                        android:text="Focus"
+                        android:textColor="@color/gc_qs_icon"
+                        android:textSize="13sp" />
+                </LinearLayout>
+
+                <LinearLayout
+                    android:id="@+id/tabProShutter"
+                    android:layout_width="88dp"
+                    android:layout_height="wrap_content"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:gravity="center_horizontal"
+                    android:orientation="vertical">
+
+                    <ImageView
+                        android:id="@+id/icProShutter"
+                        android:layout_width="56dp"
+                        android:layout_height="56dp"
+                        android:background="@drawable/bg_gc_pro_circle"
+                        android:padding="16dp"
+                        android:src="@drawable/ic_pro_shutter"
+                        app:tint="@color/gc_icon" />
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="8dp"
+                        android:maxLines="1"
+                        android:text="Shutter speed"
+                        android:textColor="@color/gc_qs_icon"
+                        android:textSize="13sp" />
+                </LinearLayout>
+
+                <LinearLayout
+                    android:id="@+id/tabProIso"
+                    android:layout_width="88dp"
+                    android:layout_height="wrap_content"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:gravity="center_horizontal"
+                    android:orientation="vertical">
+
+                    <ImageView
+                        android:id="@+id/icProIso"
+                        android:layout_width="56dp"
+                        android:layout_height="56dp"
+                        android:background="@drawable/bg_gc_pro_circle"
+                        android:padding="16dp"
+                        android:src="@drawable/ic_pro_iso"
+                        app:tint="@color/gc_icon" />
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="8dp"
+                        android:maxLines="1"
+                        android:text="ISO"
+                        android:textColor="@color/gc_qs_icon"
+                        android:textSize="13sp" />
+                </LinearLayout>
+
+                <LinearLayout
+                    android:id="@+id/tabProWb"
+                    android:layout_width="88dp"
+                    android:layout_height="wrap_content"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:gravity="center_horizontal"
+                    android:orientation="vertical">
+
+                    <ImageView
+                        android:id="@+id/icProWb"
+                        android:layout_width="56dp"
+                        android:layout_height="56dp"
+                        android:background="@drawable/bg_gc_pro_circle"
+                        android:padding="16dp"
+                        android:src="@drawable/ic_pro_wb"
+                        app:tint="@color/gc_icon" />
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="8dp"
+                        android:maxLines="1"
+                        android:text="White balance"
+                        android:textColor="@color/gc_qs_icon"
+                        android:textSize="13sp" />
+                </LinearLayout>
+
+                <LinearLayout
+                    android:id="@+id/tabProEv"
+                    android:layout_width="88dp"
+                    android:layout_height="wrap_content"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:gravity="center_horizontal"
+                    android:orientation="vertical">
+
+                    <ImageView
+                        android:id="@+id/icProEv"
+                        android:layout_width="56dp"
+                        android:layout_height="56dp"
+                        android:background="@drawable/bg_gc_pro_circle"
+                        android:padding="16dp"
+                        android:src="@drawable/ic_exposure_sun"
+                        app:tint="@color/gc_icon" />
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="8dp"
+                        android:maxLines="1"
+                        android:text="Brightness"
+                        android:textColor="@color/gc_qs_icon"
+                        android:textSize="13sp" />
+                </LinearLayout>
+
+            </LinearLayout>
+        </HorizontalScrollView>
     </LinearLayout>
 
     <!-- MGC 9.7 DUAL ZOOM SELECTOR (Physical Lenses Upper Row + Multiplier Lower Pill) -->
@@ -876,10 +1162,10 @@
         android:id="@+id/zoomPillContainer"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:layout_marginBottom="12dp"
+        android:layout_marginTop="@dimen/gc_zoom_top"
         android:gravity="center"
         android:orientation="vertical"
-        app:layout_constraintBottom_toBottomOf="@+id/viewFinderCard"
+        app:layout_constraintTop_toTopOf="parent"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent">
 
@@ -887,44 +1173,46 @@
         <LinearLayout
             android:id="@+id/layoutLensToggles"
             android:layout_width="wrap_content"
-            android:layout_height="32dp"
-            android:layout_marginBottom="4dp"
-            android:background="@drawable/bg_pill_container"
-            android:backgroundTint="#73202124"
+            android:layout_height="36dp"
+            android:layout_marginBottom="12dp"
+            android:background="@drawable/bg_gc_zoom_row"
             android:elevation="6dp"
             android:gravity="center"
             android:orientation="horizontal"
-            android:paddingHorizontal="4dp">
+            android:paddingHorizontal="2dp">
 
             <TextView
                 android:id="@+id/btnZoomUltrawide"
-                android:layout_width="34dp"
-                android:layout_height="28dp"
+                android:layout_width="32dp"
+                android:layout_height="32dp"
+                android:layout_marginHorizontal="3dp"
                 android:gravity="center"
                 android:text="0.6"
                 android:textColor="@color/pixel_text_secondary"
-                android:textSize="11sp"
+                android:textSize="12sp"
                 android:textStyle="bold" />
 
             <TextView
                 android:id="@+id/btnLens10"
-                android:layout_width="34dp"
-                android:layout_height="28dp"
+                android:layout_width="32dp"
+                android:layout_height="32dp"
+                android:layout_marginHorizontal="3dp"
                 android:background="@drawable/bg_zoom_pill_active"
                 android:gravity="center"
                 android:text="1.0"
                 android:textColor="@color/pixel_pill_text_active"
-                android:textSize="11sp"
+                android:textSize="12sp"
                 android:textStyle="bold" />
 
             <TextView
                 android:id="@+id/btnLens20"
-                android:layout_width="34dp"
-                android:layout_height="28dp"
+                android:layout_width="32dp"
+                android:layout_height="32dp"
+                android:layout_marginHorizontal="3dp"
                 android:gravity="center"
                 android:text="2.0"
                 android:textColor="@color/pixel_text_secondary"
-                android:textSize="11sp"
+                android:textSize="12sp"
                 android:textStyle="bold" />
         </LinearLayout>
 
@@ -932,18 +1220,18 @@
         <LinearLayout
             android:id="@+id/layoutZoomMultiplier"
             android:layout_width="wrap_content"
-            android:layout_height="34dp"
-            android:background="@drawable/bg_pill_container"
-            android:backgroundTint="#73202124"
+            android:layout_height="36dp"
+            android:background="@drawable/bg_gc_zoom_row"
             android:elevation="6dp"
             android:gravity="center"
             android:orientation="horizontal"
-            android:paddingHorizontal="4dp">
+            android:paddingHorizontal="2dp">
 
             <TextView
                 android:id="@+id/btnZoom1x"
                 android:layout_width="32dp"
-                android:layout_height="28dp"
+                android:layout_height="32dp"
+                android:layout_marginHorizontal="3dp"
                 android:background="@drawable/bg_zoom_pill_active"
                 android:gravity="center"
                 android:text="1×"
@@ -954,7 +1242,8 @@
             <TextView
                 android:id="@+id/btnZoom2x"
                 android:layout_width="32dp"
-                android:layout_height="28dp"
+                android:layout_height="32dp"
+                android:layout_marginHorizontal="3dp"
                 android:gravity="center"
                 android:text="2"
                 android:textColor="@color/pixel_text_secondary"
@@ -964,7 +1253,8 @@
             <TextView
                 android:id="@+id/btnZoom5x"
                 android:layout_width="32dp"
-                android:layout_height="28dp"
+                android:layout_height="32dp"
+                android:layout_marginHorizontal="3dp"
                 android:gravity="center"
                 android:text="5"
                 android:textColor="@color/pixel_text_secondary"
@@ -973,43 +1263,56 @@
         </LinearLayout>
     </LinearLayout>
 
-    <!-- MGC 9.7 QUICK SETTINGS FLOATING CARD ([ General | Pro ] SEGMENTED TABS) -->
+    <!-- Settings sheet, as Google Camera: near-black from 288dp down, drag handle, title,
+         General | Pro tabs, 64dp rows, "More settings" at the bottom right. -->
     <androidx.constraintlayout.widget.ConstraintLayout
         android:id="@+id/quickSettingsContainer"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginHorizontal="16dp"
-        android:layout_marginTop="56dp"
+        android:layout_marginTop="@dimen/gc_sheet_top"
         android:elevation="20dp"
         android:visibility="gone"
         app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constrainedHeight="true"
+        app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintVertical_bias="1"
         tools:visibility="visible">
 
-        <!-- Main Rounded Dark Charcoal Card -->
-        <androidx.cardview.widget.CardView
+        <FrameLayout
             android:id="@+id/quickSettingsSheet"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            app:cardBackgroundColor="@color/pixel_card_bg"
-            app:cardCornerRadius="28dp"
-            app:cardElevation="12dp"
-            app:layout_constraintTop_toTopOf="parent">
+            android:background="@drawable/bg_gc_sheet"
+            android:clickable="true"
+            android:focusable="false"
+            app:layout_constrainedHeight="true"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintTop_toTopOf="parent"
+            app:layout_constraintVertical_bias="1">
 
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
+                android:clipToPadding="false"
                 android:orientation="vertical"
-                android:paddingHorizontal="20dp"
-                android:paddingTop="18dp"
-                android:paddingBottom="14dp">
+                android:paddingHorizontal="24dp">
+
+                <View
+                    android:id="@+id/qsDragHandle"
+                    android:layout_width="36dp"
+                    android:layout_height="4dp"
+                    android:layout_gravity="center_horizontal"
+                    android:layout_marginTop="16dp"
+                    android:background="@drawable/bg_gc_handle" />
 
                 <!-- Header Row: Title + Storage Info Badge -->
                 <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:layout_marginBottom="12dp"
+                    android:layout_marginTop="20dp"
+                    android:layout_marginBottom="14dp"
                     android:gravity="center_vertical"
                     android:orientation="horizontal">
 
@@ -1019,13 +1322,13 @@
                         android:layout_height="wrap_content"
                         android:layout_weight="1"
                         android:text="Photo settings"
-                        android:textColor="@color/pixel_text_white"
-                        android:textSize="18sp"
-                        android:textStyle="bold" />
+                        android:textColor="@color/gc_icon"
+                        android:textSize="22sp" />
 
                     <!-- Google Pixel Storage Free Space & Remaining Photos Badge -->
                     <LinearLayout
                         android:id="@+id/badgeStorageStatus"
+                        android:visibility="gone"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:background="@drawable/bg_pill_container"
@@ -1057,47 +1360,52 @@
                 <LinearLayout
                     android:id="@+id/segmentedTabsContainer"
                     android:layout_width="match_parent"
-                    android:layout_height="40dp"
-                    android:layout_marginBottom="14dp"
-                    android:background="@drawable/bg_segmented_container"
-                    android:orientation="horizontal"
-                    android:padding="3dp">
+                    android:layout_height="36dp"
+                    android:layout_marginBottom="16dp"
+                    android:orientation="horizontal">
 
                     <TextView
                         android:id="@+id/tabQsGeneral"
                         android:layout_width="0dp"
                         android:layout_height="match_parent"
                         android:layout_weight="1"
-                        android:background="@drawable/bg_segmented_pill_active"
+                        android:layout_marginEnd="2dp"
+                        android:background="@drawable/bg_gc_tab_active"
                         android:clickable="true"
                         android:focusable="true"
                         android:gravity="center"
                         android:text="General"
-                        android:textColor="@color/pixel_pill_text_active"
-                        android:textSize="13sp"
-                        android:textStyle="bold" />
+                        android:textColor="@color/gc_toggle_icon_active"
+                        android:textSize="15sp" />
 
                     <TextView
                         android:id="@+id/tabQsPro"
                         android:layout_width="0dp"
                         android:layout_height="match_parent"
                         android:layout_weight="1"
+                        android:layout_marginStart="2dp"
+                        android:background="@drawable/bg_gc_tab_inactive"
                         android:clickable="true"
                         android:focusable="true"
                         android:gravity="center"
                         android:text="Pro"
-                        android:textColor="@color/pixel_text_white"
-                        android:textSize="13sp" />
+                        android:textColor="@color/gc_icon"
+                        android:textSize="15sp" />
                 </LinearLayout>
 
                 <!-- Scrollable Settings Rows Container -->
                 <ScrollView
                     android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
+                    android:layout_height="0dp"
+                    android:layout_weight="1"
+                    android:layout_marginEnd="-8dp"
+                    android:paddingEnd="8dp"
+                    android:clipToPadding="false"
                     android:fadeScrollbars="false"
+                    android:scrollbarStyle="outsideOverlay"
                     android:scrollbars="vertical"
                     android:scrollbarSize="3dp"
-                    android:scrollbarThumbVertical="@color/pixel_accent_blue">
+                    android:scrollbarThumbVertical="@color/gc_scrollbar">
 
                     <LinearLayout
                         android:layout_width="match_parent"
@@ -1117,7 +1425,7 @@
                                 android:layout_height="wrap_content"
                                 android:gravity="center_vertical"
                                 android:orientation="horizontal"
-                                android:paddingVertical="8dp">
+                                android:paddingVertical="12dp">
 
                                 <LinearLayout
                                     android:layout_width="0dp"
@@ -1129,7 +1437,7 @@
                                         android:layout_width="wrap_content"
                                         android:layout_height="wrap_content"
                                         android:text="Flash"
-                                        android:textColor="@color/pixel_text_white"
+                                        android:textColor="@color/gc_icon"
                                         android:textSize="13sp" />
 
                                     <TextView
@@ -1138,9 +1446,8 @@
                                         android:layout_height="wrap_content"
                                         android:layout_marginTop="2dp"
                                         android:text="Off"
-                                        android:textColor="@color/pixel_accent_blue"
-                                        android:textSize="14sp"
-                                        android:textStyle="bold" />
+                                        android:textColor="@color/gc_toggle_active"
+                                        android:textSize="16sp" />
                                 </LinearLayout>
 
                                 <LinearLayout
@@ -1156,32 +1463,32 @@
                                         android:clickable="true"
                                         android:focusable="true"
                                         android:padding="9dp"
-                                        android:src="@drawable/ic_qs_none"
-                                        app:tint="@color/pixel_icon_active" />
+                                        android:src="@drawable/ic_flash_off"
+                                        app:tint="@color/gc_toggle_icon_active" />
 
                                     <ImageView
                                         android:id="@+id/btnQsLightNight"
                                         android:layout_width="40dp"
                                         android:layout_height="40dp"
-                                        android:layout_marginStart="10dp"
+                                        android:layout_marginStart="8dp"
                                         android:background="@drawable/bg_qs_btn_inactive"
                                         android:clickable="true"
                                         android:focusable="true"
                                         android:padding="9dp"
                                         android:src="@drawable/ic_flash_auto"
-                                        app:tint="@color/pixel_text_white" />
+                                        app:tint="@color/gc_qs_icon" />
 
                                     <ImageView
                                         android:id="@+id/btnQsLightFlash"
                                         android:layout_width="40dp"
                                         android:layout_height="40dp"
-                                        android:layout_marginStart="10dp"
+                                        android:layout_marginStart="8dp"
                                         android:background="@drawable/bg_qs_btn_inactive"
                                         android:clickable="true"
                                         android:focusable="true"
                                         android:padding="9dp"
                                         android:src="@drawable/ic_flash_on"
-                                        app:tint="@color/pixel_text_white" />
+                                        app:tint="@color/gc_qs_icon" />
                                 </LinearLayout>
                             </LinearLayout>
 
@@ -1191,7 +1498,7 @@
                                 android:layout_height="wrap_content"
                                 android:gravity="center_vertical"
                                 android:orientation="horizontal"
-                                android:paddingVertical="8dp">
+                                android:paddingVertical="12dp">
 
                                 <LinearLayout
                                     android:layout_width="0dp"
@@ -1203,7 +1510,7 @@
                                         android:layout_width="wrap_content"
                                         android:layout_height="wrap_content"
                                         android:text="GOOGLE AWB"
-                                        android:textColor="@color/pixel_text_white"
+                                        android:textColor="@color/gc_icon"
                                         android:textSize="13sp" />
 
                                     <TextView
@@ -1212,9 +1519,8 @@
                                         android:layout_height="wrap_content"
                                         android:layout_marginTop="2dp"
                                         android:text="Off"
-                                        android:textColor="@color/pixel_accent_blue"
-                                        android:textSize="14sp"
-                                        android:textStyle="bold" />
+                                        android:textColor="@color/gc_toggle_active"
+                                        android:textSize="16sp" />
                                 </LinearLayout>
 
                                 <LinearLayout
@@ -1231,19 +1537,19 @@
                                         android:focusable="true"
                                         android:padding="9dp"
                                         android:src="@drawable/ic_qs_awb_off"
-                                        app:tint="@color/pixel_icon_active" />
+                                        app:tint="@color/gc_toggle_icon_active" />
 
                                     <ImageView
                                         android:id="@+id/btnQsAwbOn"
                                         android:layout_width="40dp"
                                         android:layout_height="40dp"
-                                        android:layout_marginStart="10dp"
+                                        android:layout_marginStart="8dp"
                                         android:background="@drawable/bg_qs_btn_inactive"
                                         android:clickable="true"
                                         android:focusable="true"
                                         android:padding="9dp"
                                         android:src="@drawable/ic_qs_awb_on"
-                                        app:tint="@color/pixel_text_white" />
+                                        app:tint="@color/gc_qs_icon" />
                                 </LinearLayout>
                             </LinearLayout>
 
@@ -1253,7 +1559,7 @@
                                 android:layout_height="wrap_content"
                                 android:gravity="center_vertical"
                                 android:orientation="horizontal"
-                                android:paddingVertical="8dp">
+                                android:paddingVertical="12dp">
 
                                 <LinearLayout
                                     android:layout_width="0dp"
@@ -1265,7 +1571,7 @@
                                         android:layout_width="wrap_content"
                                         android:layout_height="wrap_content"
                                         android:text="HDR+"
-                                        android:textColor="@color/pixel_text_white"
+                                        android:textColor="@color/gc_icon"
                                         android:textSize="13sp" />
 
                                     <TextView
@@ -1274,9 +1580,8 @@
                                         android:layout_height="wrap_content"
                                         android:layout_marginTop="2dp"
                                         android:text="Auto"
-                                        android:textColor="@color/pixel_accent_blue"
-                                        android:textSize="14sp"
-                                        android:textStyle="bold" />
+                                        android:textColor="@color/gc_toggle_active"
+                                        android:textSize="16sp" />
                                 </LinearLayout>
 
                                 <LinearLayout
@@ -1291,33 +1596,33 @@
                                         android:background="@drawable/bg_qs_btn_inactive"
                                         android:clickable="true"
                                         android:focusable="true"
-                                        android:padding="9dp"
+                                        android:padding="7dp"
                                         android:src="@drawable/ic_qs_hdr_off"
-                                        app:tint="@color/pixel_text_white" />
+                                        app:tint="@color/gc_qs_icon" />
 
                                     <ImageView
                                         android:id="@+id/btnQsTopShotAuto"
                                         android:layout_width="40dp"
                                         android:layout_height="40dp"
-                                        android:layout_marginStart="10dp"
+                                        android:layout_marginStart="8dp"
                                         android:background="@drawable/bg_qs_btn_active"
                                         android:clickable="true"
                                         android:focusable="true"
-                                        android:padding="9dp"
+                                        android:padding="7dp"
                                         android:src="@drawable/ic_qs_hdr_on"
-                                        app:tint="@color/pixel_icon_active" />
+                                        app:tint="@color/gc_toggle_icon_active" />
 
                                     <ImageView
                                         android:id="@+id/btnQsTopShotOn"
                                         android:layout_width="40dp"
                                         android:layout_height="40dp"
-                                        android:layout_marginStart="10dp"
+                                        android:layout_marginStart="8dp"
                                         android:background="@drawable/bg_qs_btn_inactive"
                                         android:clickable="true"
                                         android:focusable="true"
-                                        android:padding="9dp"
+                                        android:padding="7dp"
                                         android:src="@drawable/ic_qs_hdr_enhanced"
-                                        app:tint="@color/pixel_text_white" />
+                                        app:tint="@color/gc_qs_icon" />
                                 </LinearLayout>
                             </LinearLayout>
 
@@ -1327,7 +1632,7 @@
                                 android:layout_height="wrap_content"
                                 android:gravity="center_vertical"
                                 android:orientation="horizontal"
-                                android:paddingVertical="8dp">
+                                android:paddingVertical="12dp">
 
                                 <LinearLayout
                                     android:layout_width="0dp"
@@ -1339,7 +1644,7 @@
                                         android:layout_width="wrap_content"
                                         android:layout_height="wrap_content"
                                         android:text="Ratio"
-                                        android:textColor="@color/pixel_text_white"
+                                        android:textColor="@color/gc_icon"
                                         android:textSize="13sp" />
 
                                     <TextView
@@ -1348,9 +1653,8 @@
                                         android:layout_height="wrap_content"
                                         android:layout_marginTop="2dp"
                                         android:text="4:3 Standard"
-                                        android:textColor="@color/pixel_accent_blue"
-                                        android:textSize="14sp"
-                                        android:textStyle="bold" />
+                                        android:textColor="@color/gc_toggle_active"
+                                        android:textSize="16sp" />
                                 </LinearLayout>
 
                                 <LinearLayout
@@ -1367,19 +1671,19 @@
                                         android:focusable="true"
                                         android:padding="9dp"
                                         android:src="@drawable/ic_qs_ratio_43"
-                                        app:tint="@color/pixel_icon_active" />
+                                        app:tint="@color/gc_toggle_icon_active" />
 
                                     <ImageView
                                         android:id="@+id/btnQsRatio169"
                                         android:layout_width="40dp"
                                         android:layout_height="40dp"
-                                        android:layout_marginStart="10dp"
+                                        android:layout_marginStart="8dp"
                                         android:background="@drawable/bg_qs_btn_inactive"
                                         android:clickable="true"
                                         android:focusable="true"
                                         android:padding="9dp"
                                         android:src="@drawable/ic_qs_ratio_169"
-                                        app:tint="@color/pixel_text_white" />
+                                        app:tint="@color/gc_qs_icon" />
                                 </LinearLayout>
                             </LinearLayout>
 
@@ -1389,7 +1693,7 @@
                                 android:layout_height="wrap_content"
                                 android:gravity="center_vertical"
                                 android:orientation="horizontal"
-                                android:paddingVertical="8dp">
+                                android:paddingVertical="12dp">
 
                                 <LinearLayout
                                     android:layout_width="0dp"
@@ -1401,7 +1705,7 @@
                                         android:layout_width="wrap_content"
                                         android:layout_height="wrap_content"
                                         android:text="Timer"
-                                        android:textColor="@color/pixel_text_white"
+                                        android:textColor="@color/gc_icon"
                                         android:textSize="13sp" />
 
                                     <TextView
@@ -1410,9 +1714,8 @@
                                         android:layout_height="wrap_content"
                                         android:layout_marginTop="2dp"
                                         android:text="Off"
-                                        android:textColor="@color/pixel_accent_blue"
-                                        android:textSize="14sp"
-                                        android:textStyle="bold" />
+                                        android:textColor="@color/gc_toggle_active"
+                                        android:textSize="16sp" />
                                 </LinearLayout>
 
                                 <LinearLayout
@@ -1429,39 +1732,33 @@
                                         android:focusable="true"
                                         android:padding="9dp"
                                         android:src="@drawable/ic_qs_timer_off"
-                                        app:tint="@color/pixel_icon_active" />
+                                        app:tint="@color/gc_toggle_icon_active" />
 
                                     <ImageView
                                         android:id="@+id/btnQsTimer3s"
                                         android:layout_width="40dp"
                                         android:layout_height="40dp"
-                                        android:layout_marginStart="10dp"
+                                        android:layout_marginStart="8dp"
                                         android:background="@drawable/bg_qs_btn_inactive"
                                         android:clickable="true"
                                         android:focusable="true"
                                         android:padding="9dp"
                                         android:src="@drawable/ic_qs_timer_3s"
-                                        app:tint="@color/pixel_text_white" />
+                                        app:tint="@color/gc_qs_icon" />
 
                                     <ImageView
                                         android:id="@+id/btnQsTimer10s"
                                         android:layout_width="40dp"
                                         android:layout_height="40dp"
-                                        android:layout_marginStart="10dp"
+                                        android:layout_marginStart="8dp"
                                         android:background="@drawable/bg_qs_btn_inactive"
                                         android:clickable="true"
                                         android:focusable="true"
                                         android:padding="9dp"
                                         android:src="@drawable/ic_qs_timer_10s"
-                                        app:tint="@color/pixel_text_white" />
+                                        app:tint="@color/gc_qs_icon" />
                                 </LinearLayout>
                             </LinearLayout>
-
-                            <View
-                                android:layout_width="match_parent"
-                                android:layout_height="1dp"
-                                android:layout_marginVertical="6dp"
-                                android:background="#1AFFFFFF" />
 
                             <!-- Row 6: Grid Type (Off vs 3x3 vs Golden Ratio) -->
                             <LinearLayout
@@ -1469,7 +1766,7 @@
                                 android:layout_height="wrap_content"
                                 android:gravity="center_vertical"
                                 android:orientation="horizontal"
-                                android:paddingVertical="8dp">
+                                android:paddingVertical="12dp">
 
                                 <LinearLayout
                                     android:layout_width="0dp"
@@ -1481,7 +1778,7 @@
                                         android:layout_width="wrap_content"
                                         android:layout_height="wrap_content"
                                         android:text="Grid type"
-                                        android:textColor="@color/pixel_text_white"
+                                        android:textColor="@color/gc_icon"
                                         android:textSize="13sp" />
 
                                     <TextView
@@ -1490,9 +1787,8 @@
                                         android:layout_height="wrap_content"
                                         android:layout_marginTop="2dp"
                                         android:text="3 × 3"
-                                        android:textColor="@color/pixel_accent_blue"
-                                        android:textSize="14sp"
-                                        android:textStyle="bold" />
+                                        android:textColor="@color/gc_toggle_active"
+                                        android:textSize="16sp" />
                                 </LinearLayout>
 
                                 <LinearLayout
@@ -1517,7 +1813,7 @@
                                         android:id="@+id/btnQsGrid3x3"
                                         android:layout_width="40dp"
                                         android:layout_height="40dp"
-                                        android:layout_marginStart="10dp"
+                                        android:layout_marginStart="8dp"
                                         android:background="@drawable/bg_qs_btn_active"
                                         android:clickable="true"
                                         android:focusable="true"
@@ -1531,7 +1827,7 @@
                                         android:id="@+id/btnQsGridGolden"
                                         android:layout_width="40dp"
                                         android:layout_height="40dp"
-                                        android:layout_marginStart="10dp"
+                                        android:layout_marginStart="8dp"
                                         android:background="@drawable/bg_qs_btn_inactive"
                                         android:clickable="true"
                                         android:focusable="true"
@@ -1548,7 +1844,7 @@
                                 android:layout_height="wrap_content"
                                 android:gravity="center_vertical"
                                 android:orientation="horizontal"
-                                android:paddingVertical="8dp">
+                                android:paddingVertical="12dp">
 
                                 <LinearLayout
                                     android:layout_width="0dp"
@@ -1560,7 +1856,7 @@
                                         android:layout_width="wrap_content"
                                         android:layout_height="wrap_content"
                                         android:text="Mirror"
-                                        android:textColor="@color/pixel_text_white"
+                                        android:textColor="@color/gc_icon"
                                         android:textSize="13sp" />
 
                                     <TextView
@@ -1569,9 +1865,8 @@
                                         android:layout_height="wrap_content"
                                         android:layout_marginTop="2dp"
                                         android:text="Off"
-                                        android:textColor="@color/pixel_accent_blue"
-                                        android:textSize="14sp"
-                                        android:textStyle="bold" />
+                                        android:textColor="@color/gc_toggle_active"
+                                        android:textSize="16sp" />
                                 </LinearLayout>
 
                                 <LinearLayout
@@ -1596,7 +1891,7 @@
                                         android:id="@+id/btnQsMirrorOn"
                                         android:layout_width="40dp"
                                         android:layout_height="40dp"
-                                        android:layout_marginStart="10dp"
+                                        android:layout_marginStart="8dp"
                                         android:background="@drawable/bg_qs_btn_inactive"
                                         android:clickable="true"
                                         android:focusable="true"
@@ -1613,7 +1908,7 @@
                                 android:layout_height="wrap_content"
                                 android:gravity="center_vertical"
                                 android:orientation="horizontal"
-                                android:paddingVertical="8dp">
+                                android:paddingVertical="12dp">
 
                                 <LinearLayout
                                     android:layout_width="0dp"
@@ -1625,7 +1920,7 @@
                                         android:layout_width="wrap_content"
                                         android:layout_height="wrap_content"
                                         android:text="Motion photo"
-                                        android:textColor="@color/pixel_text_white"
+                                        android:textColor="@color/gc_icon"
                                         android:textSize="13sp" />
 
                                     <TextView
@@ -1634,9 +1929,8 @@
                                         android:layout_height="wrap_content"
                                         android:layout_marginTop="2dp"
                                         android:text="Off"
-                                        android:textColor="@color/pixel_accent_blue"
-                                        android:textSize="14sp"
-                                        android:textStyle="bold" />
+                                        android:textColor="@color/gc_toggle_active"
+                                        android:textSize="16sp" />
                                 </LinearLayout>
 
                                 <LinearLayout
@@ -1661,7 +1955,7 @@
                                         android:id="@+id/btnQsMotionOn"
                                         android:layout_width="40dp"
                                         android:layout_height="40dp"
-                                        android:layout_marginStart="10dp"
+                                        android:layout_marginStart="8dp"
                                         android:background="@drawable/bg_qs_btn_inactive"
                                         android:clickable="true"
                                         android:focusable="true"
@@ -1689,7 +1983,7 @@
                                 android:layout_height="wrap_content"
                                 android:gravity="center_vertical"
                                 android:orientation="horizontal"
-                                android:paddingVertical="8dp">
+                                android:paddingVertical="12dp">
 
                                 <LinearLayout
                                     android:layout_width="0dp"
@@ -1701,7 +1995,7 @@
                                         android:layout_width="wrap_content"
                                         android:layout_height="wrap_content"
                                         android:text="Lens Selection"
-                                        android:textColor="@color/pixel_text_white"
+                                        android:textColor="@color/gc_icon"
                                         android:textSize="13sp" />
 
                                     <TextView
@@ -1710,9 +2004,8 @@
                                         android:layout_height="wrap_content"
                                         android:layout_marginTop="2dp"
                                         android:text="Auto"
-                                        android:textColor="@color/pixel_accent_blue"
-                                        android:textSize="14sp"
-                                        android:textStyle="bold" />
+                                        android:textColor="@color/gc_toggle_active"
+                                        android:textSize="16sp" />
                                 </LinearLayout>
 
                                 <LinearLayout
@@ -1754,7 +2047,7 @@
                                 android:layout_height="wrap_content"
                                 android:gravity="center_vertical"
                                 android:orientation="horizontal"
-                                android:paddingVertical="8dp">
+                                android:paddingVertical="12dp">
 
                                 <LinearLayout
                                     android:layout_width="0dp"
@@ -1766,7 +2059,7 @@
                                         android:layout_width="wrap_content"
                                         android:layout_height="wrap_content"
                                         android:text="RAW/JPEG"
-                                        android:textColor="@color/pixel_text_white"
+                                        android:textColor="@color/gc_icon"
                                         android:textSize="13sp" />
 
                                     <TextView
@@ -1775,9 +2068,8 @@
                                         android:layout_height="wrap_content"
                                         android:layout_marginTop="2dp"
                                         android:text="RAW + JPEG"
-                                        android:textColor="@color/pixel_accent_blue"
-                                        android:textSize="14sp"
-                                        android:textStyle="bold" />
+                                        android:textColor="@color/gc_toggle_active"
+                                        android:textSize="16sp" />
                                 </LinearLayout>
 
                                 <LinearLayout
@@ -1794,19 +2086,19 @@
                                         android:focusable="true"
                                         android:padding="9dp"
                                         android:src="@drawable/ic_qs_raw_off"
-                                        app:tint="@color/pixel_text_white" />
+                                        app:tint="@color/gc_qs_icon" />
 
                                     <ImageView
                                         android:id="@+id/btnQsRawOn"
                                         android:layout_width="40dp"
                                         android:layout_height="40dp"
-                                        android:layout_marginStart="10dp"
+                                        android:layout_marginStart="8dp"
                                         android:background="@drawable/bg_qs_btn_active"
                                         android:clickable="true"
                                         android:focusable="true"
                                         android:padding="9dp"
                                         android:src="@drawable/ic_qs_raw_on"
-                                        app:tint="@color/pixel_icon_active" />
+                                        app:tint="@color/gc_toggle_icon_active" />
                                 </LinearLayout>
                             </LinearLayout>
 
@@ -1816,7 +2108,7 @@
                                 android:layout_height="wrap_content"
                                 android:gravity="center_vertical"
                                 android:orientation="horizontal"
-                                android:paddingVertical="8dp">
+                                android:paddingVertical="12dp">
 
                                 <LinearLayout
                                     android:layout_width="0dp"
@@ -1828,7 +2120,7 @@
                                         android:layout_width="wrap_content"
                                         android:layout_height="wrap_content"
                                         android:text="Selfie resolution"
-                                        android:textColor="@color/pixel_text_white"
+                                        android:textColor="@color/gc_icon"
                                         android:textSize="13sp" />
 
                                     <TextView
@@ -1837,9 +2129,8 @@
                                         android:layout_height="wrap_content"
                                         android:layout_marginTop="2dp"
                                         android:text="8 MP"
-                                        android:textColor="@color/pixel_accent_blue"
-                                        android:textSize="14sp"
-                                        android:textStyle="bold" />
+                                        android:textColor="@color/gc_toggle_active"
+                                        android:textSize="16sp" />
                                 </LinearLayout>
 
                                 <LinearLayout
@@ -1864,7 +2155,7 @@
                                         android:id="@+id/btnQsRes108"
                                         android:layout_width="52dp"
                                         android:layout_height="40dp"
-                                        android:layout_marginStart="10dp"
+                                        android:layout_marginStart="8dp"
                                         android:background="@drawable/bg_qs_btn_inactive"
                                         android:clickable="true"
                                         android:focusable="true"
@@ -1886,18 +2177,483 @@
                             android:orientation="vertical"
                             android:visibility="gone">
 
-                            <!-- Row 1: Fast Video Format Preset Pills -->
+                            <!-- Row 4: Flash / Torch -->
                             <LinearLayout
                                 android:layout_width="match_parent"
                                 android:layout_height="wrap_content"
+                                android:gravity="center_vertical"
+                                android:orientation="horizontal"
+                                android:paddingVertical="12dp">
+
+                                <LinearLayout
+                                    android:layout_width="0dp"
+                                    android:layout_height="wrap_content"
+                                    android:layout_weight="1"
+                                    android:orientation="vertical">
+
+                                    <TextView
+                                        android:layout_width="wrap_content"
+                                        android:layout_height="wrap_content"
+                                        android:text="Flash"
+                                        android:textColor="@color/gc_icon"
+                                        android:textSize="13sp" />
+
+                                    <TextView
+                                        android:id="@+id/tvQsVideoTorchSubtitle"
+                                        android:layout_width="wrap_content"
+                                        android:layout_height="wrap_content"
+                                        android:layout_marginTop="2dp"
+                                        android:text="Off"
+                                        android:textColor="@color/gc_toggle_active"
+                                        android:textSize="16sp" />
+                                </LinearLayout>
+
+                                <LinearLayout
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:orientation="horizontal">
+
+                                    <ImageView
+                                        android:id="@+id/btnQsVideoTorchOff"
+                                        android:layout_width="40dp"
+                                        android:layout_height="40dp"
+                                        android:background="@drawable/bg_qs_btn_active"
+                                        android:clickable="true"
+                                        android:focusable="true"
+                                        android:padding="9dp"
+                                        android:src="@drawable/ic_flash_off"
+                                        app:tint="@color/gc_toggle_icon_active" />
+
+                                    <ImageView
+                                        android:id="@+id/btnQsVideoTorchOn"
+                                        android:layout_width="40dp"
+                                        android:layout_height="40dp"
+                                        android:layout_marginStart="8dp"
+                                        android:background="@drawable/bg_qs_btn_inactive"
+                                        android:clickable="true"
+                                        android:focusable="true"
+                                        android:padding="9dp"
+                                        android:src="@drawable/ic_flash_on"
+                                        app:tint="@color/gc_qs_icon" />
+                                </LinearLayout>
+                            </LinearLayout>
+
+                            <!-- Row 2: Resolution Selection -->
+                            <LinearLayout
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:gravity="center_vertical"
+                                android:orientation="horizontal"
+                                android:paddingVertical="12dp">
+
+                                <LinearLayout
+                                    android:layout_width="0dp"
+                                    android:layout_height="wrap_content"
+                                    android:layout_weight="1"
+                                    android:orientation="vertical">
+
+                                    <TextView
+                                        android:layout_width="wrap_content"
+                                        android:layout_height="wrap_content"
+                                        android:text="Resolution"
+                                        android:textColor="@color/gc_icon"
+                                        android:textSize="13sp" />
+
+                                    <TextView
+                                        android:id="@+id/tvQsVideoResSubtitle"
+                                        android:layout_width="wrap_content"
+                                        android:layout_height="wrap_content"
+                                        android:layout_marginTop="2dp"
+                                        android:text="Full HD (1080p)"
+                                        android:textColor="@color/gc_toggle_active"
+                                        android:textSize="16sp" />
+                                </LinearLayout>
+
+                                <LinearLayout
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="40dp"
+                                    android:orientation="horizontal">
+
+                                    <TextView
+                                        android:id="@+id/btnQsVideoResFhd"
+                                        android:layout_width="40dp"
+                                        android:layout_height="40dp"
+                                        android:background="@drawable/bg_qs_btn_inactive"
+                                        android:clickable="true"
+                                        android:focusable="true"
+                                        android:gravity="center"
+                                        android:text="FHD"
+                                        android:textColor="@color/gc_icon"
+                                        android:textSize="12sp"
+                                        android:textStyle="bold" />
+
+                                    <TextView
+                                        android:id="@+id/btnQsVideoRes4k"
+                                        android:layout_width="40dp"
+                                        android:layout_height="40dp"
+                                        android:background="@drawable/bg_qs_btn_inactive"
+                                        android:layout_marginStart="8dp"
+                                        android:clickable="true"
+                                        android:focusable="true"
+                                        android:gravity="center"
+                                        android:text="4K"
+                                        android:textColor="@color/gc_icon"
+                                        android:textSize="12sp"
+                                        android:textStyle="bold" />
+                                </LinearLayout>
+                            </LinearLayout>
+
+                            <!-- Row 3: Frame Rate Selection -->
+                            <LinearLayout
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:gravity="center_vertical"
+                                android:orientation="horizontal"
+                                android:paddingVertical="12dp">
+
+                                <LinearLayout
+                                    android:layout_width="0dp"
+                                    android:layout_height="wrap_content"
+                                    android:layout_weight="1"
+                                    android:orientation="vertical">
+
+                                    <TextView
+                                        android:layout_width="wrap_content"
+                                        android:layout_height="wrap_content"
+                                        android:text="Frames / sec"
+                                        android:textColor="@color/gc_icon"
+                                        android:textSize="13sp" />
+
+                                    <TextView
+                                        android:id="@+id/tvQsVideoFpsSubtitle"
+                                        android:layout_width="wrap_content"
+                                        android:layout_height="wrap_content"
+                                        android:layout_marginTop="2dp"
+                                        android:text="30 fps"
+                                        android:textColor="@color/gc_toggle_active"
+                                        android:textSize="16sp" />
+                                </LinearLayout>
+
+                                <LinearLayout
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="40dp"
+                                    android:orientation="horizontal">
+
+                                    <TextView
+                                        android:id="@+id/btnQsVideoFps30"
+                                        android:layout_width="40dp"
+                                        android:layout_height="40dp"
+                                        android:background="@drawable/bg_qs_btn_inactive"
+                                        android:clickable="true"
+                                        android:focusable="true"
+                                        android:gravity="center"
+                                        android:text="30"
+                                        android:textColor="@color/gc_icon"
+                                        android:textSize="12sp"
+                                        android:textStyle="bold" />
+
+                                    <TextView
+                                        android:id="@+id/btnQsVideoFps60"
+                                        android:layout_width="40dp"
+                                        android:layout_height="40dp"
+                                        android:background="@drawable/bg_qs_btn_inactive"
+                                        android:layout_marginStart="8dp"
+                                        android:clickable="true"
+                                        android:focusable="true"
+                                        android:gravity="center"
+                                        android:text="60"
+                                        android:textColor="@color/gc_icon"
+                                        android:textSize="12sp"
+                                        android:textStyle="bold" />
+                                </LinearLayout>
+                            </LinearLayout>
+
+                            <!-- Low light: let the frame rate drop for a brighter picture -->
+                            <LinearLayout
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:gravity="center_vertical"
+                                android:orientation="horizontal"
+                                android:paddingVertical="12dp">
+
+                                <LinearLayout
+                                    android:layout_width="0dp"
+                                    android:layout_height="wrap_content"
+                                    android:layout_weight="1"
+                                    android:orientation="vertical">
+
+                                    <TextView
+                                        android:layout_width="wrap_content"
+                                        android:layout_height="wrap_content"
+                                        android:text="Low light"
+                                        android:textColor="@color/gc_icon"
+                                        android:textSize="13sp" />
+
+                                    <TextView
+                                        android:id="@+id/tvQsLowLightVideoSubtitle"
+                                        android:layout_width="wrap_content"
+                                        android:layout_height="wrap_content"
+                                        android:layout_marginTop="2dp"
+                                        android:text="Off"
+                                        android:textColor="@color/gc_toggle_active"
+                                        android:textSize="16sp" />
+                                </LinearLayout>
+
+                                <LinearLayout
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="40dp"
+                                    android:orientation="horizontal">
+
+                                    <TextView
+                                        android:id="@+id/btnQsLowLightVideoOff"
+                                        android:layout_width="40dp"
+                                        android:layout_height="40dp"
+                                        android:background="@drawable/bg_qs_btn_inactive"
+                                        android:clickable="true"
+                                        android:focusable="true"
+                                        android:gravity="center"
+                                        android:text="Off"
+                                        android:textColor="@color/gc_icon"
+                                        android:textSize="12sp"
+                                        android:textStyle="bold" />
+
+                                    <TextView
+                                        android:id="@+id/btnQsLowLightVideoOn"
+                                        android:layout_width="40dp"
+                                        android:layout_height="40dp"
+                                        android:background="@drawable/bg_qs_btn_inactive"
+                                        android:layout_marginStart="8dp"
+                                        android:clickable="true"
+                                        android:focusable="true"
+                                        android:gravity="center"
+                                        android:text="On"
+                                        android:textColor="@color/gc_icon"
+                                        android:textSize="12sp"
+                                        android:textStyle="bold" />
+                                </LinearLayout>
+                            </LinearLayout>
+
+                            <!-- Audio Zoom Row -->
+                            <LinearLayout
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:gravity="center_vertical"
+                                android:orientation="horizontal"
+                                android:paddingVertical="12dp">
+
+                                <LinearLayout
+                                    android:layout_width="0dp"
+                                    android:layout_height="wrap_content"
+                                    android:layout_weight="1"
+                                    android:orientation="vertical">
+
+                                    <TextView
+                                        android:layout_width="wrap_content"
+                                        android:layout_height="wrap_content"
+                                        android:text="Audio Zoom"
+                                        android:textColor="@color/gc_icon"
+                                        android:textSize="13sp" />
+
+                                    <TextView
+                                        android:id="@+id/tvQsAudioZoomSubtitle"
+                                        android:layout_width="wrap_content"
+                                        android:layout_height="wrap_content"
+                                        android:layout_marginTop="2dp"
+                                        android:text="On • Focuses on subject"
+                                        android:textColor="@color/gc_toggle_active"
+                                        android:textSize="16sp" />
+                                </LinearLayout>
+
+                                <LinearLayout
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="40dp"
+                                    android:orientation="horizontal">
+
+                                    <TextView
+                                        android:id="@+id/btnQsAudioZoomOff"
+                                        android:layout_width="40dp"
+                                        android:layout_height="40dp"
+                                        android:background="@drawable/bg_qs_btn_inactive"
+                                        android:clickable="true"
+                                        android:focusable="true"
+                                        android:gravity="center"
+                                        android:text="Off"
+                                        android:textColor="@color/gc_icon"
+                                        android:textSize="12sp"
+                                        android:textStyle="bold" />
+
+                                    <TextView
+                                        android:id="@+id/btnQsAudioZoomOn"
+                                        android:layout_width="40dp"
+                                        android:layout_height="40dp"
+                                        android:background="@drawable/bg_qs_btn_inactive"
+                                        android:layout_marginStart="8dp"
+                                        android:clickable="true"
+                                        android:focusable="true"
+                                        android:gravity="center"
+                                        android:text="On"
+                                        android:textColor="@color/gc_icon"
+                                        android:textSize="12sp"
+                                        android:textStyle="bold" />
+                                </LinearLayout>
+                            </LinearLayout>
+
+                            <!-- Row 5: Grid in Video -->
+                            <LinearLayout
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:gravity="center_vertical"
+                                android:orientation="horizontal"
+                                android:paddingVertical="12dp">
+
+                                <LinearLayout
+                                    android:layout_width="0dp"
+                                    android:layout_height="wrap_content"
+                                    android:layout_weight="1"
+                                    android:orientation="vertical">
+
+                                    <TextView
+                                        android:layout_width="wrap_content"
+                                        android:layout_height="wrap_content"
+                                        android:text="Grid type"
+                                        android:textColor="@color/gc_icon"
+                                        android:textSize="13sp" />
+
+                                    <TextView
+                                        android:id="@+id/tvQsVideoGridSubtitle"
+                                        android:layout_width="wrap_content"
+                                        android:layout_height="wrap_content"
+                                        android:layout_marginTop="2dp"
+                                        android:text="Off"
+                                        android:textColor="@color/gc_toggle_active"
+                                        android:textSize="16sp" />
+                                </LinearLayout>
+
+                                <LinearLayout
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:orientation="horizontal">
+
+                                    <TextView
+                                        android:id="@+id/btnQsVideoGridOff"
+                                        android:layout_width="40dp"
+                                        android:layout_height="40dp"
+                                        android:background="@drawable/bg_qs_btn_active"
+                                        android:clickable="true"
+                                        android:focusable="true"
+                                        android:gravity="center"
+                                        android:text="Off"
+                                        android:textColor="@color/pixel_pill_text_active"
+                                        android:textSize="12sp"
+                                        android:textStyle="bold" />
+
+                                    <TextView
+                                        android:id="@+id/btnQsVideoGrid3x3"
+                                        android:layout_width="40dp"
+                                        android:layout_height="40dp"
+                                        android:layout_marginStart="8dp"
+                                        android:background="@drawable/bg_qs_btn_inactive"
+                                        android:clickable="true"
+                                        android:focusable="true"
+                                        android:gravity="center"
+                                        android:text="3×3"
+                                        android:textColor="@color/pixel_text_white"
+                                        android:textSize="12sp"
+                                        android:textStyle="bold" />
+
+                                    <TextView
+                                        android:id="@+id/btnQsVideoGridGolden"
+                                        android:layout_width="40dp"
+                                        android:layout_height="40dp"
+                                        android:layout_marginStart="8dp"
+                                        android:background="@drawable/bg_qs_btn_inactive"
+                                        android:clickable="true"
+                                        android:focusable="true"
+                                        android:gravity="center"
+                                        android:text="Phi"
+                                        android:textColor="@color/pixel_text_white"
+                                        android:textSize="12sp"
+                                        android:textStyle="bold" />
+                                </LinearLayout>
+                            </LinearLayout>
+
+                            <LinearLayout
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:gravity="center_vertical"
+                                android:orientation="horizontal"
+                                android:paddingVertical="12dp">
+
+                                <LinearLayout
+                                    android:layout_width="0dp"
+                                    android:layout_height="wrap_content"
+                                    android:layout_weight="1"
+                                    android:orientation="vertical">
+
+                                    <TextView
+                                        android:layout_width="wrap_content"
+                                        android:layout_height="wrap_content"
+                                        android:text="Mirror"
+                                        android:textColor="@color/gc_icon"
+                                        android:textSize="13sp" />
+
+                                    <TextView
+                                        android:id="@+id/tvQsVideoMirrorSubtitle"
+                                        android:layout_width="wrap_content"
+                                        android:layout_height="wrap_content"
+                                        android:layout_marginTop="2dp"
+                                        android:text="Off"
+                                        android:textColor="@color/gc_toggle_active"
+                                        android:textSize="16sp" />
+                                </LinearLayout>
+
+                                <LinearLayout
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:orientation="horizontal">
+
+                                    <TextView
+                                        android:id="@+id/btnQsVideoMirrorOff"
+                                        android:layout_width="40dp"
+                                        android:layout_height="40dp"
+                                        android:background="@drawable/bg_qs_btn_active"
+                                        android:clickable="true"
+                                        android:focusable="true"
+                                        android:gravity="center"
+                                        android:text="Off"
+                                        android:textColor="@color/pixel_pill_text_active"
+                                        android:textSize="12sp"
+                                        android:textStyle="bold" />
+
+                                    <TextView
+                                        android:id="@+id/btnQsVideoMirrorOn"
+                                        android:layout_width="40dp"
+                                        android:layout_height="40dp"
+                                        android:layout_marginStart="8dp"
+                                        android:background="@drawable/bg_qs_btn_inactive"
+                                        android:clickable="true"
+                                        android:focusable="true"
+                                        android:gravity="center"
+                                        android:text="On"
+                                        android:textColor="@color/pixel_text_white"
+                                        android:textSize="12sp"
+                                        android:textStyle="bold" />
+                                </LinearLayout>
+                            </LinearLayout>
+
+                            <!-- Row 1: Fast Video Format Preset Pills -->
+                            <LinearLayout
+                                android:visibility="gone"
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
                                 android:orientation="vertical"
-                                android:paddingVertical="8dp">
+                                android:paddingVertical="12dp">
 
                                 <TextView
                                     android:layout_width="wrap_content"
                                     android:layout_height="wrap_content"
                                     android:text="Video Format"
-                                    android:textColor="@color/pixel_text_white"
+                                    android:textColor="@color/gc_icon"
                                     android:textSize="13sp" />
 
                                 <TextView
@@ -1907,9 +2663,8 @@
                                     android:layout_marginTop="2dp"
                                     android:layout_marginBottom="8dp"
                                     android:text="Full HD • 30 fps"
-                                    android:textColor="@color/pixel_accent_blue"
-                                    android:textSize="14sp"
-                                    android:textStyle="bold" />
+                                    android:textColor="@color/gc_toggle_active"
+                                    android:textSize="16sp" />
 
                                 <!-- 3-Segmented Pill for fast 1-tap switching -->
                                 <LinearLayout
@@ -1960,17 +2715,18 @@
                             </LinearLayout>
                             <!-- Slow motion -->
                             <LinearLayout
+                                android:visibility="gone"
                                 android:id="@+id/rowQsSlowMotion"
                                 android:layout_width="match_parent"
                                 android:layout_height="wrap_content"
                                 android:orientation="vertical"
-                                android:paddingVertical="8dp">
+                                android:paddingVertical="12dp">
 
                                 <TextView
                                     android:layout_width="wrap_content"
                                     android:layout_height="wrap_content"
                                     android:text="Slow motion"
-                                    android:textColor="@color/pixel_text_white"
+                                    android:textColor="@color/gc_icon"
                                     android:textSize="13sp" />
 
                                 <TextView
@@ -1980,9 +2736,8 @@
                                     android:layout_marginTop="2dp"
                                     android:layout_marginBottom="8dp"
                                     android:text="Off"
-                                    android:textColor="@color/pixel_accent_blue"
-                                    android:textSize="14sp"
-                                    android:textStyle="bold" />
+                                    android:textColor="@color/gc_toggle_active"
+                                    android:textSize="16sp" />
 
                                 <LinearLayout
                                     android:layout_width="match_parent"
@@ -2029,505 +2784,28 @@
                                 </LinearLayout>
                             </LinearLayout>
 
-                            <!-- Row 2: Resolution Selection -->
-                            <LinearLayout
-                                android:layout_width="match_parent"
-                                android:layout_height="wrap_content"
-                                android:gravity="center_vertical"
-                                android:orientation="horizontal"
-                                android:paddingVertical="8dp">
-
-                                <LinearLayout
-                                    android:layout_width="0dp"
-                                    android:layout_height="wrap_content"
-                                    android:layout_weight="1"
-                                    android:orientation="vertical">
-
-                                    <TextView
-                                        android:layout_width="wrap_content"
-                                        android:layout_height="wrap_content"
-                                        android:text="Resolution"
-                                        android:textColor="@color/pixel_text_white"
-                                        android:textSize="13sp" />
-
-                                    <TextView
-                                        android:id="@+id/tvQsVideoResSubtitle"
-                                        android:layout_width="wrap_content"
-                                        android:layout_height="wrap_content"
-                                        android:layout_marginTop="2dp"
-                                        android:text="Full HD (1080p)"
-                                        android:textColor="@color/pixel_accent_blue"
-                                        android:textSize="14sp"
-                                        android:textStyle="bold" />
-                                </LinearLayout>
-
-                                <LinearLayout
-                                    android:layout_width="160dp"
-                                    android:layout_height="36dp"
-                                    android:background="@drawable/bg_segmented_container"
-                                    android:orientation="horizontal"
-                                    android:padding="3dp">
-
-                                    <TextView
-                                        android:id="@+id/btnQsVideoResFhd"
-                                        android:layout_width="0dp"
-                                        android:layout_height="match_parent"
-                                        android:layout_weight="1"
-                                        android:background="@drawable/bg_segmented_pill_active"
-                                        android:clickable="true"
-                                        android:focusable="true"
-                                        android:gravity="center"
-                                        android:text="1080p"
-                                        android:textColor="@color/pixel_pill_text_active"
-                                        android:textSize="12sp"
-                                        android:textStyle="bold" />
-
-                                    <TextView
-                                        android:id="@+id/btnQsVideoRes4k"
-                                        android:layout_width="0dp"
-                                        android:layout_height="match_parent"
-                                        android:layout_weight="1"
-                                        android:clickable="true"
-                                        android:focusable="true"
-                                        android:gravity="center"
-                                        android:text="4K"
-                                        android:textColor="@color/pixel_text_white"
-                                        android:textSize="12sp" />
-                                </LinearLayout>
-                            </LinearLayout>
-
-                            <!-- Row 3: Frame Rate Selection -->
-                            <LinearLayout
-                                android:layout_width="match_parent"
-                                android:layout_height="wrap_content"
-                                android:gravity="center_vertical"
-                                android:orientation="horizontal"
-                                android:paddingVertical="8dp">
-
-                                <LinearLayout
-                                    android:layout_width="0dp"
-                                    android:layout_height="wrap_content"
-                                    android:layout_weight="1"
-                                    android:orientation="vertical">
-
-                                    <TextView
-                                        android:layout_width="wrap_content"
-                                        android:layout_height="wrap_content"
-                                        android:text="Frames / sec"
-                                        android:textColor="@color/pixel_text_white"
-                                        android:textSize="13sp" />
-
-                                    <TextView
-                                        android:id="@+id/tvQsVideoFpsSubtitle"
-                                        android:layout_width="wrap_content"
-                                        android:layout_height="wrap_content"
-                                        android:layout_marginTop="2dp"
-                                        android:text="30 fps"
-                                        android:textColor="@color/pixel_accent_blue"
-                                        android:textSize="14sp"
-                                        android:textStyle="bold" />
-                                </LinearLayout>
-
-                                <LinearLayout
-                                    android:layout_width="160dp"
-                                    android:layout_height="36dp"
-                                    android:background="@drawable/bg_segmented_container"
-                                    android:orientation="horizontal"
-                                    android:padding="3dp">
-
-                                    <TextView
-                                        android:id="@+id/btnQsVideoFps30"
-                                        android:layout_width="0dp"
-                                        android:layout_height="match_parent"
-                                        android:layout_weight="1"
-                                        android:background="@drawable/bg_segmented_pill_active"
-                                        android:clickable="true"
-                                        android:focusable="true"
-                                        android:gravity="center"
-                                        android:text="30"
-                                        android:textColor="@color/pixel_pill_text_active"
-                                        android:textSize="12sp"
-                                        android:textStyle="bold" />
-
-                                    <TextView
-                                        android:id="@+id/btnQsVideoFps60"
-                                        android:layout_width="0dp"
-                                        android:layout_height="match_parent"
-                                        android:layout_weight="1"
-                                        android:clickable="true"
-                                        android:focusable="true"
-                                        android:gravity="center"
-                                        android:text="60"
-                                        android:textColor="@color/pixel_text_white"
-                                        android:textSize="12sp" />
-                                </LinearLayout>
-                            </LinearLayout>
-
-                            <!-- Low light: let the frame rate drop for a brighter picture -->
-                            <LinearLayout
-                                android:layout_width="match_parent"
-                                android:layout_height="wrap_content"
-                                android:gravity="center_vertical"
-                                android:orientation="horizontal"
-                                android:paddingVertical="8dp">
-
-                                <LinearLayout
-                                    android:layout_width="0dp"
-                                    android:layout_height="wrap_content"
-                                    android:layout_weight="1"
-                                    android:orientation="vertical">
-
-                                    <TextView
-                                        android:layout_width="wrap_content"
-                                        android:layout_height="wrap_content"
-                                        android:text="Low light"
-                                        android:textColor="@color/pixel_text_white"
-                                        android:textSize="13sp" />
-
-                                    <TextView
-                                        android:id="@+id/tvQsLowLightVideoSubtitle"
-                                        android:layout_width="wrap_content"
-                                        android:layout_height="wrap_content"
-                                        android:layout_marginTop="2dp"
-                                        android:text="Off"
-                                        android:textColor="@color/pixel_accent_blue"
-                                        android:textSize="14sp"
-                                        android:textStyle="bold" />
-                                </LinearLayout>
-
-                                <LinearLayout
-                                    android:layout_width="120dp"
-                                    android:layout_height="36dp"
-                                    android:background="@drawable/bg_segmented_container"
-                                    android:orientation="horizontal"
-                                    android:padding="3dp">
-
-                                    <TextView
-                                        android:id="@+id/btnQsLowLightVideoOff"
-                                        android:layout_width="0dp"
-                                        android:layout_height="match_parent"
-                                        android:layout_weight="1"
-                                        android:clickable="true"
-                                        android:focusable="true"
-                                        android:gravity="center"
-                                        android:text="Off"
-                                        android:textColor="@color/pixel_text_white"
-                                        android:textSize="12sp" />
-
-                                    <TextView
-                                        android:id="@+id/btnQsLowLightVideoOn"
-                                        android:layout_width="0dp"
-                                        android:layout_height="match_parent"
-                                        android:layout_weight="1"
-                                        android:background="@drawable/bg_segmented_pill_active"
-                                        android:clickable="true"
-                                        android:focusable="true"
-                                        android:gravity="center"
-                                        android:text="On"
-                                        android:textColor="@color/pixel_pill_text_active"
-                                        android:textSize="12sp"
-                                        android:textStyle="bold" />
-                                </LinearLayout>
-                            </LinearLayout>
-
-                            <!-- Row 4: Flash / Torch -->
-                            <LinearLayout
-                                android:layout_width="match_parent"
-                                android:layout_height="wrap_content"
-                                android:gravity="center_vertical"
-                                android:orientation="horizontal"
-                                android:paddingVertical="8dp">
-
-                                <LinearLayout
-                                    android:layout_width="0dp"
-                                    android:layout_height="wrap_content"
-                                    android:layout_weight="1"
-                                    android:orientation="vertical">
-
-                                    <TextView
-                                        android:layout_width="wrap_content"
-                                        android:layout_height="wrap_content"
-                                        android:text="Flash"
-                                        android:textColor="@color/pixel_text_white"
-                                        android:textSize="13sp" />
-
-                                    <TextView
-                                        android:id="@+id/tvQsVideoTorchSubtitle"
-                                        android:layout_width="wrap_content"
-                                        android:layout_height="wrap_content"
-                                        android:layout_marginTop="2dp"
-                                        android:text="Off"
-                                        android:textColor="@color/pixel_accent_blue"
-                                        android:textSize="14sp"
-                                        android:textStyle="bold" />
-                                </LinearLayout>
-
-                                <LinearLayout
-                                    android:layout_width="wrap_content"
-                                    android:layout_height="wrap_content"
-                                    android:orientation="horizontal">
-
-                                    <ImageView
-                                        android:id="@+id/btnQsVideoTorchOff"
-                                        android:layout_width="40dp"
-                                        android:layout_height="40dp"
-                                        android:background="@drawable/bg_qs_btn_active"
-                                        android:clickable="true"
-                                        android:focusable="true"
-                                        android:padding="9dp"
-                                        android:src="@drawable/ic_qs_none"
-                                        app:tint="@color/pixel_icon_active" />
-
-                                    <ImageView
-                                        android:id="@+id/btnQsVideoTorchOn"
-                                        android:layout_width="40dp"
-                                        android:layout_height="40dp"
-                                        android:layout_marginStart="10dp"
-                                        android:background="@drawable/bg_qs_btn_inactive"
-                                        android:clickable="true"
-                                        android:focusable="true"
-                                        android:padding="9dp"
-                                        android:src="@drawable/ic_flash_on"
-                                        app:tint="@color/pixel_text_white" />
-                                </LinearLayout>
-                            </LinearLayout>
-
-                            <!-- Audio Zoom Row -->
-                            <LinearLayout
-                                android:layout_width="match_parent"
-                                android:layout_height="wrap_content"
-                                android:gravity="center_vertical"
-                                android:orientation="horizontal"
-                                android:paddingVertical="8dp">
-
-                                <LinearLayout
-                                    android:layout_width="0dp"
-                                    android:layout_height="wrap_content"
-                                    android:layout_weight="1"
-                                    android:orientation="vertical">
-
-                                    <TextView
-                                        android:layout_width="wrap_content"
-                                        android:layout_height="wrap_content"
-                                        android:text="Audio Zoom"
-                                        android:textColor="@color/pixel_text_white"
-                                        android:textSize="13sp" />
-
-                                    <TextView
-                                        android:id="@+id/tvQsAudioZoomSubtitle"
-                                        android:layout_width="wrap_content"
-                                        android:layout_height="wrap_content"
-                                        android:layout_marginTop="2dp"
-                                        android:text="On • Focuses on subject"
-                                        android:textColor="@color/pixel_accent_blue"
-                                        android:textSize="14sp"
-                                        android:textStyle="bold" />
-                                </LinearLayout>
-
-                                <LinearLayout
-                                    android:layout_width="120dp"
-                                    android:layout_height="36dp"
-                                    android:background="@drawable/bg_segmented_container"
-                                    android:orientation="horizontal"
-                                    android:padding="3dp">
-
-                                    <TextView
-                                        android:id="@+id/btnQsAudioZoomOff"
-                                        android:layout_width="0dp"
-                                        android:layout_height="match_parent"
-                                        android:layout_weight="1"
-                                        android:clickable="true"
-                                        android:focusable="true"
-                                        android:gravity="center"
-                                        android:text="Off"
-                                        android:textColor="@color/pixel_text_white"
-                                        android:textSize="12sp" />
-
-                                    <TextView
-                                        android:id="@+id/btnQsAudioZoomOn"
-                                        android:layout_width="0dp"
-                                        android:layout_height="match_parent"
-                                        android:layout_weight="1"
-                                        android:background="@drawable/bg_segmented_pill_active"
-                                        android:clickable="true"
-                                        android:focusable="true"
-                                        android:gravity="center"
-                                        android:text="On"
-                                        android:textColor="@color/pixel_pill_text_active"
-                                        android:textSize="12sp"
-                                        android:textStyle="bold" />
-                                </LinearLayout>
-                            </LinearLayout>
-
-                            <!-- Row 5: Grid in Video -->
-                            <LinearLayout
-                                android:layout_width="match_parent"
-                                android:layout_height="wrap_content"
-                                android:gravity="center_vertical"
-                                android:orientation="horizontal"
-                                android:paddingVertical="8dp">
-
-                                <LinearLayout
-                                    android:layout_width="0dp"
-                                    android:layout_height="wrap_content"
-                                    android:layout_weight="1"
-                                    android:orientation="vertical">
-
-                                    <TextView
-                                        android:layout_width="wrap_content"
-                                        android:layout_height="wrap_content"
-                                        android:text="Grid type"
-                                        android:textColor="@color/pixel_text_white"
-                                        android:textSize="13sp" />
-
-                                    <TextView
-                                        android:id="@+id/tvQsVideoGridSubtitle"
-                                        android:layout_width="wrap_content"
-                                        android:layout_height="wrap_content"
-                                        android:layout_marginTop="2dp"
-                                        android:text="Off"
-                                        android:textColor="@color/pixel_accent_blue"
-                                        android:textSize="14sp"
-                                        android:textStyle="bold" />
-                                </LinearLayout>
-
-                                <LinearLayout
-                                    android:layout_width="wrap_content"
-                                    android:layout_height="wrap_content"
-                                    android:orientation="horizontal">
-
-                                    <TextView
-                                        android:id="@+id/btnQsVideoGridOff"
-                                        android:layout_width="40dp"
-                                        android:layout_height="40dp"
-                                        android:background="@drawable/bg_qs_btn_active"
-                                        android:clickable="true"
-                                        android:focusable="true"
-                                        android:gravity="center"
-                                        android:text="Off"
-                                        android:textColor="@color/pixel_pill_text_active"
-                                        android:textSize="12sp"
-                                        android:textStyle="bold" />
-
-                                    <TextView
-                                        android:id="@+id/btnQsVideoGrid3x3"
-                                        android:layout_width="40dp"
-                                        android:layout_height="40dp"
-                                        android:layout_marginStart="10dp"
-                                        android:background="@drawable/bg_qs_btn_inactive"
-                                        android:clickable="true"
-                                        android:focusable="true"
-                                        android:gravity="center"
-                                        android:text="3×3"
-                                        android:textColor="@color/pixel_text_white"
-                                        android:textSize="12sp"
-                                        android:textStyle="bold" />
-
-                                    <TextView
-                                        android:id="@+id/btnQsVideoGridGolden"
-                                        android:layout_width="40dp"
-                                        android:layout_height="40dp"
-                                        android:layout_marginStart="10dp"
-                                        android:background="@drawable/bg_qs_btn_inactive"
-                                        android:clickable="true"
-                                        android:focusable="true"
-                                        android:gravity="center"
-                                        android:text="Phi"
-                                        android:textColor="@color/pixel_text_white"
-                                        android:textSize="12sp"
-                                        android:textStyle="bold" />
-                                </LinearLayout>
-                            </LinearLayout>
-
-                            <LinearLayout
-                                android:layout_width="match_parent"
-                                android:layout_height="wrap_content"
-                                android:gravity="center_vertical"
-                                android:orientation="horizontal"
-                                android:paddingVertical="8dp">
-
-                                <LinearLayout
-                                    android:layout_width="0dp"
-                                    android:layout_height="wrap_content"
-                                    android:layout_weight="1"
-                                    android:orientation="vertical">
-
-                                    <TextView
-                                        android:layout_width="wrap_content"
-                                        android:layout_height="wrap_content"
-                                        android:text="Mirror"
-                                        android:textColor="@color/pixel_text_white"
-                                        android:textSize="13sp" />
-
-                                    <TextView
-                                        android:id="@+id/tvQsVideoMirrorSubtitle"
-                                        android:layout_width="wrap_content"
-                                        android:layout_height="wrap_content"
-                                        android:layout_marginTop="2dp"
-                                        android:text="Off"
-                                        android:textColor="@color/pixel_accent_blue"
-                                        android:textSize="14sp"
-                                        android:textStyle="bold" />
-                                </LinearLayout>
-
-                                <LinearLayout
-                                    android:layout_width="wrap_content"
-                                    android:layout_height="wrap_content"
-                                    android:orientation="horizontal">
-
-                                    <TextView
-                                        android:id="@+id/btnQsVideoMirrorOff"
-                                        android:layout_width="40dp"
-                                        android:layout_height="40dp"
-                                        android:background="@drawable/bg_qs_btn_active"
-                                        android:clickable="true"
-                                        android:focusable="true"
-                                        android:gravity="center"
-                                        android:text="Off"
-                                        android:textColor="@color/pixel_pill_text_active"
-                                        android:textSize="12sp"
-                                        android:textStyle="bold" />
-
-                                    <TextView
-                                        android:id="@+id/btnQsVideoMirrorOn"
-                                        android:layout_width="40dp"
-                                        android:layout_height="40dp"
-                                        android:layout_marginStart="10dp"
-                                        android:background="@drawable/bg_qs_btn_inactive"
-                                        android:clickable="true"
-                                        android:focusable="true"
-                                        android:gravity="center"
-                                        android:text="On"
-                                        android:textColor="@color/pixel_text_white"
-                                        android:textSize="12sp"
-                                        android:textStyle="bold" />
-                                </LinearLayout>
-                            </LinearLayout>
-
                         </LinearLayout>
 
                     </LinearLayout>
                 </ScrollView>
 
+                <TextView
+                    android:id="@+id/btnMoreSettings"
+                    android:layout_width="wrap_content"
+                    android:layout_height="42dp"
+                    android:layout_gravity="end"
+                    android:layout_marginTop="8dp"
+                    android:layout_marginBottom="32dp"
+                    android:background="@drawable/bg_gc_outline_pill"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:gravity="center"
+                    android:paddingHorizontal="26dp"
+                    android:text="More settings"
+                    android:textColor="@color/gc_icon"
+                    android:textSize="15sp" />
             </LinearLayout>
-        </androidx.cardview.widget.CardView>
-
-        <!-- FLOATING "More settings" PILL BUTTON (Attached below card on right) -->
-        <TextView
-            android:id="@+id/btnMoreSettings"
-            android:layout_width="wrap_content"
-            android:layout_height="40dp"
-            android:layout_marginTop="10dp"
-            android:background="@drawable/bg_more_settings_pill"
-            android:clickable="true"
-            android:focusable="true"
-            android:gravity="center"
-            android:paddingHorizontal="20dp"
-            android:text="More settings"
-            android:textColor="@color/pixel_text_white"
-            android:textSize="13sp"
-            app:layout_constraintEnd_toEndOf="@+id/quickSettingsSheet"
-            app:layout_constraintTop_toBottomOf="@+id/quickSettingsSheet" />
+        </FrameLayout>
 
     </androidx.constraintlayout.widget.ConstraintLayout>
 
@@ -2536,26 +2814,25 @@
         android:id="@+id/bottomDeck"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:background="@color/pixel_black"
+        android:layout_marginTop="@dimen/gc_deck_top"
         android:orientation="vertical"
-        android:paddingBottom="16dp"
-        app:layout_constraintBottom_toBottomOf="parent">
+        app:layout_constraintTop_toTopOf="parent">
 
         <!-- TIER 1: SHUTTER DECK (Gallery Circle, Concentric Shutter, Rotating Flip) -->
         <androidx.constraintlayout.widget.ConstraintLayout
             android:id="@+id/shutterDeck"
             android:layout_width="match_parent"
-            android:layout_height="96dp">
+            android:layout_height="120dp">
 
             <!-- Gallery Circle Button (56dp circle preview) -->
             <androidx.cardview.widget.CardView
                 android:id="@+id/cardGalleryThumbnail"
-                android:layout_width="56dp"
-                android:layout_height="56dp"
-                android:layout_marginStart="36dp"
+                android:layout_width="52dp"
+                android:layout_height="52dp"
+                android:layout_marginStart="68dp"
                 app:cardBackgroundColor="#202124"
-                app:cardCornerRadius="28dp"
-                app:cardElevation="2dp"
+                app:cardCornerRadius="26dp"
+                app:cardElevation="0dp"
                 app:layout_constraintBottom_toBottomOf="parent"
                 app:layout_constraintStart_toStartOf="parent"
                 app:layout_constraintTop_toTopOf="parent">
@@ -2568,6 +2845,17 @@
                     android:scaleType="centerCrop" />
             </androidx.cardview.widget.CardView>
 
+            <!-- White ring around the thumbnail, as Google Camera -->
+            <View
+                android:id="@+id/viewThumbnailRing"
+                android:layout_width="52dp"
+                android:layout_height="52dp"
+                android:background="@drawable/bg_gc_ring"
+                android:elevation="1dp"
+                app:layout_constraintBottom_toBottomOf="@+id/cardGalleryThumbnail"
+                app:layout_constraintEnd_toEndOf="@+id/cardGalleryThumbnail"
+                app:layout_constraintStart_toStartOf="@+id/cardGalleryThumbnail"
+                app:layout_constraintTop_toTopOf="@+id/cardGalleryThumbnail" />
             <!-- Google Pixel HDR+ Processing Spinner Ring around Gallery Circle -->
             <ProgressBar
                 android:id="@+id/progressThumbnailSpin"
@@ -2584,10 +2872,11 @@
             <!-- THE ICONIC GOOGLE PIXEL SHUTTER BUTTON (Concentric white rings) -->
             <ImageView
                 android:id="@+id/btnShutter"
-                android:layout_width="86dp"
-                android:layout_height="86dp"
+                android:layout_width="102dp"
+                android:layout_height="102dp"
                 android:clickable="true"
                 android:focusable="true"
+                android:padding="13dp"
                 android:src="@drawable/bg_shutter_button"
                 app:layout_constraintBottom_toBottomOf="parent"
                 app:layout_constraintEnd_toEndOf="parent"
@@ -2637,7 +2926,7 @@
                 android:max="1000"
                 android:visibility="invisible"
                 app:indicatorColor="@color/pixel_accent_blue"
-                app:indicatorSize="88dp"
+                app:indicatorSize="82dp"
                 app:layout_constraintBottom_toBottomOf="@+id/btnShutter"
                 app:layout_constraintEnd_toEndOf="@+id/btnShutter"
                 app:layout_constraintStart_toStartOf="@+id/btnShutter"
@@ -2662,10 +2951,10 @@
             <!-- Camera Switcher (56dp circle with 180° rotation on tap) -->
             <ImageView
                 android:id="@+id/btnSwitchCamera"
-                android:layout_width="56dp"
-                android:layout_height="56dp"
-                android:layout_marginEnd="36dp"
-                android:background="@drawable/bg_camera_switch_circle"
+                android:layout_width="52dp"
+                android:layout_height="52dp"
+                android:layout_marginEnd="68dp"
+                android:background="@drawable/bg_gc_ring"
                 android:clickable="true"
                 android:focusable="true"
                 android:padding="14dp"
@@ -2681,8 +2970,8 @@
         <HorizontalScrollView
             android:id="@+id/modeCarousel"
             android:layout_width="match_parent"
-            android:layout_height="44dp"
-            android:layout_marginTop="2dp"
+            android:layout_height="50dp"
+            android:layout_marginTop="8dp"
             android:clipToPadding="false"
             android:overScrollMode="never"
             android:scrollbars="none">
@@ -2695,72 +2984,80 @@
                 android:orientation="horizontal">
 
                 <TextView
-                    android:id="@+id/modeLongExposure"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:paddingHorizontal="14dp"
-                    android:paddingVertical="7dp"
-                    android:text="Long Exposure"
-                    android:textColor="@color/pixel_text_white"
-                    android:textSize="13sp" />
-
-                <TextView
                     android:id="@+id/modePortrait"
                     android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:paddingHorizontal="14dp"
-                    android:paddingVertical="7dp"
+                    android:layout_height="36dp"
+                    android:gravity="center"
+                    android:paddingHorizontal="18dp"
                     android:text="@string/mode_portrait"
                     android:textColor="@color/pixel_text_white"
-                    android:textSize="13sp" />
-
-                <!-- Default Active Mode: Photo (Elongated Sand Pill) -->
+                    android:textSize="14sp" />
                 <TextView
                     android:id="@+id/modeCamera"
                     android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
+                    android:layout_height="36dp"
+                    android:gravity="center"
                     android:background="@drawable/bg_mode_pill_active"
-                    android:paddingHorizontal="20dp"
-                    android:paddingVertical="7dp"
+                    android:paddingHorizontal="18dp"
                     android:text="@string/mode_camera"
                     android:textColor="@color/pixel_accent_sand_text"
-                    android:textSize="13sp"
-                    android:textStyle="bold" />
-
+                    android:textSize="14sp" />
                 <TextView
                     android:id="@+id/modeNightSight"
                     android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:paddingHorizontal="14dp"
-                    android:paddingVertical="7dp"
+                    android:layout_height="36dp"
+                    android:gravity="center"
+                    android:paddingHorizontal="18dp"
                     android:text="@string/mode_night_sight"
                     android:textColor="@color/pixel_text_white"
-                    android:textSize="13sp" />
-
+                    android:textSize="14sp" />
                 <TextView
                     android:id="@+id/modePanorama"
                     android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:paddingHorizontal="14dp"
-                    android:paddingVertical="7dp"
+                    android:layout_height="36dp"
+                    android:gravity="center"
+                    android:paddingHorizontal="18dp"
                     android:text="Panorama"
                     android:textColor="@color/pixel_text_white"
-                    android:textSize="13sp" />
-
+                    android:textSize="14sp" />
+                <TextView
+                    android:id="@+id/modeLongExposure"
+                    android:layout_width="wrap_content"
+                    android:layout_height="36dp"
+                    android:gravity="center"
+                    android:paddingHorizontal="18dp"
+                    android:text="Long Exposure"
+                    android:textColor="@color/pixel_text_white"
+                    android:textSize="14sp" />
                 <TextView
                     android:id="@+id/modePro"
                     android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:paddingHorizontal="14dp"
-                    android:paddingVertical="7dp"
+                    android:layout_height="36dp"
+                    android:gravity="center"
+                    android:paddingHorizontal="18dp"
                     android:text="@string/mode_pro"
                     android:textColor="@color/pixel_text_white"
-                    android:textSize="13sp" />
-
+                    android:textSize="14sp"
+                    android:visibility="gone" />
                 <TextView
                     android:id="@+id/modeVideo"
                     android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
+                    android:layout_height="36dp"
+                    android:gravity="center"
+                    android:paddingHorizontal="18dp"
+                    android:text="Video"
+                    android:textColor="@color/pixel_text_white"
+                    android:textSize="14sp"
+                    android:visibility="gone" />
+                <TextView
+                    android:id="@+id/modeSlowMotion"
+                    android:layout_width="wrap_content"
+                    android:layout_height="36dp"
+                    android:gravity="center"
+                    android:paddingHorizontal="18dp"
+                    android:text="Slow Motion"
+                    android:textColor="@color/pixel_text_white"
+                    android:textSize="14sp"
                     android:visibility="gone" />
             </LinearLayout>
         </HorizontalScrollView>
@@ -2769,19 +3066,19 @@
         <androidx.constraintlayout.widget.ConstraintLayout
             android:id="@+id/bottomNavBar"
             android:layout_width="match_parent"
-            android:layout_height="52dp"
-            android:layout_marginTop="4dp">
+            android:layout_height="66dp"
+            android:layout_marginTop="6dp">
 
             <!-- Bottom Left: Circular Settings Gear Button -->
             <ImageView
                 android:id="@+id/btnBottomSettings"
                 android:layout_width="44dp"
                 android:layout_height="44dp"
-                android:layout_marginStart="24dp"
+                android:layout_marginStart="16dp"
                 android:background="@drawable/bg_settings_circle"
                 android:clickable="true"
                 android:focusable="true"
-                android:padding="11dp"
+                android:padding="10dp"
                 android:src="@drawable/ic_settings"
                 app:layout_constraintBottom_toBottomOf="parent"
                 app:layout_constraintStart_toStartOf="parent"
@@ -2791,12 +3088,11 @@
             <!-- Bottom Center: Material You Photo / Video Pill Toggle -->
             <LinearLayout
                 android:id="@+id/togglePhotoVideo"
-                android:layout_width="88dp"
-                android:layout_height="40dp"
+                android:layout_width="wrap_content"
+                android:layout_height="44dp"
                 android:background="@drawable/bg_photo_video_toggle"
                 android:gravity="center"
                 android:orientation="horizontal"
-                android:padding="3dp"
                 app:layout_constraintBottom_toBottomOf="parent"
                 app:layout_constraintEnd_toEndOf="parent"
                 app:layout_constraintStart_toStartOf="parent"
@@ -2805,37 +3101,55 @@
                 <!-- Camera Mode Tab -->
                 <ImageView
                     android:id="@+id/btnToggleCamera"
-                    android:layout_width="40dp"
-                    android:layout_height="match_parent"
+                    android:layout_width="44dp"
+                    android:layout_height="44dp"
                     android:background="@drawable/bg_toggle_item_active"
                     android:clickable="true"
                     android:focusable="true"
-                    android:padding="7dp"
+                    android:padding="12dp"
                     android:src="@drawable/ic_camera"
                     app:tint="@color/pixel_icon_active" />
 
                 <!-- Video Mode Tab -->
                 <ImageView
                     android:id="@+id/btnToggleVideo"
-                    android:layout_width="40dp"
-                    android:layout_height="match_parent"
+                    android:layout_width="44dp"
+                    android:layout_height="44dp"
+                    android:layout_marginStart="3dp"
                     android:clickable="true"
                     android:focusable="true"
-                    android:padding="7dp"
+                    android:padding="12dp"
                     android:src="@drawable/ic_videocam"
                     app:tint="@color/pixel_text_white" />
             </LinearLayout>
 
+            <!-- Bottom right, Night Sight and Slow Motion: a chip in place of the sliders button -->
+            <TextView
+                android:id="@+id/chipBottomRight"
+                android:layout_width="wrap_content"
+                android:layout_height="44dp"
+                android:layout_marginEnd="16dp"
+                android:background="@drawable/bg_photo_video_toggle"
+                android:drawablePadding="4dp"
+                android:gravity="center"
+                android:minWidth="44dp"
+                android:paddingHorizontal="12dp"
+                android:textColor="@color/gc_icon"
+                android:textSize="13sp"
+                android:visibility="gone"
+                app:layout_constraintBottom_toBottomOf="parent"
+                app:layout_constraintEnd_toEndOf="parent"
+                app:layout_constraintTop_toTopOf="parent" />
             <!-- Bottom Right: Circular Pro Controls Button (ic_tune) -->
             <ImageView
                 android:id="@+id/btnProControls"
                 android:layout_width="44dp"
                 android:layout_height="44dp"
-                android:layout_marginEnd="24dp"
+                android:layout_marginEnd="16dp"
                 android:background="@drawable/bg_settings_circle"
                 android:clickable="true"
                 android:focusable="true"
-                android:padding="11dp"
+                android:padding="10dp"
                 android:src="@drawable/ic_tune"
                 app:layout_constraintBottom_toBottomOf="parent"
                 app:layout_constraintEnd_toEndOf="parent"

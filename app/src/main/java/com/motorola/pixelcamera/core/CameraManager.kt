@@ -129,6 +129,10 @@ class CameraManager(private val context: Context) {
     @Volatile private var lastAutoIso: Int = 0
     @Volatile private var lastAutoExposureNs: Long = 0L
 
+    /** What auto exposure is choosing right now (0 until the first frame), for the Pro info row. */
+    val liveIso: Int get() = lastAutoIso
+    val liveExposureNs: Long get() = lastAutoExposureNs
+
     private val exposureTracker = object : android.hardware.camera2.CameraCaptureSession.CaptureCallback() {
         override fun onCaptureCompleted(
             session: android.hardware.camera2.CameraCaptureSession,
