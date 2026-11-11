@@ -21,6 +21,12 @@ object BurstAligner {
     private const val MAX_SAMPLES = 250_000
     private const val WEIGHT_BLOCK = 4
     private const val WEIGHT_ONE = 64
+    private const val FEATHER_BLOCKS = 3
+    private const val GAIN_SHIFT = 10
+    private const val GAIN_ONE = 1 shl GAIN_SHIFT
+    private const val GAIN_HALF = GAIN_ONE / 2
+    private const val MIN_GAIN = 0.8f
+    private const val MAX_GAIN = 1.25f
 
     private fun lumaOf(c: Int): Int =
         (((c shr 16) and 0xFF) * 77 + ((c shr 8) and 0xFF) * 150 + (c and 0xFF) * 29) shr 8
@@ -168,8 +174,40 @@ object BurstAligner {
         return out
     }
 
-    /** A frame after alignment: its pixels, its shift, and per-block trust in 1/[WEIGHT_ONE] steps. */
-    private class Aligned(val px: IntArray, val dx: Int, val dy: Int, val blockWeight: IntArray)
+    /**
+     * Widens every rejected area by one block and then fades trust in over a few blocks.
+     * A hard edge between "merged" and "reference only" is visible even when the two differ
+     * by a single brightness level; a gradual one is not.
+     */
+    private fun feather(weight: IntArray, bw: Int, bh: Int): IntArray {
+        val shrunk = IntArray(weight.size)
+        for (y in 0 until bh) for (x in 0 until bw) {
+            var m = Int.MAX_VALUE
+            for (yy in max(0, y - 1)..min(bh - 1, y + 1)) for (xx in max(0, x - 1)..min(bw - 1, x + 1)) {
+                m = min(m, weight[yy * bw + xx])
+            }
+            shrunk[y * bw + x] = m
+        }
+        // Separable box blur; never raise a block above what it had, so rejected stays rejected.
+        val temp = IntArray(weight.size)
+        val div = 2 * FEATHER_BLOCKS + 1
+        for (y in 0 until bh) for (x in 0 until bw) {
+            var sum = 0
+            for (k in -FEATHER_BLOCKS..FEATHER_BLOCKS) sum += shrunk[y * bw + (x + k).coerceIn(0, bw - 1)]
+            temp[y * bw + x] = sum / div
+        }
+        val out = IntArray(weight.size)
+        for (y in 0 until bh) for (x in 0 until bw) {
+            var sum = 0
+            for (k in -FEATHER_BLOCKS..FEATHER_BLOCKS) sum += temp[(y + k).coerceIn(0, bh - 1) * bw + x]
+            out[y * bw + x] = min(sum / div, weight[y * bw + x])
+        }
+        return out
+    }
+
+    /** A frame after alignment: its pixels, its shift, per-block trust in 1/[WEIGHT_ONE] steps,
+     *  and the brightness gain (in 1/[GAIN_ONE] steps) that matches it to the reference. */
+    private class Aligned(val px: IntArray, val dx: Int, val dy: Int, val blockWeight: IntArray, val gain: Int)
 
     private fun parallelFor(count: Int, body: (Int) -> Unit) =
         java.util.stream.IntStream.range(0, count).parallel().forEach { body(it) }
@@ -206,18 +244,28 @@ object BurstAligner {
             val (dx, dy) = estimateOffset(refPyr, pyramid(frmLuma, w, h, levels))
             val frmBlocks = blockMeans(frmLuma, w, h, dx, dy, bw, bh)
 
+            // Frames of one burst differ a little in brightness (exposure still settling, lamp
+            // flicker). Match this frame to the reference first; otherwise every area where the
+            // frame is rejected shows up as a patch of slightly different brightness.
+            var refSum = 0L
+            var frmSum = 0L
+            for (b in 0 until bw * bh) {
+                if (frmBlocks[b] >= 0) { refSum += refBlocks[b]; frmSum += frmBlocks[b] }
+            }
+            val gain = if (frmSum > 0) (refSum.toFloat() / frmSum).coerceIn(MIN_GAIN, MAX_GAIN) else 1f
+
             // Noise-adaptive threshold from the median block difference
             val diffs = IntArray(bw * bh)
             var nd = 0
             for (b in 0 until bw * bh) {
-                if (frmBlocks[b] >= 0) diffs[nd++] = abs(refBlocks[b] - frmBlocks[b])
+                if (frmBlocks[b] >= 0) diffs[nd++] = abs(refBlocks[b] - (frmBlocks[b] * gain + 0.5f).toInt())
             }
             if (nd > 0) {
                 val sorted = diffs.copyOf(nd).also { it.sort() }
                 val t = 1.5f * sorted[nd / 2] + 4f
                 val blockWeight = IntArray(bw * bh) { b ->
                     if (frmBlocks[b] < 0) 0 else {
-                        val d = abs(refBlocks[b] - frmBlocks[b])
+                        val d = abs(refBlocks[b] - (frmBlocks[b] * gain + 0.5f).toInt())
                         val trust = when {
                             d <= t -> 1f
                             d >= 3f * t -> 0f
@@ -226,7 +274,7 @@ object BurstAligner {
                         (trust * WEIGHT_ONE + 0.5f).toInt()
                     }
                 }
-                slots[n] = Aligned(frame, dx, dy, blockWeight)
+                slots[n] = Aligned(frame, dx, dy, feather(blockWeight, bw, bh), (gain * GAIN_ONE + 0.5f).toInt())
             }
         }
         val aligned = slots.filterNotNull()
@@ -248,9 +296,9 @@ object BurstAligner {
                     val wq = a.blockWeight[bRow + x / WEIGHT_BLOCK]
                     if (wq <= 0) continue
                     val f = a.px[sy * w + sx]
-                    r += wq * ((f shr 16) and 0xFF)
-                    g += wq * ((f shr 8) and 0xFF)
-                    b += wq * (f and 0xFF)
+                    r += wq * min(255, (((f shr 16) and 0xFF) * a.gain + GAIN_HALF) shr GAIN_SHIFT)
+                    g += wq * min(255, (((f shr 8) and 0xFF) * a.gain + GAIN_HALF) shr GAIN_SHIFT)
+                    b += wq * min(255, ((f and 0xFF) * a.gain + GAIN_HALF) shr GAIN_SHIFT)
                     weight += wq
                 }
                 val half = weight / 2
