@@ -398,20 +398,13 @@ class CameraManager(private val context: Context) {
                     qrScanner.scan(imageProxy)?.let(qrListener)
                 }
 
-                // If Top Shot or Panorama active, stream frames
-                val needsFrame = (topShotMode != TopShotMode.OFF && (currentCameraMode == CameraMode.CAMERA || currentCameraMode == CameraMode.PORTRAIT)) ||
-                        (currentCameraMode == CameraMode.PANORAMA && panoramaEngine.wantsFrame())
-
-                if (needsFrame) {
-                    val bmp = imageProxyRgbaToBitmap(imageProxy)
-                    if (bmp != null) {
-                        if (topShotMode != TopShotMode.OFF) {
-                            MotionPhotoEngine.pushPreviewFrame(bmp)
-                        }
-                        if (currentCameraMode == CameraMode.PANORAMA && panoramaEngine.wantsFrame()) {
-                            panoramaEngine.processIncomingFrame(bmp)
-                        }
-                    }
+                if (topShotMode != TopShotMode.OFF && (currentCameraMode == CameraMode.CAMERA || currentCameraMode == CameraMode.PORTRAIT)) {
+                    MotionPhotoEngine.offerFrame(imageProxy)
+                } else {
+                    MotionPhotoEngine.clear()
+                }
+                if (currentCameraMode == CameraMode.PANORAMA && panoramaEngine.wantsFrame()) {
+                    imageProxyRgbaToBitmap(imageProxy)?.let { panoramaEngine.processIncomingFrame(it) }
                 }
             } catch (e: Exception) {
                 // Ignore transient analysis error
@@ -834,16 +827,18 @@ class CameraManager(private val context: Context) {
             return if (rawBound) takePictureRawAndJpeg(capture) else takePictureDirect(capture)
         }
 
-        suspend fun attachMotion(savedUri: Uri?, motionFrames: List<Bitmap>) {
-            if (savedUri == null || motionFrames.size < 4) return
+        suspend fun attachMotion(savedUri: Uri?, motionFrames: List<MotionPhotoEngine.MotionFrame>) {
+            val tempMp4 = File(context.cacheDir, "motion_${System.currentTimeMillis()}.mp4")
             try {
-                val tempMp4 = File(context.cacheDir, "motion_${System.currentTimeMillis()}.mp4")
+                if (savedUri == null || motionFrames.size < 4) return
                 if (MotionPhotoEngine.encodeFramesToMp4(motionFrames, tempMp4)) {
                     MotionPhotoEngine.attachMotionPhoto(context, savedUri, tempMp4)
-                    tempMp4.delete()
                 }
             } catch (e: Exception) {
                 Log.w(TAG, "Motion Photo attach warning: ${e.message}")
+            } finally {
+                tempMp4.delete()
+                MotionPhotoEngine.recycleFrames(motionFrames)
             }
         }
 
