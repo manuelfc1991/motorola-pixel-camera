@@ -163,6 +163,9 @@ object FullResCapture {
                 }, handler)
             } catch (e: CameraAccessException) {
                 opened.complete(null)
+            } catch (e: Exception) {
+                Log.e(TAG, "Camera cannot be opened", e)
+                return null
             }
             opened.await()?.let { return it }
             Log.w(TAG, "Camera $cameraId busy, attempt ${attempt + 1}")
