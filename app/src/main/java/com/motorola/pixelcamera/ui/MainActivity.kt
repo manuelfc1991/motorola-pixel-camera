@@ -424,6 +424,7 @@ class MainActivity : AppCompatActivity() {
     private fun syncSettings() {
         cameraManager.isRawEnabled = prefs.getBoolean(SettingsActivity.KEY_RAW_ENABLED, false)
         cameraManager.fullResFront = prefs.getBoolean(SettingsActivity.KEY_FRONT_FULL_RES, false)
+        cameraManager.lowLightVideo = prefs.getBoolean(SettingsActivity.KEY_LOW_LIGHT_VIDEO, false)
         hdrMode = prefs.getInt(SettingsActivity.KEY_HDR_MODE, 0).coerceIn(0, 2)
         cameraManager.hdrPlusMode = hdrMode
         cameraManager.shutterSoundEnabled = prefs.getBoolean(SettingsActivity.KEY_CAMERA_SOUNDS, true)
@@ -652,6 +653,15 @@ class MainActivity : AppCompatActivity() {
         setQsButtonActive(binding.btnQsVideoTorchOn, isTorch)
 
         // Audio Zoom
+        val lowLight = cameraManager.lowLightVideo
+        binding.tvQsLowLightVideoSubtitle.text = when {
+            !lowLight -> "Off"
+            cameraManager.currentVideoFps == CameraManager.VideoFps.FPS_60 -> "On • not at 60 fps"
+            else -> "On • brighter, slower frames"
+        }
+        setQsPillActive(binding.btnQsLowLightVideoOn, lowLight)
+        setQsPillActive(binding.btnQsLowLightVideoOff, !lowLight)
+
         val isAudioZoom = cameraManager.audioZoomEnabled
         binding.tvQsAudioZoomSubtitle.text = if (isAudioZoom) "On • Focuses on subject" else "Off"
         setQsPillActive(binding.btnQsAudioZoomOn, isAudioZoom)
@@ -735,7 +745,7 @@ class MainActivity : AppCompatActivity() {
                 // The 0.6 lens button only makes sense when the ultrawide is really reachable.
                 binding.btnZoomUltrawide.visibility = if (cameraManager.isUltrawideAvailable()) View.VISIBLE else View.GONE
                 cameraManager.onQrDetected = { text -> runOnUiThread { showQrResult(text) } }
-                cameraManager.onVideoTooDark = { showHint("Too dark for 4K · 1080p is brighter") }
+                cameraManager.onVideoTooDark = { runOnUiThread { showHint("Too dark for 4K · try Low light") } }
                 restoreLastMode()
             } catch (e: Exception) {
                 showHint("Failed to start camera: ${e.message}")
@@ -1234,6 +1244,9 @@ class MainActivity : AppCompatActivity() {
             cameraManager.flashMode = ImageCapture.FLASH_MODE_ON
             updateVideoQsUi()
         }
+
+        binding.btnQsLowLightVideoOff.setOnClickListener { setLowLightVideo(false) }
+        binding.btnQsLowLightVideoOn.setOnClickListener { setLowLightVideo(true) }
 
         binding.btnQsAudioZoomOff.setOnClickListener {
             cameraManager.audioZoomEnabled = false
@@ -2788,6 +2801,14 @@ class MainActivity : AppCompatActivity() {
         if (pw == 0 || ph == 0) return
         val w = minOf(pw, ph * 9 / 16)
         binding.slowMotionPreview.layoutParams = android.widget.FrameLayout.LayoutParams(w, w * 16 / 9, android.view.Gravity.CENTER)
+    }
+
+    private fun setLowLightVideo(enabled: Boolean) {
+        if (cameraManager.isRecordingVideo()) return
+        prefs.edit().putBoolean(SettingsActivity.KEY_LOW_LIGHT_VIDEO, enabled).apply()
+        cameraManager.setLowLightVideoEnabled(enabled)
+        updateVideoQsUi()
+        if (enabled) showHint("Low light on · frame rate drops in the dark")
     }
 
     private fun handleSlowMotionShutter() {

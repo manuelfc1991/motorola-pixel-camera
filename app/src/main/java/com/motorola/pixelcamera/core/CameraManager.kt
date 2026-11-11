@@ -129,12 +129,15 @@ class CameraManager(private val context: Context) {
             val exp = result.get(android.hardware.camera2.CaptureResult.SENSOR_EXPOSURE_TIME) ?: return
             lastAutoIso = iso
             lastAutoExposureNs = exp
-            if (currentCameraMode == CameraMode.VIDEO) {
+            if (currentCameraMode == CameraMode.VIDEO && currentVideoResolution == VideoResolution.UHD && !lowLightVideo && !toldTooDark) {
+                // At 4K the stream keeps 30 fps only up to about ISO 1900 (measured: 13-19 fps from
+                // 2000 up), so the driver stops there and dim rooms come out dark. 1080p goes to 12800.
                 val dark = result.get(android.hardware.camera2.CaptureResult.CONTROL_AE_STATE) ==
                     android.hardware.camera2.CaptureResult.CONTROL_AE_STATE_FLASH_REQUIRED
-                if (exposureAssist.onAutoResult(dark, iso) != null) {
-                    assistExposureNs = exp
-                    mainHandler.post { startExposureAssist() }
+                darkFrames = if (dark && iso < DARK_4K_ISO_LIMIT) darkFrames + 1 else 0
+                if (darkFrames >= DARK_4K_FRAMES) {
+                    toldTooDark = true
+                    onVideoTooDark?.invoke()
                 }
             }
         }
@@ -193,7 +196,8 @@ class CameraManager(private val context: Context) {
     ) {
         val owner = lifecycleOwner ?: currentLifecycleOwner ?: return
         val view = previewView ?: currentPreviewView ?: return
-        stopExposureAssist()
+        toldTooDark = false
+        darkFrames = 0
         currentLifecycleOwner = owner
         currentPreviewView = view
 
@@ -265,11 +269,7 @@ class CameraManager(private val context: Context) {
             previewExtender.setCaptureRequestOption(CaptureRequest.CONTROL_SCENE_MODE, CaptureRequest.CONTROL_SCENE_MODE_NIGHT)
         }
         if (currentCameraMode == CameraMode.VIDEO) {
-            val targetFps = if (currentVideoFps == VideoFps.FPS_60 && currentVideoResolution != VideoResolution.UHD) {
-                android.util.Range(60, 60)
-            } else {
-                android.util.Range(30, 30)
-            }
+            val targetFps = videoFpsRange()
             previewExtender.setCaptureRequestOption(CaptureRequest.CONTROL_AE_TARGET_FPS_RANGE, targetFps)
         }
 
@@ -504,7 +504,8 @@ class CameraManager(private val context: Context) {
 
     /** Lets go of the camera so another session (slow motion) can open it. [bindCameraUseCases] takes it back. */
     fun releaseCamera() {
-        stopExposureAssist()
+        toldTooDark = false
+        darkFrames = 0
         cameraProvider?.unbindAll()
         camera = null
     }
@@ -548,116 +549,38 @@ class CameraManager(private val context: Context) {
     fun applyVideoFps() {
         val cam = camera ?: return
         val c2Control = Camera2CameraControl.from(cam.cameraControl)
-        val targetFps = if (currentVideoFps == VideoFps.FPS_60 && currentVideoResolution != VideoResolution.UHD) {
-            android.util.Range(60, 60)
-        } else {
-            android.util.Range(30, 30)
-        }
-        val builder = CaptureRequestOptions.Builder()
+        val targetFps = videoFpsRange()
+        val options = CaptureRequestOptions.Builder()
             .setCaptureRequestOption(CaptureRequest.CONTROL_AE_TARGET_FPS_RANGE, targetFps)
-        val assistIso = exposureAssist.iso
-        if (assistIso > 0) {
-            // The driver's own shutter time is kept: it is the one that avoids mains flicker.
-            builder.setCaptureRequestOption(CaptureRequest.CONTROL_AE_MODE, CaptureRequest.CONTROL_AE_MODE_OFF)
-                .setCaptureRequestOption(CaptureRequest.SENSOR_SENSITIVITY, assistIso)
-                .setCaptureRequestOption(CaptureRequest.SENSOR_EXPOSURE_TIME, assistExposureNs)
-                .setCaptureRequestOption(CaptureRequest.SENSOR_FRAME_DURATION, 1_000_000_000L / targetFps.upper)
-        }
-        c2Control.setCaptureRequestOptions(builder.build())
-        Log.i(TAG, "Applied video FPS range: $targetFps (Res: $currentVideoResolution, FPS: $currentVideoFps, assist ISO: $assistIso)")
+            .build()
+        c2Control.setCaptureRequestOptions(options)
+        Log.i(TAG, "Applied video FPS range: $targetFps (Res: $currentVideoResolution, FPS: $currentVideoFps)")
     }
 
-    // --- Low-light exposure assist for video (see VideoExposureAssist) ---
+    /**
+     * Low light for video: the camera may slow down to 10 frames a second for a longer shutter and
+     * more ISO. At a fixed 30 the driver stops at about ISO 1800 in 4K; with this range it went to
+     * ISO 9800 at 1/10 s in the same dark scene.
+     */
+    var lowLightVideo = false
 
-    private val exposureAssist = VideoExposureAssist()
-    private var assistToldTooDark = false
-    private val mainHandler = android.os.Handler(android.os.Looper.getMainLooper())
-    @Volatile private var assistExposureNs = 0L
+    fun setLowLightVideoEnabled(enabled: Boolean) {
+        lowLightVideo = enabled
+        toldTooDark = false
+        darkFrames = 0
+        if (currentCameraMode == CameraMode.VIDEO) applyVideoFps()
+    }
 
-    /** Called once when 4K video stays too dark even with the assist at its limit. */
+    private fun videoFpsRange(): android.util.Range<Int> = when {
+        currentVideoFps == VideoFps.FPS_60 && currentVideoResolution != VideoResolution.UHD -> android.util.Range(60, 60)
+        lowLightVideo -> android.util.Range(LOW_LIGHT_VIDEO_MIN_FPS, 30)
+        else -> android.util.Range(30, 30)
+    }
+
+    /** Called once per camera session, off the main thread, when 4K video is too dark for the driver to expose. */
     var onVideoTooDark: (() -> Unit)? = null
-
-    private val assistTick = Runnable { stepExposureAssist() }
-
-    private fun startExposureAssist() {
-        if (currentCameraMode != CameraMode.VIDEO || camera == null) { stopExposureAssist(); return }
-        Log.i(TAG, "Video is stuck dark at ISO ${exposureAssist.iso}: taking over exposure")
-        applyVideoFps()
-        mainHandler.removeCallbacks(assistTick)
-        mainHandler.postDelayed(assistTick, ASSIST_INTERVAL_MS)
-    }
-
-    private fun stopExposureAssist() {
-        mainHandler.removeCallbacks(assistTick)
-        exposureAssist.reset()
-        assistToldTooDark = false
-        // Above this ISO the 4K stream drops to about 12 frames a second (measured on the phone).
-        // Other formats reach the sensor's useful limit by themselves, so the assist stays out.
-        exposureAssist.maxIso =
-            if (currentVideoResolution == VideoResolution.UHD) ASSIST_MAX_ISO_4K else VideoExposureAssist.MAX_ISO
-    }
-
-    private fun stepExposureAssist() {
-        if (!exposureAssist.active) return
-        if (currentCameraMode != CameraMode.VIDEO || camera == null) { stopExposureAssist(); return }
-        samplePreviewLuma { luma ->
-            if (!exposureAssist.active || camera == null) return@samplePreviewLuma
-            var settled = false
-            if (luma != null) {
-                // The exposure slider still works: each stop doubles the brightness aimed for.
-                val stops = getExposureCompensationIndex() * getExposureCompensationStep()
-                val target = (VideoExposureAssist.TARGET_LUMA * Math.pow(2.0, stops * 0.6)).toFloat().coerceIn(40f, 200f)
-                val step = exposureAssist.onBrightness(luma, target)
-                settled = step == VideoExposureAssist.Step.Hold
-                when (step) {
-                    is VideoExposureAssist.Step.Iso -> applyVideoFps()
-                    VideoExposureAssist.Step.HandBack -> {
-                        Log.i(TAG, "Scene is bright again: exposure back to the driver")
-                        applyVideoFps()
-                    }
-                    VideoExposureAssist.Step.Hold -> Unit
-                }
-            }
-            if (exposureAssist.stillDark && !assistToldTooDark) {
-                assistToldTooDark = true
-                onVideoTooDark?.invoke()
-            }
-            // Reading the preview back costs the recorder a frame now and then, so once the
-            // brightness has settled it is only checked occasionally.
-            if (exposureAssist.active) {
-                mainHandler.postDelayed(assistTick, if (settled) ASSIST_SETTLED_INTERVAL_MS else ASSIST_INTERVAL_MS)
-            }
-        }
-    }
-
-    /** Average brightness (0..255) of the picture on screen, read at thumbnail size. */
-    private fun samplePreviewLuma(onLuma: (Float?) -> Unit) {
-        val view = currentPreviewView ?: return onLuma(null)
-        val children = (0 until view.childCount).map { view.getChildAt(it) }
-        val small = Bitmap.createBitmap(36, 64, Bitmap.Config.ARGB_8888)
-        fun finish(ok: Boolean) {
-            var luma: Float? = null
-            if (ok) {
-                val px = IntArray(small.width * small.height)
-                small.getPixels(px, 0, small.width, 0, 0, small.width, small.height)
-                var sum = 0L
-                for (p in px) sum += (((p shr 16) and 0xFF) * 77 + ((p shr 8) and 0xFF) * 150 + (p and 0xFF) * 29) shr 8
-                luma = sum.toFloat() / px.size
-            }
-            small.recycle()
-            onLuma(luma)
-        }
-        val surface = children.firstOrNull { it is android.view.SurfaceView } as? android.view.SurfaceView
-        val texture = children.firstOrNull { it is android.view.TextureView } as? android.view.TextureView
-        runCatching {
-            when {
-                surface != null && surface.holder.surface.isValid ->
-                    android.view.PixelCopy.request(surface, small, { finish(it == android.view.PixelCopy.SUCCESS) }, mainHandler)
-                texture != null && texture.isAvailable -> { texture.getBitmap(small); finish(true) }
-                else -> finish(false)
-            }
-        }.onFailure { finish(false) }
-    }
+    @Volatile private var toldTooDark = false
+    private var darkFrames = 0
 
     fun setVideoProfile(resolution: VideoResolution, fps: VideoFps) {
         val resolutionChanged = (currentVideoResolution != resolution)
@@ -1412,9 +1335,10 @@ class CameraManager(private val context: Context) {
         const val CAMERA_FRONT = "1"
         const val CAMERA_ULTRAWIDE = "3"
         private const val NIGHT_HANDHELD_CAPTURES = 2
-        private const val ASSIST_INTERVAL_MS = 250L
-        private const val ASSIST_SETTLED_INTERVAL_MS = 2000L
-        private const val ASSIST_MAX_ISO_4K = 2800
+        private const val DARK_4K_ISO_LIMIT = 2500
+        private const val LOW_LIGHT_VIDEO_MIN_FPS = 10
+        /** Two seconds at 30 frames a second. */
+        private const val DARK_4K_FRAMES = 60
         private const val LOW_LIGHT_ISO = 800
         private const val LOW_LIGHT_ISO_HIGH = 3200
         // Sensor limits of the main camera (from the HAL static metadata).
