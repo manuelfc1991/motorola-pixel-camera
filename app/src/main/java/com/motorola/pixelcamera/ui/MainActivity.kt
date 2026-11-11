@@ -735,6 +735,7 @@ class MainActivity : AppCompatActivity() {
                 // The 0.6 lens button only makes sense when the ultrawide is really reachable.
                 binding.btnZoomUltrawide.visibility = if (cameraManager.isUltrawideAvailable()) View.VISIBLE else View.GONE
                 cameraManager.onQrDetected = { text -> runOnUiThread { showQrResult(text) } }
+                cameraManager.onVideoTooDark = { showHint("Too dark for 4K · 1080p is brighter") }
                 restoreLastMode()
             } catch (e: Exception) {
                 showHint("Failed to start camera: ${e.message}")
