@@ -87,6 +87,39 @@ class PortraitMathTest {
     }
 
     @Test
+    fun `a thin part at the outline survives a soft depth map`() {
+        // A head (wide box) with an ear (small box on its side). The depth map, being soft at
+        // outlines, reads the ear as background.
+        val w = 120
+        val h = 80
+        fun head(i: Int) = i % w in 40..79 && i / w in 10..69
+        fun ear(i: Int) = i % w in 37..39 && i / w in 35..44
+        val alpha = FloatArray(w * h) { if (head(it) || ear(it)) 1f else 0f }
+        val depth = FloatArray(w * h) { if (head(it)) 0.8f else 0.2f }
+
+        val kept = PortraitMath.isolateSubject(alpha, depth, w, h, focusX = 0.5f, focusY = 0.5f)
+
+        assertTrue("ear was cut off", kept[40 * w + 38] > 0.5f)
+    }
+
+    @Test
+    fun `with the focus on a person, parts well behind the face stay`() {
+        // Face in front, shoulders connected below it and 0.3 farther away.
+        val w = 60
+        val h = 60
+        fun face(i: Int) = i % w in 20..39 && i / w in 5..29
+        fun shoulders(i: Int) = i % w in 5..54 && i / w in 30..54
+        val alpha = FloatArray(w * h) { if (face(it) || shoulders(it)) 1f else 0f }
+        val depth = FloatArray(w * h) { if (face(it)) 0.9f else 0.6f }
+
+        val asObject = PortraitMath.isolateSubject(alpha, depth, w, h, 0.5f, 0.3f)
+        val asPerson = PortraitMath.isolateSubject(alpha, depth, w, h, 0.5f, 0.3f, people = floatArrayOf(0.5f, 0.4f))
+
+        assertEquals(0f, asObject[45 * w + 30], 1e-6f)  // an object 0.3 behind is something else
+        assertEquals(1f, asPerson[45 * w + 30], 1e-6f)  // a person's shoulders are part of them
+    }
+
+    @Test
     fun `transpose swaps rows and columns and back`() {
         val src = floatArrayOf(1f, 2f, 3f, 4f, 5f, 6f) // 3 wide, 2 tall
         val flipped = PortraitMath.transpose(src, 3, 2) // 2 wide, 3 tall
