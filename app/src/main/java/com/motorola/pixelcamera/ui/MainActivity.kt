@@ -408,6 +408,7 @@ class MainActivity : AppCompatActivity() {
 
         setupListeners()
         setupAudioZoom()
+        setupZoomedVideoSaving()
         setupPanoramaEngine()
         setupPortraitPreview()
         initDefaultUiState()
@@ -3041,6 +3042,16 @@ class MainActivity : AppCompatActivity() {
         binding.tvPanoramaPrompt.visibility = View.VISIBLE
         binding.tvPanoramaPrompt.removeCallbacks(hidePanoramaMessage)
         binding.tvPanoramaPrompt.postDelayed(hidePanoramaMessage, 4000)
+    }
+
+    /** Audio-zoom videos reach the gallery a moment after recording stops, once sound and picture are joined. */
+    private fun setupZoomedVideoSaving() {
+        cameraManager.onZoomedVideoSaved = { uri ->
+            if (uri == null) showHint("Video could not be saved") else {
+                latestCapturedUri = uri
+                loadLatestGalleryThumbnail()
+            }
+        }
     }
 
     private fun setupPanoramaEngine() {
