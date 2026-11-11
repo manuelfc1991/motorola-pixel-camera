@@ -148,6 +148,26 @@ class MainActivity : AppCompatActivity() {
     private var lastTotalAcc: Float = 9.8f
     private var stillStartTime: Long = 0L
 
+    // The level indicator is fed by the motion sensor many times a second. Every call that touches
+    // a view makes the whole screen redraw, so views are only touched when what they show changes.
+    private val levelColours = HashMap<View, Int>()
+    private var levelTextColourNow = 0
+
+    private fun levelColour(view: View, colour: Int) {
+        if (levelColours.put(view, colour) != colour) view.setBackgroundColor(colour)
+    }
+
+    private fun levelTextColour(colour: Int) {
+        if (levelTextColourNow != colour) {
+            levelTextColourNow = colour
+            binding.tvHorizonAngle.setTextColor(colour)
+        }
+    }
+
+    private fun levelText(text: String) {
+        if (binding.tvHorizonAngle.text.toString() != text) binding.tvHorizonAngle.text = text
+    }
+
     private val sensorListener = object : SensorEventListener {
         override fun onSensorChanged(event: SensorEvent?) {
             if (event == null) return
@@ -206,14 +226,14 @@ class MainActivity : AppCompatActivity() {
                 if (isNowLevel) {
                     binding.horizonFloatingReticle.translationX = 0f
                     binding.horizonFloatingReticle.translationY = 0f
-                    binding.tvHorizonAngle.text = "0°"
+                    levelText("0°")
 
                     val goldColor = ContextCompat.getColor(this@MainActivity, R.color.pixel_accent_yellow)
-                    binding.horizonCrosshairH.setBackgroundColor(goldColor)
-                    binding.horizonCrosshairV.setBackgroundColor(goldColor)
-                    binding.horizonFloatingCrosshairH.setBackgroundColor(goldColor)
-                    binding.horizonFloatingCrosshairV.setBackgroundColor(goldColor)
-                    binding.tvHorizonAngle.setTextColor(goldColor)
+                    levelColour(binding.horizonCrosshairH, goldColor)
+                    levelColour(binding.horizonCrosshairV, goldColor)
+                    levelColour(binding.horizonFloatingCrosshairH, goldColor)
+                    levelColour(binding.horizonFloatingCrosshairV, goldColor)
+                    levelTextColour(goldColor)
 
                     if (!isLevelAligned) {
                         isLevelAligned = true
@@ -221,19 +241,22 @@ class MainActivity : AppCompatActivity() {
                     }
                 } else {
                     isLevelAligned = false
-                    binding.horizonFloatingReticle.translationX = targetDx
-                    binding.horizonFloatingReticle.translationY = targetDy
+                    if (abs(binding.horizonFloatingReticle.translationX - targetDx) >= density ||
+                        abs(binding.horizonFloatingReticle.translationY - targetDy) >= density) {
+                        binding.horizonFloatingReticle.translationX = targetDx
+                        binding.horizonFloatingReticle.translationY = targetDy
+                    }
 
                     val deg = kotlin.math.round(Math.toDegrees(atan2(distance.toDouble(), (9.8 * 6f * density)))).toInt()
-                    binding.tvHorizonAngle.text = "${deg}°"
+                    levelText("${deg}°")
 
                     val tiltColor = Color.parseColor("#CCFFFFFF")
                     val goldColor = ContextCompat.getColor(this@MainActivity, R.color.pixel_accent_yellow)
-                    binding.horizonCrosshairH.setBackgroundColor(goldColor)
-                    binding.horizonCrosshairV.setBackgroundColor(goldColor)
-                    binding.horizonFloatingCrosshairH.setBackgroundColor(tiltColor)
-                    binding.horizonFloatingCrosshairV.setBackgroundColor(tiltColor)
-                    binding.tvHorizonAngle.setTextColor(tiltColor)
+                    levelColour(binding.horizonCrosshairH, goldColor)
+                    levelColour(binding.horizonCrosshairV, goldColor)
+                    levelColour(binding.horizonFloatingCrosshairH, tiltColor)
+                    levelColour(binding.horizonFloatingCrosshairV, tiltColor)
+                    levelTextColour(tiltColor)
                 }
             } else {
                 // Mode B: Upright Photography Horizon Wings (Portrait / Landscape Roll)
@@ -258,14 +281,14 @@ class MainActivity : AppCompatActivity() {
 
                 if (isNowLevel) {
                     binding.horizonRotatingBar.rotation = 0f
-                    binding.tvHorizonAngle.text = "0°"
+                    levelText("0°")
 
                     val goldColor = ContextCompat.getColor(this@MainActivity, R.color.pixel_accent_yellow)
-                    binding.horizonWingLeft.setBackgroundColor(goldColor)
-                    binding.horizonWingRight.setBackgroundColor(goldColor)
-                    binding.horizonCrosshairH.setBackgroundColor(goldColor)
-                    binding.horizonCrosshairV.setBackgroundColor(goldColor)
-                    binding.tvHorizonAngle.setTextColor(goldColor)
+                    levelColour(binding.horizonWingLeft, goldColor)
+                    levelColour(binding.horizonWingRight, goldColor)
+                    levelColour(binding.horizonCrosshairH, goldColor)
+                    levelColour(binding.horizonCrosshairV, goldColor)
+                    levelTextColour(goldColor)
 
                     if (!isLevelAligned) {
                         isLevelAligned = true
@@ -273,17 +296,17 @@ class MainActivity : AppCompatActivity() {
                     }
                 } else {
                     isLevelAligned = false
-                    binding.horizonRotatingBar.rotation = -filteredRoll
+                    if (abs(binding.horizonRotatingBar.rotation + filteredRoll) >= 0.3f) binding.horizonRotatingBar.rotation = -filteredRoll
                     val deg = absDelta.roundToInt()
-                    binding.tvHorizonAngle.text = "${deg}°"
+                    levelText("${deg}°")
 
                     val tiltColor = Color.parseColor("#CCFFFFFF")
                     val goldColor = ContextCompat.getColor(this@MainActivity, R.color.pixel_accent_yellow)
-                    binding.horizonWingLeft.setBackgroundColor(tiltColor)
-                    binding.horizonWingRight.setBackgroundColor(tiltColor)
-                    binding.horizonCrosshairH.setBackgroundColor(goldColor)
-                    binding.horizonCrosshairV.setBackgroundColor(goldColor)
-                    binding.tvHorizonAngle.setTextColor(tiltColor)
+                    levelColour(binding.horizonWingLeft, tiltColor)
+                    levelColour(binding.horizonWingRight, tiltColor)
+                    levelColour(binding.horizonCrosshairH, goldColor)
+                    levelColour(binding.horizonCrosshairV, goldColor)
+                    levelTextColour(tiltColor)
                 }
             }
         }
@@ -424,6 +447,7 @@ class MainActivity : AppCompatActivity() {
     private fun syncSettings() {
         cameraManager.isRawEnabled = prefs.getBoolean(SettingsActivity.KEY_RAW_ENABLED, false)
         cameraManager.fullResFront = prefs.getBoolean(SettingsActivity.KEY_FRONT_FULL_RES, false)
+        cameraManager.lowLightVideo = prefs.getBoolean(SettingsActivity.KEY_LOW_LIGHT_VIDEO, false)
         hdrMode = prefs.getInt(SettingsActivity.KEY_HDR_MODE, 0).coerceIn(0, 2)
         cameraManager.hdrPlusMode = hdrMode
         cameraManager.shutterSoundEnabled = prefs.getBoolean(SettingsActivity.KEY_CAMERA_SOUNDS, true)
@@ -652,6 +676,15 @@ class MainActivity : AppCompatActivity() {
         setQsButtonActive(binding.btnQsVideoTorchOn, isTorch)
 
         // Audio Zoom
+        val lowLight = cameraManager.lowLightVideo
+        binding.tvQsLowLightVideoSubtitle.text = when {
+            !lowLight -> "Off"
+            cameraManager.currentVideoFps == CameraManager.VideoFps.FPS_60 -> "On • not at 60 fps"
+            else -> "On • brighter, slower frames"
+        }
+        setQsPillActive(binding.btnQsLowLightVideoOn, lowLight)
+        setQsPillActive(binding.btnQsLowLightVideoOff, !lowLight)
+
         val isAudioZoom = cameraManager.audioZoomEnabled
         binding.tvQsAudioZoomSubtitle.text = if (isAudioZoom) "On • Focuses on subject" else "Off"
         setQsPillActive(binding.btnQsAudioZoomOn, isAudioZoom)
@@ -735,6 +768,7 @@ class MainActivity : AppCompatActivity() {
                 // The 0.6 lens button only makes sense when the ultrawide is really reachable.
                 binding.btnZoomUltrawide.visibility = if (cameraManager.isUltrawideAvailable()) View.VISIBLE else View.GONE
                 cameraManager.onQrDetected = { text -> runOnUiThread { showQrResult(text) } }
+                cameraManager.onVideoTooDark = { runOnUiThread { showHint("Too dark for 4K · try Low light") } }
                 restoreLastMode()
             } catch (e: Exception) {
                 showHint("Failed to start camera: ${e.message}")
@@ -1233,6 +1267,9 @@ class MainActivity : AppCompatActivity() {
             cameraManager.flashMode = ImageCapture.FLASH_MODE_ON
             updateVideoQsUi()
         }
+
+        binding.btnQsLowLightVideoOff.setOnClickListener { setLowLightVideo(false) }
+        binding.btnQsLowLightVideoOn.setOnClickListener { setLowLightVideo(true) }
 
         binding.btnQsAudioZoomOff.setOnClickListener {
             cameraManager.audioZoomEnabled = false
@@ -2787,6 +2824,14 @@ class MainActivity : AppCompatActivity() {
         if (pw == 0 || ph == 0) return
         val w = minOf(pw, ph * 9 / 16)
         binding.slowMotionPreview.layoutParams = android.widget.FrameLayout.LayoutParams(w, w * 16 / 9, android.view.Gravity.CENTER)
+    }
+
+    private fun setLowLightVideo(enabled: Boolean) {
+        if (cameraManager.isRecordingVideo()) return
+        prefs.edit().putBoolean(SettingsActivity.KEY_LOW_LIGHT_VIDEO, enabled).apply()
+        cameraManager.setLowLightVideoEnabled(enabled)
+        updateVideoQsUi()
+        if (enabled) showHint("Low light on · frame rate drops in the dark")
     }
 
     private fun handleSlowMotionShutter() {

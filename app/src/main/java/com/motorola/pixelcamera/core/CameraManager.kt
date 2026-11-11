@@ -129,6 +129,17 @@ class CameraManager(private val context: Context) {
             val exp = result.get(android.hardware.camera2.CaptureResult.SENSOR_EXPOSURE_TIME) ?: return
             lastAutoIso = iso
             lastAutoExposureNs = exp
+            if (currentCameraMode == CameraMode.VIDEO && currentVideoResolution == VideoResolution.UHD && !lowLightVideo && !toldTooDark) {
+                // At 4K the stream keeps 30 fps only up to about ISO 1900 (measured: 13-19 fps from
+                // 2000 up), so the driver stops there and dim rooms come out dark. 1080p goes to 12800.
+                val dark = result.get(android.hardware.camera2.CaptureResult.CONTROL_AE_STATE) ==
+                    android.hardware.camera2.CaptureResult.CONTROL_AE_STATE_FLASH_REQUIRED
+                darkFrames = if (dark && iso < DARK_4K_ISO_LIMIT) darkFrames + 1 else 0
+                if (darkFrames >= DARK_4K_FRAMES) {
+                    toldTooDark = true
+                    onVideoTooDark?.invoke()
+                }
+            }
         }
     }
 
@@ -185,6 +196,8 @@ class CameraManager(private val context: Context) {
     ) {
         val owner = lifecycleOwner ?: currentLifecycleOwner ?: return
         val view = previewView ?: currentPreviewView ?: return
+        toldTooDark = false
+        darkFrames = 0
         currentLifecycleOwner = owner
         currentPreviewView = view
 
@@ -241,7 +254,12 @@ class CameraManager(private val context: Context) {
 
         val previewExtender = Camera2Interop.Extender(previewBuilder)
         previewExtender.setSessionCaptureCallback(exposureTracker)
-        previewExtender.setCaptureRequestOption(CaptureRequest.CONTROL_AF_MODE, CaptureRequest.CONTROL_AF_MODE_CONTINUOUS_PICTURE)
+        // Video focus mode moves the lens gently, so a recording does not show focus hunting.
+        previewExtender.setCaptureRequestOption(
+            CaptureRequest.CONTROL_AF_MODE,
+            if (currentCameraMode == CameraMode.VIDEO) CaptureRequest.CONTROL_AF_MODE_CONTINUOUS_VIDEO
+            else CaptureRequest.CONTROL_AF_MODE_CONTINUOUS_PICTURE
+        )
         previewExtender.setCaptureRequestOption(CaptureRequest.CONTROL_AE_ANTIBANDING_MODE, CaptureRequest.CONTROL_AE_ANTIBANDING_MODE_AUTO)
         if (isGoogleAwbEnabled) {
             previewExtender.setCaptureRequestOption(CaptureRequest.CONTROL_AWB_MODE, CaptureRequest.CONTROL_AWB_MODE_AUTO)
@@ -251,11 +269,7 @@ class CameraManager(private val context: Context) {
             previewExtender.setCaptureRequestOption(CaptureRequest.CONTROL_SCENE_MODE, CaptureRequest.CONTROL_SCENE_MODE_NIGHT)
         }
         if (currentCameraMode == CameraMode.VIDEO) {
-            val targetFps = if (currentVideoFps == VideoFps.FPS_60 && currentVideoResolution != VideoResolution.UHD) {
-                android.util.Range(60, 60)
-            } else {
-                android.util.Range(30, 30)
-            }
+            val targetFps = videoFpsRange()
             previewExtender.setCaptureRequestOption(CaptureRequest.CONTROL_AE_TARGET_FPS_RANGE, targetFps)
         }
 
@@ -365,7 +379,11 @@ class CameraManager(private val context: Context) {
                 }
 
                 val qrListener = onQrDetected
-                if (qrListener != null && currentCameraMode == CameraMode.CAMERA) {
+                // A code stays in view for seconds, so a few looks a second are enough; scanning
+                // every frame kept a processor core busy for nothing.
+                val nowMs = android.os.SystemClock.elapsedRealtime()
+                if (qrListener != null && currentCameraMode == CameraMode.CAMERA && nowMs - lastQrScanMs >= QR_SCAN_INTERVAL_MS) {
+                    lastQrScanMs = nowMs
                     qrScanner.scan(imageProxy)?.let(qrListener)
                 }
 
@@ -490,6 +508,8 @@ class CameraManager(private val context: Context) {
 
     /** Lets go of the camera so another session (slow motion) can open it. [bindCameraUseCases] takes it back. */
     fun releaseCamera() {
+        toldTooDark = false
+        darkFrames = 0
         cameraProvider?.unbindAll()
         camera = null
     }
@@ -533,17 +553,38 @@ class CameraManager(private val context: Context) {
     fun applyVideoFps() {
         val cam = camera ?: return
         val c2Control = Camera2CameraControl.from(cam.cameraControl)
-        val targetFps = if (currentVideoFps == VideoFps.FPS_60 && currentVideoResolution != VideoResolution.UHD) {
-            android.util.Range(60, 60)
-        } else {
-            android.util.Range(30, 30)
-        }
+        val targetFps = videoFpsRange()
         val options = CaptureRequestOptions.Builder()
             .setCaptureRequestOption(CaptureRequest.CONTROL_AE_TARGET_FPS_RANGE, targetFps)
             .build()
         c2Control.setCaptureRequestOptions(options)
         Log.i(TAG, "Applied video FPS range: $targetFps (Res: $currentVideoResolution, FPS: $currentVideoFps)")
     }
+
+    /**
+     * Low light for video: the camera may slow down to 10 frames a second for a longer shutter and
+     * more ISO. At a fixed 30 the driver stops at about ISO 1800 in 4K; with this range it went to
+     * ISO 9800 at 1/10 s in the same dark scene.
+     */
+    var lowLightVideo = false
+
+    fun setLowLightVideoEnabled(enabled: Boolean) {
+        lowLightVideo = enabled
+        toldTooDark = false
+        darkFrames = 0
+        if (currentCameraMode == CameraMode.VIDEO) applyVideoFps()
+    }
+
+    private fun videoFpsRange(): android.util.Range<Int> = when {
+        currentVideoFps == VideoFps.FPS_60 && currentVideoResolution != VideoResolution.UHD -> android.util.Range(60, 60)
+        lowLightVideo -> android.util.Range(LOW_LIGHT_VIDEO_MIN_FPS, 30)
+        else -> android.util.Range(30, 30)
+    }
+
+    /** Called once per camera session, off the main thread, when 4K video is too dark for the driver to expose. */
+    var onVideoTooDark: (() -> Unit)? = null
+    @Volatile private var toldTooDark = false
+    private var darkFrames = 0
 
     fun setVideoProfile(resolution: VideoResolution, fps: VideoFps) {
         val resolutionChanged = (currentVideoResolution != resolution)
@@ -687,6 +728,7 @@ class CameraManager(private val context: Context) {
     /** Called with the text of a QR code seen in Photo mode. */
     var onQrDetected: ((String) -> Unit)? = null
     private val qrScanner = QrScanner()
+    private var lastQrScanMs = 0L
 
     @OptIn(ExperimentalCamera2Interop::class)
     private fun setIspCleanup(enabled: Boolean) {
@@ -903,6 +945,12 @@ class CameraManager(private val context: Context) {
      * hardware edge enhancement, and all EXIF tags without lossy software recompression.
      */
     private suspend fun takePictureDirect(capture: ImageCapture): Uri? =
+        // With RAW on, the camera hands over two files and refuses a request that names only one
+        // (that crashed the hold-the-shutter burst).
+        if (capture.outputFormat == ImageCapture.OUTPUT_FORMAT_RAW_JPEG) takePictureRawAndJpeg(capture)
+        else takeJpegToMediaStore(capture)
+
+    private suspend fun takeJpegToMediaStore(capture: ImageCapture): Uri? =
         suspendCancellableCoroutine { cont ->
             val timeStamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())
             val name = "IMG_${timeStamp}_PXL"
@@ -1298,6 +1346,11 @@ class CameraManager(private val context: Context) {
         const val CAMERA_FRONT = "1"
         const val CAMERA_ULTRAWIDE = "3"
         private const val NIGHT_HANDHELD_CAPTURES = 2
+        private const val DARK_4K_ISO_LIMIT = 2500
+        private const val QR_SCAN_INTERVAL_MS = 300L
+        private const val LOW_LIGHT_VIDEO_MIN_FPS = 10
+        /** Two seconds at 30 frames a second. */
+        private const val DARK_4K_FRAMES = 60
         private const val LOW_LIGHT_ISO = 800
         private const val LOW_LIGHT_ISO_HIGH = 3200
         // Sensor limits of the main camera (from the HAL static metadata).

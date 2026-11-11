@@ -119,6 +119,7 @@ class SettingsActivity : AppCompatActivity() {
         const val KEY_GRID_MODE = "grid_mode"
         const val KEY_VIDEO_QUALITY = "video_quality"
         const val KEY_VIDEO_FPS = "video_fps"
+        const val KEY_LOW_LIGHT_VIDEO = "low_light_video"
         const val KEY_SATURATION = "pref_saturation"
         const val KEY_MICRO_CONTRAST = "pref_micro_contrast"
         const val KEY_SHARPNESS = "pref_sharpness"

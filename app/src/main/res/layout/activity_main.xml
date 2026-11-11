@@ -2152,6 +2152,73 @@
                                 </LinearLayout>
                             </LinearLayout>
 
+                            <!-- Low light: let the frame rate drop for a brighter picture -->
+                            <LinearLayout
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:gravity="center_vertical"
+                                android:orientation="horizontal"
+                                android:paddingVertical="8dp">
+
+                                <LinearLayout
+                                    android:layout_width="0dp"
+                                    android:layout_height="wrap_content"
+                                    android:layout_weight="1"
+                                    android:orientation="vertical">
+
+                                    <TextView
+                                        android:layout_width="wrap_content"
+                                        android:layout_height="wrap_content"
+                                        android:text="Low light"
+                                        android:textColor="@color/pixel_text_white"
+                                        android:textSize="13sp" />
+
+                                    <TextView
+                                        android:id="@+id/tvQsLowLightVideoSubtitle"
+                                        android:layout_width="wrap_content"
+                                        android:layout_height="wrap_content"
+                                        android:layout_marginTop="2dp"
+                                        android:text="Off"
+                                        android:textColor="@color/pixel_accent_blue"
+                                        android:textSize="14sp"
+                                        android:textStyle="bold" />
+                                </LinearLayout>
+
+                                <LinearLayout
+                                    android:layout_width="120dp"
+                                    android:layout_height="36dp"
+                                    android:background="@drawable/bg_segmented_container"
+                                    android:orientation="horizontal"
+                                    android:padding="3dp">
+
+                                    <TextView
+                                        android:id="@+id/btnQsLowLightVideoOff"
+                                        android:layout_width="0dp"
+                                        android:layout_height="match_parent"
+                                        android:layout_weight="1"
+                                        android:clickable="true"
+                                        android:focusable="true"
+                                        android:gravity="center"
+                                        android:text="Off"
+                                        android:textColor="@color/pixel_text_white"
+                                        android:textSize="12sp" />
+
+                                    <TextView
+                                        android:id="@+id/btnQsLowLightVideoOn"
+                                        android:layout_width="0dp"
+                                        android:layout_height="match_parent"
+                                        android:layout_weight="1"
+                                        android:background="@drawable/bg_segmented_pill_active"
+                                        android:clickable="true"
+                                        android:focusable="true"
+                                        android:gravity="center"
+                                        android:text="On"
+                                        android:textColor="@color/pixel_pill_text_active"
+                                        android:textSize="12sp"
+                                        android:textStyle="bold" />
+                                </LinearLayout>
+                            </LinearLayout>
+
                             <!-- Row 4: Flash / Torch -->
                             <LinearLayout
                                 android:layout_width="match_parent"
