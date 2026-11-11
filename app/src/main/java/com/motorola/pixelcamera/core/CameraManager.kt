@@ -1334,11 +1334,20 @@ class CameraManager(private val context: Context) {
                 }
             }.build()
 
-        val pendingRecording = video.output.prepareRecording(context, mediaStoreOutput)
-
-        if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
-            pendingRecording.withAudioEnabled()
+        val canRecordSound = ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
+        // Audio zoom: the picture goes to a temporary file without sound while we record the
+        // sound ourselves; the two are joined into the gallery file when recording stops.
+        val zoomTemp = File(context.cacheDir, "$name.video.mp4")
+        val zoomSound = File(context.cacheDir, "$name.sound.m4a")
+        val zoomRecorder = if (audioZoomEnabled && canRecordSound) {
+            AudioZoomRecorder(zoomSound) { currentZoomRatio }.takeIf { it.start() }
+        } else null
+        val pendingRecording = if (zoomRecorder != null) {
+            video.output.prepareRecording(context, FileOutputOptions.Builder(zoomTemp).build())
+        } else {
+            video.output.prepareRecording(context, mediaStoreOutput).also { if (canRecordSound) it.withAudioEnabled() }
         }
+        activeZoomRecorder = zoomRecorder
 
         if (flashMode == ImageCapture.FLASH_MODE_ON) {
             setTorchEnabled(true)
@@ -1346,11 +1355,16 @@ class CameraManager(private val context: Context) {
         playSound(android.media.MediaActionSound.START_VIDEO_RECORDING)
 
         activeRecording = pendingRecording.start(ContextCompat.getMainExecutor(context)) { event ->
+            if (event is VideoRecordEvent.Start) zoomRecorder?.markVideoStarted()
             if (event is VideoRecordEvent.Finalize) {
                 activeRecording = null
                 recordingFinalizing = false
                 setTorchEnabled(false)
                 audioZoomManager.onRecordingStopped()
+                if (zoomRecorder != null) {
+                    if (activeZoomRecorder === zoomRecorder) activeZoomRecorder = null
+                    finishZoomedVideo(zoomRecorder, zoomTemp, zoomSound, contentValues, gpsLocation, event.hasError())
+                }
             }
             onVideoRecordEvent(event)
         }
@@ -1383,9 +1397,56 @@ class CameraManager(private val context: Context) {
         cameraExecutor.shutdown()
     }
 
-    fun pauseVideoRecording() { activeRecording?.pause() }
+    fun pauseVideoRecording() { activeRecording?.pause(); activeZoomRecorder?.pause() }
 
-    fun resumeVideoRecording() { activeRecording?.resume() }
+    fun resumeVideoRecording() { activeRecording?.resume(); activeZoomRecorder?.resume() }
+
+    /** The sound recorder of the recording in progress, when audio zoom is on. */
+    @Volatile private var activeZoomRecorder: AudioZoomRecorder? = null
+
+    /** Called once an audio-zoom video has been written to the gallery (null if it failed). */
+    var onZoomedVideoSaved: ((Uri?) -> Unit)? = null
+
+    /**
+     * Joins the silent video and the zoomed sound into the gallery file. If the sound failed the
+     * video is still saved, silent, rather than lost.
+     */
+    private fun finishZoomedVideo(
+        recorder: AudioZoomRecorder, video: File, sound: File,
+        values: ContentValues, location: android.location.Location?, failed: Boolean
+    ) {
+        Thread({
+            val hasSound = recorder.stop()
+            val resolver = context.contentResolver
+            fun save(withSound: Boolean): Uri? {
+                var uri: Uri? = null
+                return try {
+                    if (!video.exists() || video.length() == 0L) error("no video written${if (failed) " (recorder error)" else ""}")
+                    val pending = ContentValues(values).apply {
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) put(MediaStore.MediaColumns.IS_PENDING, 1)
+                    }
+                    uri = resolver.insert(MediaStore.Video.Media.EXTERNAL_CONTENT_URI, pending) ?: error("gallery refused the file")
+                    resolver.openFileDescriptor(uri, "rw")!!.use { pfd ->
+                        VideoAudioMuxer.mux(video, if (withSound) sound else null, pfd.fileDescriptor, location?.latitude, location?.longitude)
+                    }
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                        resolver.update(uri, ContentValues().apply { put(MediaStore.MediaColumns.IS_PENDING, 0) }, null, null)
+                    }
+                    Log.i(TAG, "Audio-zoom video saved: $uri (sound: $withSound)")
+                    uri
+                } catch (e: Exception) {
+                    Log.e(TAG, "Audio-zoom video failed (sound: $withSound)", e)
+                    uri?.let { runCatching { resolver.delete(it, null, null) } }
+                    null
+                }
+            }
+            // Without its sound the video is still worth keeping.
+            val saved = (if (hasSound) save(true) else null) ?: save(false)
+            video.delete()
+            sound.delete()
+            android.os.Handler(android.os.Looper.getMainLooper()).post { onZoomedVideoSaved?.invoke(saved) }
+        }, "AudioZoomMux").start()
+    }
 
     /** Saves a frame grabbed from the viewfinder while recording (video resolution, not 12 MP). */
     suspend fun saveVideoSnapshot(frame: Bitmap): Uri? = withContext(Dispatchers.IO) {
