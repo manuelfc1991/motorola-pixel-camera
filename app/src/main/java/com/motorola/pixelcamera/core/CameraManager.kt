@@ -700,11 +700,20 @@ class CameraManager(private val context: Context) {
      * so both are shot as a short aligned burst.
      */
     fun multiFrameCount(): Int = when {
-        currentCameraMode != CameraMode.CAMERA || rawBound -> 1
-        flashMode != ImageCapture.FLASH_MODE_OFF -> 1
-        multiFrameLowLight && lastAutoIso >= LOW_LIGHT_ISO_HIGH -> 4
-        multiFrameLowLight && isLowLight() -> 3
+        rawBound || flashMode != ImageCapture.FLASH_MODE_OFF -> 1
+        // Portrait merges in low light only: its single frame at a slow shutter is easily shaken.
+        currentCameraMode == CameraMode.PORTRAIT -> lowLightFrames()
+        currentCameraMode != CameraMode.CAMERA -> 1
+        lowLightFrames() > 1 -> lowLightFrames()
         multiFrameZoom && currentZoomRatio >= ZOOM_MERGE_RATIO -> 3
+        else -> 1
+    }
+
+    /** Frames to merge for the current light level: more as the sensor gain climbs. */
+    private fun lowLightFrames(): Int = when {
+        !multiFrameLowLight -> 1
+        lastAutoIso >= LOW_LIGHT_ISO_HIGH -> 4
+        isLowLight() -> 3
         else -> 1
     }
 
@@ -798,7 +807,21 @@ class CameraManager(private val context: Context) {
             }
             CameraMode.PORTRAIT -> {
                 val motionFrames = if (topShotMode != TopShotMode.OFF) MotionPhotoEngine.snapshotFrames() else emptyList()
-                val baseBitmap = burst(1).firstOrNull() ?: return@withContext null
+                // In low light, merge a short burst first: the merge starts from the sharpest frame,
+                // so one shaken exposure no longer ruins the shot, and the noise averages out.
+                val frameCount = multiFrameCount()
+                val ownCleanup = ownNoiseCleanup && frameCount > 1
+                if (ownCleanup) setIspCleanup(false)
+                val frames = try {
+                    burst(frameCount)
+                } finally {
+                    if (ownCleanup) setIspCleanup(true)
+                }
+                val baseBitmap = when {
+                    frames.isEmpty() -> return@withContext null
+                    frames.size == 1 -> frames[0]
+                    else -> HdrProcessor.mergeBurst(frames)
+                }
                 val portraitBitmap = PortraitEngine.applyPortraitBokeh(
                     context,
                     baseBitmap,
