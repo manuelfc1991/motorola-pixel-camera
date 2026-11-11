@@ -153,15 +153,21 @@ object HdrProcessor {
         return@withContext output
     }
 
-    /** Aligned noise-reducing merge of a burst, with no tone or sharpening changes. */
-    suspend fun mergeBurst(frames: List<Bitmap>): Bitmap = withContext(DimensityOptimizer.computationDispatcher) {
+    /**
+     * Aligned noise-reducing merge of a burst, with no tone or sharpening changes.
+     * [colourCleanup] above 0 also removes the colour speckle the merge leaves at high ISO.
+     */
+    suspend fun mergeBurst(frames: List<Bitmap>, colourCleanup: Float = 0f): Bitmap = withContext(DimensityOptimizer.computationDispatcher) {
         require(frames.isNotEmpty()) { "Frame list is empty" }
         if (frames.size == 1) return@withContext frames[0]
         val width = frames[0].width
         val height = frames[0].height
         val t0 = android.os.SystemClock.elapsedRealtime()
         val merged = mergeAligned(frames)
-        android.util.Log.i("HdrProcessor", "mergeBurst ${frames.size} frames: ${android.os.SystemClock.elapsedRealtime() - t0}ms")
+        val tMerged = android.os.SystemClock.elapsedRealtime()
+        ColourCleanup.clean(merged, width, height, colourCleanup)
+        android.util.Log.i("HdrProcessor", "mergeBurst ${frames.size} frames: ${tMerged - t0}ms, " +
+            "colour cleanup $colourCleanup: ${android.os.SystemClock.elapsedRealtime() - tMerged}ms")
         Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888).also {
             it.setPixels(merged, 0, width, 0, 0, width, height)
         }
