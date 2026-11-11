@@ -104,6 +104,15 @@ class CameraManager(private val context: Context) {
     var isRawEnabled: Boolean = false
     private var rawBound = false
 
+    /** Selfies at the front sensor's full 32 MP instead of the binned 8 MP. Photo mode only. */
+    var fullResFront: Boolean = false
+    private val frontFullSize by lazy { FullResCapture.fullSize(context, CAMERA_FRONT) }
+
+    fun isFullResSupported(): Boolean = frontFullSize != null
+
+    fun isFullResActive(mode: CameraMode): Boolean =
+        fullResFront && mode == CameraMode.CAMERA && isFrontCamera() && frontFullSize != null
+
     // Last auto-exposure result, used to keep brightness when only one Pro value is manual.
     @Volatile private var lastAutoIso: Int = 0
     @Volatile private var lastAutoExposureNs: Long = 0L
@@ -775,6 +784,12 @@ class CameraManager(private val context: Context) {
             // Manual exposure: keep the single hardware frame exactly as shot.
             CameraMode.PRO -> single()
             CameraMode.CAMERA -> {
+                // Unbinned pixels are tiny: in dim light the full-size frame is mostly noise,
+                // so the binned multi-frame photo below is the better picture there.
+                if (isFullResActive(mode) && !isLowLight()) {
+                    onProgress(CaptureProgress.Processing)
+                    return@withContext captureFullRes()
+                }
                 val motionFrames = if (topShotMode != TopShotMode.OFF) MotionPhotoEngine.snapshotFrames() else emptyList()
                 val multiFrames = multiFrameCount()
                 val hdrFrames = if (hdrPlusMode == 2) 3 else if (hdrPlusMode == 1) 2 else 1
@@ -928,6 +943,65 @@ class CameraManager(private val context: Context) {
                 }
             )
         }
+
+    /**
+     * Full-size selfie. CameraX cannot ask for this size, so it hands the camera over for one
+     * shot and takes it back. If the driver does not deliver, the normal photo is taken instead.
+     */
+    private suspend fun captureFullRes(): Uri? {
+        val size = frontFullSize ?: return null
+        val mirror = mirrorEnabled
+        val exposureIndex = getExposureCompensationIndex()
+        withContext(Dispatchers.Main) { cameraProvider?.unbindAll() }
+        val jpeg = try {
+            FullResCapture.capture(context, CAMERA_FRONT, size, exposureIndex)
+        } finally {
+            withContext(Dispatchers.Main) { bindCameraUseCases() }
+        }
+        if (jpeg == null) {
+            Log.w(TAG, "Full-size capture failed, taking the normal photo")
+            return imageCapture?.let { takePictureDirect(it) }
+        }
+        return saveJpegToMediaStore(jpeg, mirror)
+    }
+
+    /** Stores a finished JPEG as it is; mirroring is recorded in its orientation tag. */
+    private fun saveJpegToMediaStore(jpeg: ByteArray, mirror: Boolean): Uri? {
+        val name = "IMG_${SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())}_PXL"
+        val values = ContentValues().apply {
+            put(MediaStore.MediaColumns.DISPLAY_NAME, "$name.jpg")
+            put(MediaStore.MediaColumns.MIME_TYPE, "image/jpeg")
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                put(MediaStore.MediaColumns.RELATIVE_PATH, Environment.DIRECTORY_DCIM + "/Camera")
+                put(MediaStore.Images.Media.IS_PENDING, 1)
+            }
+        }
+        val resolver = context.contentResolver
+        val uri = resolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values) ?: return null
+        return try {
+            resolver.openOutputStream(uri)?.use { it.write(jpeg) } ?: error("no output stream")
+            runCatching {
+                resolver.openFileDescriptor(uri, "rw")?.use { pfd ->
+                    val exif = androidx.exifinterface.media.ExifInterface(pfd.fileDescriptor)
+                    if (mirror) exif.flipHorizontally()
+                    locationHelper.getCurrentLocation()?.let { runCatching { exif.setGpsInfo(it) } }
+                    exif.setAttribute(androidx.exifinterface.media.ExifInterface.TAG_SOFTWARE, "Pixel Camera kyoto")
+                    exif.saveAttributes()
+                }
+            }.onFailure { Log.w(TAG, "Failed to write EXIF attributes", it) }
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                values.clear()
+                values.put(MediaStore.Images.Media.IS_PENDING, 0)
+                resolver.update(uri, values, null, null)
+            }
+            Log.i(TAG, "Full-size photo saved: $uri")
+            uri
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to save full-size photo", e)
+            resolver.delete(uri, null, null)
+            null
+        }
+    }
 
     /**
      * RAW + JPEG: CameraX writes the sensor frame as a DNG and the ISP result as a JPEG.

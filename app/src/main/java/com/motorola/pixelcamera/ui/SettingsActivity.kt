@@ -114,6 +114,7 @@ class SettingsActivity : AppCompatActivity() {
         const val KEY_EIS_ENABLED = "eis_enabled"
         const val KEY_FLASH_MODE = "flash_mode"
         const val KEY_RAW_ENABLED = "raw_enabled"
+        const val KEY_FRONT_FULL_RES = "front_full_res"
         const val KEY_HDR_MODE = "hdr_plus_mode"
         const val KEY_GRID_MODE = "grid_mode"
         const val KEY_VIDEO_QUALITY = "video_quality"

@@ -1808,7 +1808,7 @@
                                     <TextView
                                         android:layout_width="wrap_content"
                                         android:layout_height="wrap_content"
-                                        android:text="Resolution"
+                                        android:text="Selfie resolution"
                                         android:textColor="@color/pixel_text_white"
                                         android:textSize="13sp" />
 
@@ -1817,7 +1817,7 @@
                                         android:layout_width="wrap_content"
                                         android:layout_height="wrap_content"
                                         android:layout_marginTop="2dp"
-                                        android:text="108 MP Ultra"
+                                        android:text="8 MP"
                                         android:textColor="@color/pixel_accent_blue"
                                         android:textSize="14sp"
                                         android:textStyle="bold" />
@@ -1828,28 +1828,32 @@
                                     android:layout_height="wrap_content"
                                     android:orientation="horizontal">
 
-                                    <ImageView
+                                    <TextView
                                         android:id="@+id/btnQsRes12"
-                                        android:layout_width="40dp"
+                                        android:layout_width="52dp"
                                         android:layout_height="40dp"
-                                        android:background="@drawable/bg_qs_btn_inactive"
-                                        android:clickable="true"
-                                        android:focusable="true"
-                                        android:padding="9dp"
-                                        android:src="@drawable/ic_qs_res_12"
-                                        app:tint="@color/pixel_text_white" />
-
-                                    <ImageView
-                                        android:id="@+id/btnQsRes108"
-                                        android:layout_width="40dp"
-                                        android:layout_height="40dp"
-                                        android:layout_marginStart="10dp"
                                         android:background="@drawable/bg_qs_btn_active"
                                         android:clickable="true"
                                         android:focusable="true"
-                                        android:padding="9dp"
-                                        android:src="@drawable/ic_qs_res_108"
-                                        app:tint="@color/pixel_icon_active" />
+                                        android:gravity="center"
+                                        android:text="8 MP"
+                                        android:textColor="@color/pixel_text_white"
+                                        android:textSize="13sp"
+                                        android:textStyle="bold" />
+
+                                    <TextView
+                                        android:id="@+id/btnQsRes108"
+                                        android:layout_width="52dp"
+                                        android:layout_height="40dp"
+                                        android:layout_marginStart="10dp"
+                                        android:background="@drawable/bg_qs_btn_inactive"
+                                        android:clickable="true"
+                                        android:focusable="true"
+                                        android:gravity="center"
+                                        android:text="32 MP"
+                                        android:textColor="@color/pixel_text_white"
+                                        android:textSize="13sp"
+                                        android:textStyle="bold" />
                                 </LinearLayout>
                             </LinearLayout>
 
@@ -1953,7 +1957,7 @@
                                     <TextView
                                         android:layout_width="wrap_content"
                                         android:layout_height="wrap_content"
-                                        android:text="Resolution"
+                                        android:text="Selfie resolution"
                                         android:textColor="@color/pixel_text_white"
                                         android:textSize="13sp" />
 
