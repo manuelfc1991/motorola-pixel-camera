@@ -1,7 +1,7 @@
 <resources>
     <style name="Theme.MotorolaPixelCamera" parent="Theme.MaterialComponents.DayNight.NoActionBar">
         <item name="colorPrimary">@color/pixel_accent_blue</item>
-        <item name="colorSecondary">@color/pixel_accent_yellow</item>
+        <item name="colorSecondary">@color/pixel_accent_blue</item>
         <item name="android:statusBarColor">@color/pixel_black</item>
         <item name="android:navigationBarColor">@color/pixel_black</item>
     </style>

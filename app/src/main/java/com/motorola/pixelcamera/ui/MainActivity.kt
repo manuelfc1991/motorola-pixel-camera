@@ -71,7 +71,7 @@ class MainActivity : AppCompatActivity() {
 
     // Quick Settings states
     private var moreLightMode = 0 // 0: None, 1: Night Auto, 2: Flash On
-    private var topShotMode = 1   // 0: Off, 1: Auto, 2: On
+    private var hdrMode = 0   // HDR+ merge: 0: Off, 1: On (2 frames), 2: Enhanced (3 frames)
     private var timerDuration = 0 // 0: Off, 3: 3s, 10: 10s
 
     // Tap to Focus & Interactive Brightness Exposure Slider
@@ -94,6 +94,12 @@ class MainActivity : AppCompatActivity() {
     // Gyroscope / Accelerometer Horizon Level Indicator
     private var sensorManager: SensorManager? = null
     private var accelerometer: Sensor? = null
+    private var lightSensor: Sensor? = null
+    // Astrophotography needs darkness as well as stillness; unknown light counts as dark.
+    private var ambientLux: Float = 0f
+    private var latestGalleryUri: Uri? = null
+    private var timerJob: Job? = null
+    private var lastEisPref: Boolean? = null
     private var filteredRoll = 0f
     private var isLevelAligned = false
 
@@ -106,9 +112,9 @@ class MainActivity : AppCompatActivity() {
     private var proFocusProgress = 0
     private var proWbIndex = 0
 
-    private val isoValues = intArrayOf(0, 50, 100, 200, 400, 800, 1600, 3200, 6400)
-    private val shutterLabels = arrayOf("AUTO", "1/4000s", "1/2000s", "1/1000s", "1/500s", "1/250s", "1/125s", "1/60s", "1/30s", "1/15s", "1/8s", "1/4s", "1/2s", "1s")
-    private val shutterNanos = longArrayOf(0L, 250_000L, 500_000L, 1_000_000L, 2_000_000L, 4_000_000L, 8_000_000L, 16_666_666L, 33_333_333L, 66_666_666L, 125_000_000L, 250_000_000L, 500_000_000L, 1_000_000_000L)
+    private val isoValues = intArrayOf(0, 100, 200, 400, 800, 1600, 3200, 6400, 12800)
+    private val shutterLabels = arrayOf("AUTO", "1/4000s", "1/2000s", "1/1000s", "1/500s", "1/250s", "1/125s", "1/60s", "1/30s", "1/15s", "1/8s", "1/5s")
+    private val shutterNanos = longArrayOf(0L, 250_000L, 500_000L, 1_000_000L, 2_000_000L, 4_000_000L, 8_000_000L, 16_666_666L, 33_333_333L, 66_666_666L, 125_000_000L, 200_000_000L)
     private val wbLabels = arrayOf("AWB AUTO", "2800K Incandescent", "4000K Fluorescent", "5500K Daylight", "6500K Cloudy", "7500K Shade")
     private val wbModes = intArrayOf(
         CaptureRequest.CONTROL_AWB_MODE_AUTO,
@@ -128,7 +134,12 @@ class MainActivity : AppCompatActivity() {
 
     private val sensorListener = object : SensorEventListener {
         override fun onSensorChanged(event: SensorEvent?) {
-            if (event == null || event.sensor.type != Sensor.TYPE_ACCELEROMETER) return
+            if (event == null) return
+            if (event.sensor.type == Sensor.TYPE_LIGHT) {
+                ambientLux = event.values[0]
+                return
+            }
+            if (event.sensor.type != Sensor.TYPE_ACCELEROMETER) return
 
             val ax = event.values[0]
             val ay = event.values[1]
@@ -139,8 +150,8 @@ class MainActivity : AppCompatActivity() {
             val deltaAcc = abs(totalAcc - lastTotalAcc)
             lastTotalAcc = totalAcc
 
-            if (currentMode == CameraMode.NIGHT_SIGHT) {
-                if (deltaAcc < 0.08f) {
+            if (currentMode == CameraMode.NIGHT_SIGHT && !isCapturing) {
+                if (deltaAcc < 0.08f && ambientLux < ASTRO_MAX_LUX) {
                     if (stillStartTime == 0L) {
                         stillStartTime = System.currentTimeMillis()
                     } else if (System.currentTimeMillis() - stillStartTime >= 2500L) {
@@ -271,6 +282,7 @@ class MainActivity : AppCompatActivity() {
         val audioGranted = permissions[Manifest.permission.RECORD_AUDIO] ?: false
 
         if (cameraGranted && audioGranted) {
+            cameraManager.locationHelper.startListening()
             setupCamera()
             loadLatestGalleryThumbnail()
         } else {
@@ -289,6 +301,8 @@ class MainActivity : AppCompatActivity() {
 
         sensorManager = getSystemService(Context.SENSOR_SERVICE) as? SensorManager
         accelerometer = sensorManager?.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)
+        lightSensor = sensorManager?.getDefaultSensor(Sensor.TYPE_LIGHT)
+        gridMode = prefs.getInt(SettingsActivity.KEY_GRID_MODE, 1)
 
         // Live Histogram callback for Pro Mode
         cameraManager.onHistogramUpdate = { r, g, b ->
@@ -303,7 +317,7 @@ class MainActivity : AppCompatActivity() {
             override fun onScale(detector: ScaleGestureDetector): Boolean {
                 val currentZoom = cameraManager.currentZoomRatio
                 val scale = detector.scaleFactor
-                val newZoom = (currentZoom * scale).coerceIn(1.0f, 8.0f)
+                val newZoom = (currentZoom * scale).coerceIn(1.0f, cameraManager.maxZoomRatio())
                 cameraManager.setZoom(newZoom)
                 updateZoomUiForRatio(newZoom)
                 return true
@@ -334,7 +348,7 @@ class MainActivity : AppCompatActivity() {
             setupCamera()
             loadLatestGalleryThumbnail()
         } else {
-            permissionLauncher.launch(REQUIRED_PERMISSIONS)
+            permissionLauncher.launch(REQUIRED_PERMISSIONS + OPTIONAL_PERMISSIONS)
         }
     }
 
@@ -346,10 +360,15 @@ class MainActivity : AppCompatActivity() {
         accelerometer?.let {
             sensorManager?.registerListener(sensorListener, it, SensorManager.SENSOR_DELAY_UI)
         }
+        lightSensor?.let {
+            sensorManager?.registerListener(sensorListener, it, SensorManager.SENSOR_DELAY_NORMAL)
+        }
     }
 
     override fun onPause() {
         super.onPause()
+        timerJob?.cancel()
+        binding.tvCountdown.visibility = View.GONE
         cameraManager.locationHelper.stopListening()
         sensorManager?.unregisterListener(sensorListener)
     }
@@ -366,21 +385,26 @@ class MainActivity : AppCompatActivity() {
         binding.focusReticleContainer.visibility = View.GONE
         binding.tvExposureEvBadge.visibility = View.GONE
         selectProTab(ProTab.ISO)
+        binding.tvSensorInfo.text = MAIN_SENSOR_LABEL
+        setGridType(gridMode)
+        // Rows for features this phone cannot deliver through the public camera API:
+        // 108 MP output (driver tops out at 12 MP) and manual lens selection.
+        (binding.btnQsRes12.parent.parent as View).visibility = View.GONE
+        (binding.btnQsLensAuto.parent.parent as View).visibility = View.GONE
     }
 
     private fun syncSettings() {
-        val rawPref = prefs.getBoolean(SettingsActivity.KEY_RAW_ENABLED, false)
-        cameraManager.isRawEnabled = rawPref
+        cameraManager.isRawEnabled = prefs.getBoolean(SettingsActivity.KEY_RAW_ENABLED, false)
+        hdrMode = prefs.getInt(SettingsActivity.KEY_HDR_MODE, 0).coerceIn(0, 2)
+        cameraManager.hdrPlusMode = hdrMode
+        cameraManager.shutterSoundEnabled = prefs.getBoolean(SettingsActivity.KEY_CAMERA_SOUNDS, true)
 
-        cameraManager.topShotMode = when (topShotMode) {
-            0 -> CameraManager.TopShotMode.OFF
-            2 -> CameraManager.TopShotMode.ON
-            else -> CameraManager.TopShotMode.AUTO
+        val eisPref = prefs.getBoolean(SettingsActivity.KEY_EIS_ENABLED, true)
+        cameraManager.videoStabilizationEnabled = eisPref
+        if (lastEisPref != null && lastEisPref != eisPref && currentMode == CameraMode.VIDEO && !cameraManager.isRecordingVideo()) {
+            cameraManager.bindCameraUseCases()
         }
-
-        val remosaicPref = prefs.getBoolean(SettingsActivity.KEY_108MP_REMOSAIC, false)
-        cameraManager.is108MpEnabled = remosaicPref
-        binding.tvSensorInfo.text = if (remosaicPref) "108MP ULTRA" else "108MP HM2"
+        lastEisPref = eisPref
 
         val flashPref = prefs.getInt(SettingsActivity.KEY_FLASH_MODE, ImageCapture.FLASH_MODE_OFF)
         cameraManager.flashMode = flashPref
@@ -391,9 +415,8 @@ class MainActivity : AppCompatActivity() {
         }
 
         val videoQualityPref = prefs.getString(SettingsActivity.KEY_VIDEO_QUALITY, "1080p")
-        val videoFpsPref = prefs.getInt(SettingsActivity.KEY_VIDEO_FPS, 30)
         cameraManager.currentVideoResolution = if (videoQualityPref == "4k") CameraManager.VideoResolution.UHD else CameraManager.VideoResolution.FHD
-        cameraManager.currentVideoFps = if (videoFpsPref == 60) CameraManager.VideoFps.FPS_60 else CameraManager.VideoFps.FPS_30
+        cameraManager.currentVideoFps = if (prefs.getInt(SettingsActivity.KEY_VIDEO_FPS, 30) == 60) CameraManager.VideoFps.FPS_60 else CameraManager.VideoFps.FPS_30
 
         com.motorola.pixelcamera.computational.HdrProcessor.saturationMultiplier = prefs.getInt(SettingsActivity.KEY_SATURATION, 100) / 100f
         com.motorola.pixelcamera.computational.HdrProcessor.microContrastMultiplier = prefs.getInt(SettingsActivity.KEY_MICRO_CONTRAST, 100) / 100f
@@ -430,19 +453,19 @@ class MainActivity : AppCompatActivity() {
         // 1. More light row
         when (moreLightMode) {
             0 -> {
-                binding.tvQsLightSubtitle.text = "None"
+                binding.tvQsLightSubtitle.text = "Off"
                 setQsButtonActive(binding.btnQsLightNone, true)
                 setQsButtonActive(binding.btnQsLightNight, false)
                 setQsButtonActive(binding.btnQsLightFlash, false)
             }
             1 -> {
-                binding.tvQsLightSubtitle.text = "Night Sight Auto"
+                binding.tvQsLightSubtitle.text = "Auto"
                 setQsButtonActive(binding.btnQsLightNone, false)
                 setQsButtonActive(binding.btnQsLightNight, true)
                 setQsButtonActive(binding.btnQsLightFlash, false)
             }
             2 -> {
-                binding.tvQsLightSubtitle.text = "Flash On"
+                binding.tvQsLightSubtitle.text = "On"
                 setQsButtonActive(binding.btnQsLightNone, false)
                 setQsButtonActive(binding.btnQsLightNight, false)
                 setQsButtonActive(binding.btnQsLightFlash, true)
@@ -451,26 +474,26 @@ class MainActivity : AppCompatActivity() {
 
         // 2. RAW/JPEG row
         val isRaw = cameraManager.isRawEnabled
-        binding.tvQsRawSubtitle.text = if (isRaw) "RAW + JPEG" else "JPEG only"
+        binding.tvQsRawSubtitle.text = if (isRaw) "RAW (DNG) + JPEG • Photo and Pro" else "JPEG only"
         setQsButtonActive(binding.btnQsRawOff, !isRaw)
         setQsButtonActive(binding.btnQsRawOn, isRaw)
 
         // 3. Top Shot row
-        when (topShotMode) {
+        when (hdrMode) {
             0 -> {
-                binding.tvQsTopShotSubtitle.text = "Off"
+                binding.tvQsTopShotSubtitle.text = "Off • fastest"
                 setQsButtonActive(binding.btnQsTopShotOff, true)
                 setQsButtonActive(binding.btnQsTopShotAuto, false)
                 setQsButtonActive(binding.btnQsTopShotOn, false)
             }
             1 -> {
-                binding.tvQsTopShotSubtitle.text = "Auto ⓘ"
+                binding.tvQsTopShotSubtitle.text = "On • 2-frame merge"
                 setQsButtonActive(binding.btnQsTopShotOff, false)
                 setQsButtonActive(binding.btnQsTopShotAuto, true)
                 setQsButtonActive(binding.btnQsTopShotOn, false)
             }
             2 -> {
-                binding.tvQsTopShotSubtitle.text = "On"
+                binding.tvQsTopShotSubtitle.text = "Enhanced • 3-frame merge"
                 setQsButtonActive(binding.btnQsTopShotOff, false)
                 setQsButtonActive(binding.btnQsTopShotAuto, false)
                 setQsButtonActive(binding.btnQsTopShotOn, true)
@@ -482,12 +505,6 @@ class MainActivity : AppCompatActivity() {
         binding.tvQsRatioSubtitle.text = if (is169) "16:9 Wide" else "4:3 Standard"
         setQsButtonActive(binding.btnQsRatio43, !is169)
         setQsButtonActive(binding.btnQsRatio169, is169)
-
-        // 5. Resolution row
-        val is108 = cameraManager.is108MpEnabled
-        binding.tvQsResSubtitle.text = if (is108) "108 MP Ultra" else "12 MP Binned"
-        setQsButtonActive(binding.btnQsRes12, !is108)
-        setQsButtonActive(binding.btnQsRes108, is108)
 
         // 6. Google AWB row
         val isAwb = cameraManager.isGoogleAwbEnabled
@@ -650,6 +667,8 @@ class MainActivity : AppCompatActivity() {
         lifecycleScope.launch {
             try {
                 cameraManager.initialize(this@MainActivity, binding.viewFinder)
+                // The 0.6 lens button only makes sense when the ultrawide is really reachable.
+                binding.btnZoomUltrawide.visibility = if (cameraManager.isUltrawideAvailable()) View.VISIBLE else View.GONE
             } catch (e: Exception) {
                 Toast.makeText(this@MainActivity, "Failed to start camera: ${e.message}", Toast.LENGTH_SHORT).show()
             }
@@ -681,6 +700,7 @@ class MainActivity : AppCompatActivity() {
                                 MediaStore.Images.Thumbnails.MINI_KIND, null
                             )
                         }
+                        latestGalleryUri = contentUri
                         if (thumbnail != null) {
                             runOnUiThread {
                                 binding.ivGalleryThumbnail.setImageBitmap(thumbnail)
@@ -704,7 +724,7 @@ class MainActivity : AppCompatActivity() {
         }
 
         binding.btnPreviewShare.setOnClickListener {
-            val uri = latestCapturedUri ?: return@setOnClickListener
+            val uri = latestCapturedUri ?: latestGalleryUri ?: return@setOnClickListener
             val shareIntent = Intent(Intent.ACTION_SEND).apply {
                 type = "image/jpeg"
                 putExtra(Intent.EXTRA_STREAM, uri)
@@ -781,7 +801,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun openInAppPhotoPreview() {
-        val uri = latestCapturedUri
+        val uri = latestCapturedUri ?: latestGalleryUri
         if (uri == null) {
             Toast.makeText(this, "No photo in gallery yet", Toast.LENGTH_SHORT).show()
             return
@@ -800,6 +820,11 @@ class MainActivity : AppCompatActivity() {
                 }
 
                 val isMotion = MotionPhotoEngine.isMotionPhoto(this@MainActivity, uri)
+                val displayName = runCatching {
+                    contentResolver.query(uri, arrayOf(MediaStore.MediaColumns.DISPLAY_NAME), null, null, null)?.use { c ->
+                        if (c.moveToFirst()) c.getString(0) else null
+                    }
+                }.getOrNull()
 
                 if (bitmap != null) {
                     withContext(Dispatchers.Main) {
@@ -811,7 +836,7 @@ class MainActivity : AppCompatActivity() {
                         binding.ivPreviewPhoto.translationX = 0f
                         binding.ivPreviewPhoto.translationY = 0f
 
-                        binding.tvPreviewTitle.text = uri.lastPathSegment ?: "Captured Photo"
+                        binding.tvPreviewTitle.text = displayName ?: "Captured Photo"
                         val motionTag = if (isMotion) " • Motion Photo" else ""
                         binding.tvPreviewDetails.text = "${bitmap.width} × ${bitmap.height} • Motorola Edge 20 Fusion$motionTag"
 
@@ -899,11 +924,6 @@ class MainActivity : AppCompatActivity() {
         }
 
         // "More settings" floating pill button opens full SettingsActivity
-        binding.btnMoreSettings.setOnClickListener {
-            binding.quickSettingsContainer.visibility = View.GONE
-            startActivity(Intent(this, SettingsActivity::class.java))
-        }
-
         // Quick Settings - Row 1: More light
         binding.btnQsLightNone.setOnClickListener {
             moreLightMode = 0
@@ -918,27 +938,21 @@ class MainActivity : AppCompatActivity() {
             setQuickFlash(ImageCapture.FLASH_MODE_ON)
         }
 
-        // Quick Settings - Row 2: RAW / JPEG
+        // Quick Settings (Pro tab): RAW + JPEG
         binding.btnQsRawOff.setOnClickListener { setQuickRaw(false) }
         binding.btnQsRawOn.setOnClickListener { setQuickRaw(true) }
 
         // Quick Settings - Row 3: HDR+ (Off / Auto / Enhanced)
         binding.btnQsTopShotOff.setOnClickListener {
-            topShotMode = 0
-            cameraManager.hdrPlusMode = 0
-            updateQuickSettingsUi()
+            setHdrMode(0)
             Toast.makeText(this, "HDR+ Off", Toast.LENGTH_SHORT).show()
         }
         binding.btnQsTopShotAuto.setOnClickListener {
-            topShotMode = 1
-            cameraManager.hdrPlusMode = 1
-            updateQuickSettingsUi()
-            Toast.makeText(this, "HDR+ Auto", Toast.LENGTH_SHORT).show()
+            setHdrMode(1)
+            Toast.makeText(this, "HDR+ On", Toast.LENGTH_SHORT).show()
         }
         binding.btnQsTopShotOn.setOnClickListener {
-            topShotMode = 2
-            cameraManager.hdrPlusMode = 2
-            updateQuickSettingsUi()
+            setHdrMode(2)
             Toast.makeText(this, "HDR+ Enhanced", Toast.LENGTH_SHORT).show()
         }
 
@@ -1022,20 +1036,18 @@ class MainActivity : AppCompatActivity() {
         // Quick Settings - Row 4: Aspect Ratio
         binding.btnQsRatio43.setOnClickListener {
             cameraManager.aspectRatio = AspectRatio.RATIO_4_3
+            applyPreviewScale()
             cameraManager.bindCameraUseCases()
             updateQuickSettingsUi()
             Toast.makeText(this, "Aspect Ratio: 4:3 Standard", Toast.LENGTH_SHORT).show()
         }
         binding.btnQsRatio169.setOnClickListener {
             cameraManager.aspectRatio = AspectRatio.RATIO_16_9
+            applyPreviewScale()
             cameraManager.bindCameraUseCases()
             updateQuickSettingsUi()
             Toast.makeText(this, "Aspect Ratio: 16:9 Widescreen", Toast.LENGTH_SHORT).show()
         }
-
-        // Quick Settings - Row 5: Resolution
-        binding.btnQsRes12.setOnClickListener { setQuickResolution(false) }
-        binding.btnQsRes108.setOnClickListener { setQuickResolution(true) }
 
         // Quick Settings - Row 6: Google AWB
         binding.btnQsAwbOff.setOnClickListener {
@@ -1053,6 +1065,7 @@ class MainActivity : AppCompatActivity() {
 
         // Quick Settings - Floating "More settings" Pill
         binding.btnMoreSettings.setOnClickListener {
+            binding.quickSettingsContainer.visibility = View.GONE
             startActivity(Intent(this, SettingsActivity::class.java))
         }
 
@@ -1232,33 +1245,37 @@ class MainActivity : AppCompatActivity() {
 
         // MGC 9.7 Dual Zoom Selectors (Upper Physical Lenses + Lower Multipliers)
         binding.btnZoomUltrawide.setOnClickListener {
+            if (!cameraManager.isUltrawideAvailable()) {
+                Toast.makeText(this, "Ultrawide camera is not available to this app", Toast.LENGTH_SHORT).show()
+                return@setOnClickListener
+            }
             cameraManager.switchToLens(CameraManager.CAMERA_ULTRAWIDE, 1.0f)
             updateDualZoomUi("0.6", "1×")
-            binding.tvSensorInfo.text = "8MP UW"
+            binding.tvSensorInfo.text = "8MP ULTRAWIDE"
         }
 
         binding.btnLens10.setOnClickListener {
             cameraManager.switchToLens(CameraManager.CAMERA_MAIN, 1.0f)
             updateDualZoomUi("1.0", "1×")
-            binding.tvSensorInfo.text = if (cameraManager.is108MpEnabled) "108MP ULTRA" else "108MP HM2"
+            binding.tvSensorInfo.text = MAIN_SENSOR_LABEL
         }
 
         binding.btnLens20.setOnClickListener {
             cameraManager.switchToLens(CameraManager.CAMERA_MAIN, 2.0f)
             updateDualZoomUi("2.0", "2")
-            binding.tvSensorInfo.text = "2X SENSOR CROP"
+            binding.tvSensorInfo.text = "2X ZOOM"
         }
 
         binding.btnZoom1x.setOnClickListener {
             cameraManager.switchToLens(CameraManager.CAMERA_MAIN, 1.0f)
             updateDualZoomUi("1.0", "1×")
-            binding.tvSensorInfo.text = if (cameraManager.is108MpEnabled) "108MP ULTRA" else "108MP HM2"
+            binding.tvSensorInfo.text = MAIN_SENSOR_LABEL
         }
 
         binding.btnZoom2x.setOnClickListener {
             cameraManager.switchToLens(CameraManager.CAMERA_MAIN, 2.0f)
             updateDualZoomUi("2.0", "2")
-            binding.tvSensorInfo.text = "2X SUPER RES"
+            binding.tvSensorInfo.text = "2X ZOOM"
         }
 
         binding.btnZoom5x.setOnClickListener {
@@ -1604,14 +1621,32 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun flipCameraWithAnimation() {
+        if (isCapturing || timerJob?.isActive == true || cameraManager.isRecordingVideo() || cameraManager.isCapturingPanorama()) return
+        binding.quickSettingsContainer.visibility = View.GONE
         binding.btnSwitchCamera.animate().rotationBy(180f).setDuration(300).start()
         cameraManager.switchCamera()
         val isFront = cameraManager.isFrontCamera()
-        binding.zoomPillContainer.visibility = if (isFront) View.GONE else View.VISIBLE
+        updateZoomPillVisibility()
+        binding.tvSensorInfo.text = if (isFront) FRONT_SENSOR_LABEL else MAIN_SENSOR_LABEL
         if (!isFront) {
             selectZoomPill(binding.btnZoom1x)
         }
         checkSelfieRingLight()
+    }
+
+    /** 16:9 photos and video are letterboxed so the viewfinder shows exactly what is saved. */
+    private fun applyPreviewScale() {
+        val wide = cameraManager.aspectRatio == AspectRatio.RATIO_16_9 || currentMode == CameraMode.VIDEO
+        binding.viewFinder.scaleType = if (wide) {
+            androidx.camera.view.PreviewView.ScaleType.FIT_CENTER
+        } else {
+            androidx.camera.view.PreviewView.ScaleType.FILL_CENTER
+        }
+    }
+
+    private fun updateZoomPillVisibility() {
+        val hide = cameraManager.isFrontCamera() || currentMode == CameraMode.PANORAMA
+        binding.zoomPillContainer.visibility = if (hide) View.GONE else View.VISIBLE
     }
 
     private fun updateZoomUiForRatio(zoom: Float) {
@@ -1625,6 +1660,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun setGridType(mode: Int) {
         gridMode = mode
+        prefs.edit().putInt(SettingsActivity.KEY_GRID_MODE, mode).apply()
         val activeBg = R.drawable.bg_qs_btn_active
         val inactiveBg = R.drawable.bg_qs_btn_inactive
         val activeTextColor = ContextCompat.getColor(this, R.color.pixel_pill_text_active)
@@ -1784,20 +1820,25 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun setQuickRaw(enabled: Boolean) {
+        if (isModeChangeBlocked()) return
         cameraManager.isRawEnabled = enabled
         prefs.edit().putBoolean(SettingsActivity.KEY_RAW_ENABLED, enabled).apply()
-        syncSettings()
+        cameraManager.bindCameraUseCases()
         updateQuickSettingsUi()
-        Toast.makeText(this, if (enabled) "RAW (DNG) enabled" else "JPEG only", Toast.LENGTH_SHORT).show()
+        val msg = when {
+            !enabled -> "JPEG only"
+            cameraManager.isRawActive() -> "RAW (DNG) + JPEG"
+            currentMode == CameraMode.CAMERA || currentMode == CameraMode.PRO -> "RAW is not supported on this camera"
+            else -> "RAW applies in Photo and Pro"
+        }
+        Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
     }
 
-    private fun setQuickResolution(is108Mp: Boolean) {
-        cameraManager.is108MpEnabled = is108Mp
-        prefs.edit().putBoolean(SettingsActivity.KEY_108MP_REMOSAIC, is108Mp).apply()
-        syncSettings()
+    private fun setHdrMode(mode: Int) {
+        hdrMode = mode
+        cameraManager.hdrPlusMode = mode
+        prefs.edit().putInt(SettingsActivity.KEY_HDR_MODE, mode).apply()
         updateQuickSettingsUi()
-        cameraManager.bindCameraUseCases()
-        Toast.makeText(this, if (is108Mp) "108MP Remosaic ON" else "12MP Nona-binning ON", Toast.LENGTH_SHORT).show()
     }
 
     private fun selectZoomPill(selectedView: TextView) {
@@ -1835,6 +1876,8 @@ class MainActivity : AppCompatActivity() {
     }
 
     private var isUserScrollingCarousel = false
+    // Only a finger swipe may change the mode; layout and programmatic scrolls must not.
+    private var carouselSwipedByUser = false
     private var lastCarouselScrollX = -1
     private val carouselFlingChecker = object : Runnable {
         override fun run() {
@@ -1874,6 +1917,7 @@ class MainActivity : AppCompatActivity() {
             when (event.actionMasked) {
                 MotionEvent.ACTION_DOWN -> {
                     isUserScrollingCarousel = true
+                    carouselSwipedByUser = true
                     binding.modeCarousel.removeCallbacks(carouselFlingChecker)
                 }
                 MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
@@ -1921,8 +1965,14 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun snapCarouselToNearestMode() {
+        if (!carouselSwipedByUser) return
+        carouselSwipedByUser = false
         val halfScreen = binding.modeCarousel.width / 2
         if (halfScreen <= 0) return
+        if (isModeChangeBlocked()) {
+            centerModeView(getCurrentActiveModeView(), smooth = true)
+            return
+        }
         val currentCenter = binding.modeCarousel.scrollX + halfScreen
 
         val modeItems = listOf(
@@ -1970,19 +2020,37 @@ class MainActivity : AppCompatActivity() {
             if (v == selectedView) {
                 v.setBackgroundResource(R.drawable.bg_mode_pill_active)
                 v.setTextColor(ContextCompat.getColor(this, R.color.pixel_accent_sand_text))
-                v.paint.isFakeBoldText = true
+                v.setTypeface(null, android.graphics.Typeface.BOLD)
             } else {
                 v.background = null
                 v.setTextColor(ContextCompat.getColor(this, R.color.pixel_text_white))
-                v.paint.isFakeBoldText = false
+                v.setTypeface(null, android.graphics.Typeface.NORMAL)
             }
         }
         centerModeView(selectedView, smooth = smoothScroll)
     }
 
+    private fun isModeChangeBlocked(): Boolean =
+        isCapturing || timerJob?.isActive == true || cameraManager.isCapturingPanorama()
+
     private fun setMode(mode: CameraMode, selectedView: TextView) {
+        if (currentMode == mode) {
+            selectModeUi(selectedView, smoothScroll = true)
+            return
+        }
+        // Rebinding the camera mid-capture drops the frames still being taken.
+        if (isModeChangeBlocked()) return
         selectModeUi(selectedView, smoothScroll = true)
-        if (currentMode == mode) return
+
+        if (currentMode == CameraMode.PRO) {
+            // Manual exposure/focus/white balance belong to Pro only.
+            proIsoIndex = 0
+            proShutterIndex = 0
+            proFocusProgress = 0
+            proWbIndex = 0
+            cameraManager.resetManualState()
+            selectProTab(activeProTab)
+        }
 
         // If recording video when switching modes, stop it first
         if (cameraManager.isRecordingVideo()) {
@@ -2068,7 +2136,9 @@ class MainActivity : AppCompatActivity() {
         }
 
         // Rebind use cases for optimal performance in active mode
+        applyPreviewScale()
         cameraManager.bindCameraUseCases()
+        updateZoomPillVisibility()
         updateQuickSettingsUi()
     }
 
@@ -2185,12 +2255,22 @@ class MainActivity : AppCompatActivity() {
 
         if (isCapturing) return
 
+        if (timerJob?.isActive == true) {
+            // Second press cancels a running countdown.
+            timerJob?.cancel()
+            binding.tvCountdown.visibility = View.GONE
+            return
+        }
+
         if (timerDuration > 0) {
-            lifecycleScope.launch {
+            timerJob = lifecycleScope.launch {
+                binding.tvCountdown.visibility = View.VISIBLE
                 for (i in timerDuration downTo 1) {
-                    Toast.makeText(this@MainActivity, "$i...", Toast.LENGTH_SHORT).show()
+                    binding.tvCountdown.text = i.toString()
                     delay(1000)
                 }
+                binding.tvCountdown.visibility = View.GONE
+                timerJob = null
                 executePhotoCapture()
             }
         } else {
@@ -2298,14 +2378,14 @@ class MainActivity : AppCompatActivity() {
     private fun handlePanoramaShutter() {
         if (!cameraManager.isCapturingPanorama()) {
             cameraManager.startPanoramaCapture()
-            binding.btnShutter.setBackgroundResource(R.drawable.bg_shutter_video_recording)
+            binding.btnShutter.setImageResource(R.drawable.bg_shutter_video_recording)
             binding.tvPanoramaPrompt.text = "Pan steadily along the line →"
             binding.tvPanoramaAngle.text = "0° / 180°"
             binding.pbPanoramaProgress.progress = 0
             Toast.makeText(this, "Panorama capture started. Pan right steadily.", Toast.LENGTH_SHORT).show()
         } else {
             binding.tvPanoramaPrompt.text = "Finalizing panorama..."
-            binding.btnShutter.setBackgroundResource(R.drawable.bg_shutter_button)
+            binding.btnShutter.setImageResource(R.drawable.bg_shutter_button)
             lifecycleScope.launch {
                 binding.processingPill.visibility = View.VISIBLE
                 binding.tvProcessingStatus.text = "Stitching panorama..."
@@ -2317,7 +2397,8 @@ class MainActivity : AppCompatActivity() {
                     updateStorageBadge()
                     Toast.makeText(this@MainActivity, "Panorama saved successfully", Toast.LENGTH_SHORT).show()
                 } else {
-                    Toast.makeText(this@MainActivity, "Panorama capture ended", Toast.LENGTH_SHORT).show()
+                    binding.tvPanoramaPrompt.text = "Pan steadily along the line"
+                    Toast.makeText(this@MainActivity, "Panorama too short. Turn the phone further while capturing.", Toast.LENGTH_LONG).show()
                 }
             }
         }
@@ -2402,5 +2483,13 @@ class MainActivity : AppCompatActivity() {
             Manifest.permission.CAMERA,
             Manifest.permission.RECORD_AUDIO
         )
+        // Asked for on first launch, but the camera works without them.
+        private val OPTIONAL_PERMISSIONS = arrayOf(
+            Manifest.permission.ACCESS_FINE_LOCATION,
+            Manifest.permission.ACCESS_COARSE_LOCATION
+        )
+        private const val ASTRO_MAX_LUX = 10f
+        private const val MAIN_SENSOR_LABEL = "12MP MAIN"
+        private const val FRONT_SENSOR_LABEL = "8MP FRONT"
     }
 }

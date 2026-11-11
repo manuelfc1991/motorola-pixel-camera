@@ -139,54 +139,6 @@
                 android:orientation="vertical"
                 android:padding="16dp">
 
-                <com.google.android.material.switchmaterial.SwitchMaterial
-                    android:id="@+id/swRaw"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:checked="false"
-                    android:text="RAW + JPEG control\nSave 10-bit DNG alongside processed JPEG"
-                    android:textColor="@color/pixel_text_white"
-                    android:textSize="14sp" />
-
-                <View
-                    android:layout_width="match_parent"
-                    android:layout_height="1dp"
-                    android:layout_marginVertical="8dp"
-                    android:background="#26282E" />
-
-                <!-- HDR+ Frame Count Slider -->
-                <TextView
-                    android:id="@+id/tvHdrFramesLabel"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="HDR+ Frame Count: 18 frames"
-                    android:textColor="@color/pixel_text_white"
-                    android:textSize="14sp" />
-
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="Higher frame counts eliminate noise on hair and foliage"
-                    android:textColor="@color/pixel_text_secondary"
-                    android:textSize="12sp" />
-
-                <SeekBar
-                    android:id="@+id/sbHdrFrames"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="8dp"
-                    android:max="25"
-                    android:min="5"
-                    android:progress="18"
-                    android:progressTint="@color/pixel_accent_yellow"
-                    android:thumbTint="@color/pixel_accent_yellow" />
-
-                <View
-                    android:layout_width="match_parent"
-                    android:layout_height="1dp"
-                    android:layout_marginVertical="8dp"
-                    android:background="#26282E" />
-
                 <!-- Color Saturation Tuning Slider -->
                 <TextView
                     android:id="@+id/tvSaturationLabel"
@@ -280,70 +232,6 @@
                     android:progressTint="@color/pixel_accent_blue"
                     android:thumbTint="@color/pixel_accent_blue" />
 
-                <View
-                    android:layout_width="match_parent"
-                    android:layout_height="1dp"
-                    android:layout_marginVertical="8dp"
-                    android:background="#26282E" />
-
-                <com.google.android.material.switchmaterial.SwitchMaterial
-                    android:id="@+id/swUltraHdr"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:checked="true"
-                    android:text="Ultra HDR capture\nRetain highlight dynamic range for OLED"
-                    android:textColor="@color/pixel_text_white"
-                    android:textSize="14sp" />
-            </LinearLayout>
-
-            <!-- HARDWARE TUNING (MOTO EDGE 20 FUSION) -->
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginStart="4dp"
-                android:layout_marginTop="20dp"
-                android:layout_marginBottom="8dp"
-                android:text="HARDWARE TUNING (KYOTO)"
-                android:textColor="@color/pixel_indicator_glow"
-                android:textSize="12sp"
-                android:textStyle="bold" />
-
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:background="@drawable/bg_pill_container"
-                android:backgroundTint="#181A1D"
-                android:orientation="vertical"
-                android:padding="16dp">
-
-                <com.google.android.material.switchmaterial.SwitchMaterial
-                    android:id="@+id/sw108MpRemosaic"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:checked="true"
-                    android:text="108 MP Remosaic Trigger\nHook vendor remosaic scenario on HM2"
-                    android:textColor="@color/pixel_text_white"
-                    android:textSize="14sp" />
-
-                <View
-                    android:layout_width="match_parent"
-                    android:layout_height="1dp"
-                    android:layout_marginVertical="8dp"
-                    android:background="#26282E" />
-
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="Temporal De-Noise Floor: Mild (0.4x)"
-                    android:textColor="@color/pixel_text_white"
-                    android:textSize="14sp" />
-
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="Preserves real texture details without watercolor smudging"
-                    android:textColor="@color/pixel_text_secondary"
-                    android:textSize="12sp" />
             </LinearLayout>
 
             <!-- VIDEO CATEGORY -->
@@ -375,20 +263,6 @@
                     android:textColor="@color/pixel_text_white"
                     android:textSize="14sp" />
 
-                <View
-                    android:layout_width="match_parent"
-                    android:layout_height="1dp"
-                    android:layout_marginVertical="8dp"
-                    android:background="#26282E" />
-
-                <com.google.android.material.switchmaterial.SwitchMaterial
-                    android:id="@+id/swHevc"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:checked="true"
-                    android:text="Store videos efficiently (HEVC)\nH.265 hardware encoding via MTK Codec2"
-                    android:textColor="@color/pixel_text_white"
-                    android:textSize="14sp" />
             </LinearLayout>
 
             <!-- ABOUT FOOTER -->
@@ -411,7 +285,7 @@
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="Version 9.4.103 • Apache 2.0 Open Source"
+                    android:text="Version 1.0.0-kyoto • Open source"
                     android:textColor="@color/pixel_text_secondary"
                     android:textSize="12sp" />
             </LinearLayout>

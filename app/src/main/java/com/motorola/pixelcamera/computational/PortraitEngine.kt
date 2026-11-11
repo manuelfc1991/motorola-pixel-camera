@@ -68,6 +68,8 @@ object PortraitEngine {
         }
 
         val sharpCopy = input.copy(Bitmap.Config.ARGB_8888, true)
+        // JPEG-decoded bitmaps are opaque; without alpha the DST_IN mask turns the edges black.
+        sharpCopy.setHasAlpha(true)
         val sharpCanvas = Canvas(sharpCopy)
         sharpCanvas.drawRect(0f, 0f, width.toFloat(), height.toFloat(), paint)
 
