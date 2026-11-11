@@ -1803,7 +1803,8 @@ class MainActivity : AppCompatActivity() {
             }
             setMode(CameraMode.CAMERA, binding.modeCamera)
         }
-        updatePhotoVideoToggle(isVideo = false)
+        // A capture in progress can refuse the change; show the mode actually in use.
+        updatePhotoVideoToggle(isVideo = currentMode == CameraMode.VIDEO)
         padCarousel()
     }
 
@@ -1811,7 +1812,7 @@ class MainActivity : AppCompatActivity() {
         if (currentMode != CameraMode.VIDEO) {
             setMode(CameraMode.VIDEO, binding.modeVideo)
         }
-        updatePhotoVideoToggle(isVideo = true)
+        updatePhotoVideoToggle(isVideo = currentMode == CameraMode.VIDEO)
         padCarousel()
     }
 
@@ -2180,12 +2181,15 @@ class MainActivity : AppCompatActivity() {
             return
         }
 
+        val switchedRow = (currentMode == CameraMode.VIDEO) != (mode == CameraMode.VIDEO)
         currentMode = mode
         cameraManager.currentCameraMode = mode
         if (mode != CameraMode.PORTRAIT) hidePortraitPreview()
 
         // Update Tier 3 Toggle Pill
         updatePhotoVideoToggle(isVideo = (mode == CameraMode.VIDEO))
+        // Leaving Slow Motion finishes later than the tap, so the mode row follows here.
+        if (switchedRow) padCarousel()
 
         if (cameraManager.isFrontCamera()) updateSensorLabel()
         // Update Pixel Shutter color per mode
