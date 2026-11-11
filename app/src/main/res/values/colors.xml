@@ -35,4 +35,8 @@
     <color name="gc_qs_btn">#292B2F</color>
     <color name="gc_qs_icon">#C4C7C5</color>
     <color name="gc_scrollbar">#6B6B6B</color>
+    <!-- Google Camera "Camera settings" page -->
+    <color name="gc_set_title">#1F1F1F</color>
+    <color name="gc_set_accent">#0B57D0</color>
+    <color name="gc_set_summary">#00639B</color>
 </resources>
