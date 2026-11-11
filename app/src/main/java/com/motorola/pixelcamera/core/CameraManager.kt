@@ -31,6 +31,7 @@ import androidx.camera.view.PreviewView
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.LifecycleOwner
 import com.motorola.pixelcamera.computational.AstrophotographyEngine
+import com.motorola.pixelcamera.computational.ColourCleanup
 import com.motorola.pixelcamera.computational.HdrProcessor
 import com.motorola.pixelcamera.computational.MotionPhotoEngine
 import com.motorola.pixelcamera.computational.NightSightEngine
@@ -719,6 +720,10 @@ class CameraManager(private val context: Context) {
     }
 
     /** Frames to merge for the current light level: more as the sensor gain climbs. */
+    /** With the ISP's noise reduction off for a burst, the merge needs its own colour cleanup. */
+    private fun cleanupStrength(ownCleanup: Boolean): Float =
+        if (ownCleanup) ColourCleanup.strengthForIso(lastAutoIso) else 0f
+
     private fun lowLightFrames(): Int = when {
         !multiFrameLowLight -> 1
         lastAutoIso >= LOW_LIGHT_ISO_HIGH -> 4
@@ -814,7 +819,7 @@ class CameraManager(private val context: Context) {
                         frames.isEmpty() -> takePictureDirect(capture)
                         toneMapped -> saveBitmapToMediaStore(HdrProcessor.processHdr(frames, enableGoogleAwb = isGoogleAwbEnabled))
                         // Low light with HDR+ off: merge only, so the look stays the ISP's own
-                        else -> saveBitmapToMediaStore(HdrProcessor.mergeBurst(frames))
+                        else -> saveBitmapToMediaStore(HdrProcessor.mergeBurst(frames, cleanupStrength(ownCleanup)))
                     }
                 }
                 attachMotion(savedUri, motionFrames)
@@ -835,7 +840,7 @@ class CameraManager(private val context: Context) {
                 val baseBitmap = when {
                     frames.isEmpty() -> return@withContext null
                     frames.size == 1 -> frames[0]
-                    else -> HdrProcessor.mergeBurst(frames)
+                    else -> HdrProcessor.mergeBurst(frames, cleanupStrength(ownCleanup))
                 }
                 val portraitBitmap = PortraitEngine.applyPortraitBokeh(
                     context,
