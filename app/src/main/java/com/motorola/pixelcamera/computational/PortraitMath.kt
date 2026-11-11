@@ -25,6 +25,15 @@ internal object PortraitMath {
     /** Mask pixels this much farther than the focused spot belong to something else. */
     private const val BEHIND_SUBJECT_CUT = 0.18f
 
+    /** With the focus on a person, only mask pixels this much farther are dropped. */
+    private const val BEHIND_PERSON_CUT = 0.4f
+
+    /** The focus counts as on a person when one's body centre is within width / this of it. */
+    private const val PERSON_FOCUS_DIVISOR = 3
+
+    /** Parts of the object within width / this of its kept part survive the depth cut. */
+    private const val EDGE_RESTORE_DIVISOR = 40
+
     /** A detected person only counts when the mask comes within width / this of them. */
     private const val PERSON_REACH_DIVISOR = 10
 
@@ -119,13 +128,22 @@ internal object PortraitMath {
     ): FloatArray {
         val solid = BooleanArray(alpha.size) { alpha[it] > 0.5f }
         val keep = BooleanArray(alpha.size)
-        val mainDepth = addRegion(keep, solid, depth, w, h, focusX, focusY, Int.MAX_VALUE)
+        // A person is rarely fused with background clutter, but has parts well behind the face
+        // (ears, shoulders), so the "clearly behind" cut is much looser when the focus is on one.
+        val focusOnPerson = (0 until people.size / 2).any { p ->
+            val dx = (people[p * 2] - focusX) * w
+            val dy = (people[p * 2 + 1] - focusY) * h
+            dx * dx + dy * dy < (w / PERSON_FOCUS_DIVISOR).let { it * it }
+        }
+        val mainCut = if (focusOnPerson) BEHIND_PERSON_CUT else BEHIND_SUBJECT_CUT
+        val mainDepth = addRegion(keep, solid, depth, w, h, focusX, focusY, Int.MAX_VALUE, mainCut)
             ?: return alpha.copyOf()
 
         for (p in 0 until people.size / 2) {
             val region = BooleanArray(alpha.size)
-            val personDepth = addRegion(region, solid, depth, w, h, people[p * 2], people[p * 2 + 1], w / PERSON_REACH_DIVISOR)
-                ?: continue
+            val personDepth = addRegion(
+                region, solid, depth, w, h, people[p * 2], people[p * 2 + 1], w / PERSON_REACH_DIVISOR, BEHIND_PERSON_CUT
+            ) ?: continue
             if (depth != null && kotlin.math.abs(personDepth - mainDepth) > GROUP_DEPTH_RANGE) continue
             for (i in keep.indices) if (region[i]) keep[i] = true
         }
@@ -141,7 +159,7 @@ internal object PortraitMath {
      */
     private fun addRegion(
         into: BooleanArray, solid: BooleanArray, depth: FloatArray?, w: Int, h: Int,
-        px: Float, py: Float, maxSeedDistance: Int
+        px: Float, py: Float, maxSeedDistance: Int, behindCut: Float
     ): Float? {
         val fx = (px * w).toInt().coerceIn(0, w - 1)
         val fy = (py * h).toInt().coerceIn(0, h - 1)
@@ -166,9 +184,18 @@ internal object PortraitMath {
             }
             samples.sort()
             seedDepth = samples[samples.size / 2]
-            val gated = BooleanArray(solid.size) { region[it] && depth[it] > seedDepth - BEHIND_SUBJECT_CUT }
+            val gated = BooleanArray(solid.size) { region[it] && depth[it] > seedDepth - behindCut }
             val gatedSeed = nearest(gated, w, fx, fy)
-            if (gatedSeed >= 0) region = flood(gated, w, h, gatedSeed)
+            if (gatedSeed >= 0) {
+                val front = flood(gated, w, h, gatedSeed)
+                // The depth map is soft at outlines, so thin parts at the silhouette (an ear, a
+                // finger) read as background. Give back whatever of the object lies right beside
+                // the part that was kept.
+                val reach = max(1, w / EDGE_RESTORE_DIVISOR)
+                val near = boxBlur(FloatArray(solid.size) { if (front[it]) 1f else 0f }, w, h, reach)
+                val whole = region
+                region = BooleanArray(solid.size) { front[it] || (whole[it] && near[it] > 0f) }
+            }
         }
         for (i in into.indices) if (region[i]) into[i] = true
         return seedDepth
