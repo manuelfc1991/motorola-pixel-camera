@@ -348,10 +348,21 @@ class CameraManager(private val context: Context) {
         videoCapture = videoBuilder.build()
 
         // 4. Image Analysis Use Case (Real-time Live RGB/Luminance Histogram, Top Shot, Panorama)
-        val analysis = ImageAnalysis.Builder()
+        val analysisBuilder = ImageAnalysis.Builder()
             .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
             .setOutputImageFormat(ImageAnalysis.OUTPUT_IMAGE_FORMAT_RGBA_8888)
-            .build()
+        if (currentCameraMode == CameraMode.PANORAMA) {
+            // The panorama is built from these frames, so they get twice the default size.
+            analysisBuilder.setResolutionSelector(
+                ResolutionSelector.Builder()
+                    .setAspectRatioStrategy(AspectRatioStrategy.RATIO_4_3_FALLBACK_AUTO_STRATEGY)
+                    .setResolutionStrategy(
+                        ResolutionStrategy(PANORAMA_FRAME_SIZE, ResolutionStrategy.FALLBACK_RULE_CLOSEST_LOWER_THEN_HIGHER)
+                    )
+                    .build()
+            )
+        }
+        val analysis = analysisBuilder.build()
 
         analysis.setAnalyzer(cameraExecutor) { imageProxy ->
             try {
@@ -389,7 +400,7 @@ class CameraManager(private val context: Context) {
 
                 // If Top Shot or Panorama active, stream frames
                 val needsFrame = (topShotMode != TopShotMode.OFF && (currentCameraMode == CameraMode.CAMERA || currentCameraMode == CameraMode.PORTRAIT)) ||
-                        (currentCameraMode == CameraMode.PANORAMA && panoramaEngine.isCapturing())
+                        (currentCameraMode == CameraMode.PANORAMA && panoramaEngine.wantsFrame())
 
                 if (needsFrame) {
                     val bmp = imageProxyRgbaToBitmap(imageProxy)
@@ -397,7 +408,7 @@ class CameraManager(private val context: Context) {
                         if (topShotMode != TopShotMode.OFF) {
                             MotionPhotoEngine.pushPreviewFrame(bmp)
                         }
-                        if (currentCameraMode == CameraMode.PANORAMA && panoramaEngine.isCapturing()) {
+                        if (currentCameraMode == CameraMode.PANORAMA && panoramaEngine.wantsFrame()) {
                             panoramaEngine.processIncomingFrame(bmp)
                         }
                     }
@@ -431,6 +442,9 @@ class CameraManager(private val context: Context) {
             val zState = camera?.cameraInfo?.zoomState?.value
             Log.i(TAG, "Active camera zoom range: min=${zState?.minZoomRatio}, max=${zState?.maxZoomRatio}, current=${zState?.zoomRatio}")
             setZoom(currentZoomRatio)
+            if (currentCameraMode == CameraMode.PANORAMA) {
+                Log.i(TAG, "Panorama frames: ${imageAnalysis?.resolutionInfo?.resolution}")
+            }
             when (currentCameraMode) {
                 CameraMode.VIDEO -> applyVideoFps()
                 CameraMode.PRO -> applyManualControls()
@@ -921,7 +935,7 @@ class CameraManager(private val context: Context) {
                     onProgress(CaptureProgress.Processing)
                     panoramaEngine.finishCapture(locationHelper.getCurrentLocation())
                 } else {
-                    panoramaEngine.startCapture()
+                    startPanoramaCapture()
                     null
                 }
             }
@@ -931,8 +945,21 @@ class CameraManager(private val context: Context) {
     }
 
     fun startPanoramaCapture() {
+        panoramaFocalToWidth()?.let { panoramaEngine.focalToWidth = it }
         panoramaEngine.startCapture()
     }
+
+    /** Lens focal length over the sensor's short side, times the zoom: the stitcher's focal length per frame width. */
+    private fun panoramaFocalToWidth(): Float? = runCatching {
+        val info = camera?.cameraInfo ?: return null
+        val c2 = Camera2CameraInfo.from(info)
+        val focal = c2.getCameraCharacteristic(android.hardware.camera2.CameraCharacteristics.LENS_INFO_AVAILABLE_FOCAL_LENGTHS)
+            ?.firstOrNull() ?: return null
+        val sensor = c2.getCameraCharacteristic(android.hardware.camera2.CameraCharacteristics.SENSOR_INFO_PHYSICAL_SIZE)
+            ?: return null
+        val zoom = info.zoomState.value?.zoomRatio ?: 1f
+        (focal / minOf(sensor.width, sensor.height) * zoom).takeIf { it in 0.3f..5f }
+    }.getOrNull()
 
     suspend fun stopPanoramaCapture(): Uri? {
         return panoramaEngine.finishCapture(locationHelper.getCurrentLocation())
@@ -1384,6 +1411,7 @@ class CameraManager(private val context: Context) {
     }
 
     companion object {
+        private val PANORAMA_FRAME_SIZE = Size(1280, 960)
         private const val ZOOM_MERGE_RATIO = 2f
         private const val HIGH_BITRATE_FHD = 36_000_000
         private const val TAG = "CameraManager"
