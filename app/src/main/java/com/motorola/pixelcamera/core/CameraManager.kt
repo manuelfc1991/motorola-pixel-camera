@@ -39,6 +39,10 @@ import com.motorola.pixelcamera.computational.PortraitEngine
 import com.motorola.pixelcamera.hardware.LocationHelper
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
+import com.motorola.pixelcamera.hardware.DimensityOptimizer
 import kotlinx.coroutines.withContext
 import java.io.ByteArrayOutputStream
 import java.io.File
@@ -634,166 +638,162 @@ class CameraManager(private val context: Context) {
         camera?.cameraControl?.startFocusAndMetering(action)
     }
 
+    /** Low-light bursts are cleaned by the aligned merge instead of the ISP's noise reduction. */
+    var ownNoiseCleanup = true
+
+    @OptIn(ExperimentalCamera2Interop::class)
+    private fun setIspCleanup(enabled: Boolean) {
+        val cam = camera ?: return
+        val options = CaptureRequestOptions.Builder()
+            .setCaptureRequestOption(
+                CaptureRequest.NOISE_REDUCTION_MODE,
+                if (enabled) CaptureRequest.NOISE_REDUCTION_MODE_HIGH_QUALITY else CaptureRequest.NOISE_REDUCTION_MODE_OFF
+            )
+            .setCaptureRequestOption(
+                CaptureRequest.EDGE_MODE,
+                if (enabled) CaptureRequest.EDGE_MODE_HIGH_QUALITY else CaptureRequest.EDGE_MODE_OFF
+            )
+            .build()
+        runCatching {
+            val applied = Camera2CameraControl.from(cam.cameraControl).addCaptureRequestOptions(options)
+            // Only switching off has to be in effect before the next frame; restoring can settle on its own.
+            if (!enabled) applied.get(1, java.util.concurrent.TimeUnit.SECONDS)
+        }.onFailure { Log.w(TAG, "Could not switch ISP cleanup: ${it.message}") }
+    }
+
+    /**
+     * Frames merged for a Photo-mode shot in the current light. 1 means a plain single shot.
+     * High ISO single frames are grainy, so dim scenes are shot as a short aligned burst.
+     */
+    fun lowLightFrameCount(): Int = when {
+        currentCameraMode != CameraMode.CAMERA || rawBound -> 1
+        flashMode != ImageCapture.FLASH_MODE_OFF -> 1
+        lastAutoIso >= LOW_LIGHT_ISO_HIGH -> 4
+        lastAutoIso >= LOW_LIGHT_ISO -> 3
+        else -> 1
+    }
+
     /**
      * Executes photo capture with maximum clarity and appropriate computational processing
      */
     suspend fun capturePhoto(
         mode: CameraMode,
         portraitBlurStrength: Float = 14f,
-        onStatusUpdate: (String) -> Unit
+        onProgress: (CaptureProgress) -> Unit
     ): Uri? = withContext(Dispatchers.IO) {
         val capture = imageCapture ?: return@withContext null
         if (mode != CameraMode.PANORAMA) playSound(android.media.MediaActionSound.SHUTTER_CLICK)
 
-        when (mode) {
-            CameraMode.PRO -> {
-                // Manual exposure: keep the single hardware frame exactly as shot.
-                onStatusUpdate("Capturing manual frame...")
-                if (rawBound) takePictureRawAndJpeg(capture) else takePictureDirect(capture)
+        /**
+         * Takes [count] frames, reporting each one, then switches the UI to processing.
+         * Each JPEG is decoded on the compute pool while the next frame is being exposed.
+         */
+        suspend fun burst(count: Int): List<Bitmap> = coroutineScope {
+            val t0 = android.os.SystemClock.elapsedRealtime()
+            onProgress(CaptureProgress.Frames(0, count))
+            val decoding = (0 until count).mapNotNull { i ->
+                val jpeg = runCatching { takeJpegFrame(capture) }.getOrNull()
+                onProgress(CaptureProgress.Frames(i + 1, count))
+                jpeg?.let { async(DimensityOptimizer.computationDispatcher) { runCatching { it.decode() }.getOrNull() } }
             }
+            val tCaptured = android.os.SystemClock.elapsedRealtime()
+            onProgress(CaptureProgress.Processing)
+            val frames = decoding.awaitAll().filterNotNull()
+            Log.i(TAG, "Burst of $count: capture=${tCaptured - t0}ms decode tail=${android.os.SystemClock.elapsedRealtime() - tCaptured}ms")
+            frames
+        }
+
+        suspend fun single(): Uri? {
+            onProgress(CaptureProgress.Frames(0, 1))
+            return if (rawBound) takePictureRawAndJpeg(capture) else takePictureDirect(capture)
+        }
+
+        suspend fun attachMotion(savedUri: Uri?, motionFrames: List<Bitmap>) {
+            if (savedUri == null || motionFrames.size < 4) return
+            try {
+                val tempMp4 = File(context.cacheDir, "motion_${System.currentTimeMillis()}.mp4")
+                if (MotionPhotoEngine.encodeFramesToMp4(motionFrames, tempMp4)) {
+                    MotionPhotoEngine.attachMotionPhoto(context, savedUri, tempMp4)
+                    tempMp4.delete()
+                }
+            } catch (e: Exception) {
+                Log.w(TAG, "Motion Photo attach warning: ${e.message}")
+            }
+        }
+
+        when (mode) {
+            // Manual exposure: keep the single hardware frame exactly as shot.
+            CameraMode.PRO -> single()
             CameraMode.CAMERA -> {
-                val shouldRecordMotion = (topShotMode != TopShotMode.OFF) && (mode == CameraMode.CAMERA)
-                val motionFrames = if (shouldRecordMotion) MotionPhotoEngine.snapshotFrames() else emptyList()
+                val motionFrames = if (topShotMode != TopShotMode.OFF) MotionPhotoEngine.snapshotFrames() else emptyList()
+                val lowLightFrames = lowLightFrameCount()
+                val hdrFrames = if (hdrPlusMode == 2) 3 else if (hdrPlusMode == 1) 2 else 1
+                val toneMapped = hdrPlusMode != 0 || isGoogleAwbEnabled
 
-                val savedUri = if (rawBound) {
-                    onStatusUpdate("Capturing RAW + JPEG...")
-                    takePictureRawAndJpeg(capture)
-                } else if (hdrPlusMode == 0 && !isGoogleAwbEnabled) {
-                    onStatusUpdate("Capturing...")
-                    takePictureDirect(capture)
+                val savedUri = if (rawBound || (!toneMapped && lowLightFrames <= 1)) {
+                    single()
                 } else {
-                    val frameCount = if (hdrPlusMode == 2) 3 else if (hdrPlusMode == 1) 2 else 1
-                    onStatusUpdate("HDR+ burst: Capturing $frameCount frames...")
-                    val burst = mutableListOf<Bitmap>()
-                    for (i in 0 until frameCount) {
-                        val bmp = runCatching { takeSingleBitmap(capture) }.getOrNull()
-                        if (bmp != null) burst.add(bmp)
+                    // Low light with HDR+ off: the aligned merge is the noise cleanup, so the ISP's own
+                    // noise reduction and sharpening (which smear high-ISO noise into worms) are off.
+                    val ownCleanup = ownNoiseCleanup && !toneMapped
+                    val t0 = android.os.SystemClock.elapsedRealtime()
+                    if (ownCleanup) setIspCleanup(false)
+                    val frames = try {
+                        burst(maxOf(hdrFrames, lowLightFrames))
+                    } finally {
+                        if (ownCleanup) setIspCleanup(true)
                     }
-
-                    if (burst.isNotEmpty()) {
-                        onStatusUpdate("Merging HDR+ & Pixel tone mapping...")
-                        val processed = HdrProcessor.processHdr(burst, enableGoogleAwb = isGoogleAwbEnabled)
-                        onStatusUpdate("Saving HDR+ photo...")
-                        saveBitmapToMediaStore(processed)
-                    } else {
-                        takePictureDirect(capture)
-                    }
-                }
-
-                if (shouldRecordMotion && savedUri != null && motionFrames.size >= 4) {
-                    try {
-                        onStatusUpdate("Embedding Motion Photo...")
-                        val tempMp4 = File(context.cacheDir, "motion_${System.currentTimeMillis()}.mp4")
-                        if (MotionPhotoEngine.encodeFramesToMp4(motionFrames, tempMp4)) {
-                            MotionPhotoEngine.attachMotionPhoto(context, savedUri, tempMp4)
-                            tempMp4.delete()
-                        }
-                    } catch (e: Exception) {
-                        Log.w(TAG, "Motion Photo attach warning: ${e.message}")
+                    Log.i(TAG, "Photo burst capture: ${android.os.SystemClock.elapsedRealtime() - t0}ms ownCleanup=$ownCleanup")
+                    Log.i(TAG, "Photo burst: ${frames.size} frames, iso=$lastAutoIso, toneMapped=$toneMapped")
+                    when {
+                        frames.isEmpty() -> takePictureDirect(capture)
+                        toneMapped -> saveBitmapToMediaStore(HdrProcessor.processHdr(frames, enableGoogleAwb = isGoogleAwbEnabled))
+                        // Low light with HDR+ off: merge only, so the look stays the ISP's own
+                        else -> saveBitmapToMediaStore(HdrProcessor.mergeBurst(frames))
                     }
                 }
+                attachMotion(savedUri, motionFrames)
                 savedUri
             }
             CameraMode.PORTRAIT -> {
-                val shouldRecordMotion = (topShotMode != TopShotMode.OFF)
-                val motionFrames = if (shouldRecordMotion) MotionPhotoEngine.snapshotFrames() else emptyList()
-
-                onStatusUpdate("Capturing portrait frame...")
-                val baseBitmap = runCatching { takeSingleBitmap(capture) }.getOrNull() ?: return@withContext null
-                onStatusUpdate("Computing progressive bokeh...")
+                val motionFrames = if (topShotMode != TopShotMode.OFF) MotionPhotoEngine.snapshotFrames() else emptyList()
+                val baseBitmap = burst(1).firstOrNull() ?: return@withContext null
                 val portraitBitmap = PortraitEngine.applyPortraitBokeh(
                     baseBitmap,
                     focusX = 0.5f,
                     focusY = 0.45f,
                     blurIntensity = portraitBlurStrength
                 )
-                onStatusUpdate("Saving Portrait JPEG...")
                 val savedUri = saveBitmapToMediaStore(portraitBitmap)
-
-                if (shouldRecordMotion && savedUri != null && motionFrames.size >= 4) {
-                    try {
-                        onStatusUpdate("Embedding Motion Photo...")
-                        val tempMp4 = File(context.cacheDir, "motion_${System.currentTimeMillis()}.mp4")
-                        if (MotionPhotoEngine.encodeFramesToMp4(motionFrames, tempMp4)) {
-                            MotionPhotoEngine.attachMotionPhoto(context, savedUri, tempMp4)
-                            tempMp4.delete()
-                        }
-                    } catch (e: Exception) {
-                        Log.w(TAG, "Motion Photo attach warning: ${e.message}")
-                    }
-                }
+                attachMotion(savedUri, motionFrames)
                 savedUri
             }
             CameraMode.NIGHT_SIGHT -> {
-                if (isAstrophotographyActive) {
-                    onStatusUpdate("Astrophotography: Capturing 8 long exposures...")
-                    val burst = mutableListOf<Bitmap>()
-                    for (i in 0 until 8) {
-                        val bmp = runCatching { takeSingleBitmap(capture) }.getOrNull()
-                        if (bmp != null) burst.add(bmp)
-                    }
-                    if (burst.isNotEmpty()) {
-                        onStatusUpdate("Aligning stars & sidereal stacking...")
-                        val processed = AstrophotographyEngine.processAstroStack(burst)
-                        onStatusUpdate("Saving Astrophotography photo...")
-                        saveBitmapToMediaStore(processed)
-                    } else {
-                        takePictureDirect(capture)
-                    }
-                } else {
-                    // Each capture is already a 6-frame aligned MediaTek MFNR merge (~1.5s in the HAL).
-                    // Handheld, more captures only add hold time and hand drift, so keep it short.
-                    onStatusUpdate("Night Sight: Capturing $NIGHT_HANDHELD_CAPTURES multi-frame exposures...")
-                    val burst = mutableListOf<Bitmap>()
-                    for (i in 0 until NIGHT_HANDHELD_CAPTURES) {
-                        val tc = android.os.SystemClock.elapsedRealtime()
-                        val bmp = runCatching { takeSingleBitmap(capture) }.getOrNull()
-                        Log.i(TAG, "Night Sight capture+decode ${i + 1}: ${android.os.SystemClock.elapsedRealtime() - tc}ms")
-                        if (bmp != null) burst.add(bmp)
-                    }
-                    if (burst.isNotEmpty()) {
-                        onStatusUpdate("Fusing low-light frames & de-noising...")
-                        val processed = NightSightEngine.processNightSight(burst)
-                        onStatusUpdate("Saving Night Sight photo...")
-                        val ts = android.os.SystemClock.elapsedRealtime()
-                        saveBitmapToMediaStore(processed).also {
-                            Log.i(TAG, "Night Sight save=${android.os.SystemClock.elapsedRealtime() - ts}ms")
-                        }
-                    } else {
-                        takePictureDirect(capture)
-                    }
+                // Handheld: each capture is already a 6-frame MediaTek MFNR merge (~1.5s in the HAL),
+                // so more captures only add hold time and hand drift.
+                val frames = burst(if (isAstrophotographyActive) 8 else NIGHT_HANDHELD_CAPTURES)
+                when {
+                    frames.isEmpty() -> takePictureDirect(capture)
+                    isAstrophotographyActive -> saveBitmapToMediaStore(AstrophotographyEngine.processAstroStack(frames))
+                    else -> saveBitmapToMediaStore(NightSightEngine.processNightSight(frames))
                 }
             }
             CameraMode.LONG_EXPOSURE -> {
-                onStatusUpdate("Long Exposure: Capturing 12 motion frames...")
-                val burst = mutableListOf<Bitmap>()
-                for (i in 0 until 12) {
-                    val bmp = runCatching { takeSingleBitmap(capture) }.getOrNull()
-                    if (bmp != null) burst.add(bmp)
-                }
-                if (burst.isNotEmpty()) {
-                    onStatusUpdate("Blending motion blur & light trails...")
-                    val processed = HdrProcessor.blendLongExposure(burst)
-                    onStatusUpdate("Saving Long Exposure photo...")
-                    saveBitmapToMediaStore(processed)
-                } else {
-                    takePictureDirect(capture)
-                }
+                val frames = burst(12)
+                if (frames.isNotEmpty()) saveBitmapToMediaStore(HdrProcessor.blendLongExposure(frames))
+                else takePictureDirect(capture)
             }
             CameraMode.PANORAMA -> {
                 if (panoramaEngine.isCapturing()) {
-                    onStatusUpdate("Stitching cylindrical panorama...")
+                    onProgress(CaptureProgress.Processing)
                     panoramaEngine.finishCapture(locationHelper.getCurrentLocation())
                 } else {
-                    onStatusUpdate("Aligning panorama horizon...")
                     panoramaEngine.startCapture()
                     null
                 }
             }
-            CameraMode.VIDEO -> {
-                // Video is handled by startRecording / stopRecording
-                takePictureDirect(capture)
-            }
+            // Video is handled by startRecording / stopRecording
+            CameraMode.VIDEO -> takePictureDirect(capture)
         }
     }
 
@@ -974,19 +974,30 @@ class CameraManager(private val context: Context) {
 
     fun isRecordingVideo(): Boolean = activeRecording != null
 
-    private suspend fun takeSingleBitmap(capture: ImageCapture): Bitmap? =
+    /** One captured JPEG, copied out of the camera buffer so the camera can take the next frame. */
+    private class JpegFrame(val bytes: ByteArray, val rotationDegrees: Int) {
+        fun decode(): Bitmap {
+            val bitmap = BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+            if (rotationDegrees == 0) return bitmap
+            val matrix = Matrix().apply { postRotate(rotationDegrees.toFloat()) }
+            return Bitmap.createBitmap(bitmap, 0, 0, bitmap.width, bitmap.height, matrix, true)
+        }
+    }
+
+    private suspend fun takeJpegFrame(capture: ImageCapture): JpegFrame =
         suspendCancellableCoroutine { cont ->
             capture.takePicture(
                 cameraExecutor,
                 object : ImageCapture.OnImageCapturedCallback() {
                     override fun onCaptureSuccess(image: ImageProxy) {
                         try {
-                            val bitmap = imageProxyToBitmap(image)
-                            image.close()
-                            cont.resume(bitmap)
+                            val buffer = image.planes[0].buffer
+                            val bytes = ByteArray(buffer.remaining()).also { buffer.get(it) }
+                            cont.resume(JpegFrame(bytes, image.imageInfo.rotationDegrees))
                         } catch (e: Exception) {
-                            image.close()
                             cont.resumeWithException(e)
+                        } finally {
+                            image.close()
                         }
                     }
 
@@ -996,21 +1007,6 @@ class CameraManager(private val context: Context) {
                 }
             )
         }
-
-    private fun imageProxyToBitmap(image: ImageProxy): Bitmap {
-        val plane = image.planes[0]
-        val buffer = plane.buffer
-        val bytes = ByteArray(buffer.remaining())
-        buffer.get(bytes)
-        val bitmap = BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
-
-        val rotationDegrees = image.imageInfo.rotationDegrees
-        if (rotationDegrees != 0) {
-            val matrix = Matrix().apply { postRotate(rotationDegrees.toFloat()) }
-            return Bitmap.createBitmap(bitmap, 0, 0, bitmap.width, bitmap.height, matrix, true)
-        }
-        return bitmap
-    }
 
     private fun imageProxyRgbaToBitmap(image: ImageProxy): Bitmap? {
         return try {
@@ -1106,6 +1102,8 @@ class CameraManager(private val context: Context) {
         const val CAMERA_FRONT = "1"
         const val CAMERA_ULTRAWIDE = "3"
         private const val NIGHT_HANDHELD_CAPTURES = 2
+        private const val LOW_LIGHT_ISO = 800
+        private const val LOW_LIGHT_ISO_HIGH = 3200
         // Sensor limits of the main camera (from the HAL static metadata).
         private const val MIN_ISO = 100
         private const val MAX_ISO = 6400

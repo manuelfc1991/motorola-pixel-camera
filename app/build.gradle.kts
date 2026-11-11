@@ -39,6 +39,8 @@ android {
         create("kyoto") {
             initWith(getByName("debug"))
             applicationIdSuffix = ""
+            // Debuggable apps run without ART optimisations; the frame merge is ~3x slower there.
+            isDebuggable = false
             matchingFallbacks += "debug"
         }
     }

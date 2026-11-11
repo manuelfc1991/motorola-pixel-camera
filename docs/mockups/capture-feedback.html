@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Capture Feedback Mockup</title>
+<style>
+/* Layout idea: scenario tabs on top, two phones side by side (Now / Proposed), notes underneath. */
+:root{
+  --bg:#0e0f11; --panel:#17191c; --card:#232528; --line:#2f3236;
+  --text:#f2f2f2; --muted:#a9adb3; --accent:#8ab4f8; --accent-ink:#041e49;
+  --warn:#fdd663; --rec:#e24b4b;
+  --font: "Google Sans", "Product Sans", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  color-scheme: dark;
+}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--bg);color:var(--text);font-family:var(--font)}
+main{max-width:1040px;margin:0 auto;padding:28px 20px 60px;display:flex;flex-direction:column;gap:22px}
+h1{font-size:26px;margin:0;font-weight:600;text-wrap:balance}
+p.lead{margin:0;color:var(--muted);max-width:68ch;line-height:1.5}
+.tabs{display:flex;flex-wrap:wrap;gap:8px}
+.tabs button{font:inherit;font-size:14px;color:var(--text);background:var(--card);border:1px solid var(--line);
+  padding:10px 16px;border-radius:999px;cursor:pointer;min-height:44px}
+.tabs button[aria-pressed="true"]{background:var(--accent);color:var(--accent-ink);border-color:var(--accent);font-weight:600}
+.tabs button:focus-visible,.replay:focus-visible{outline:2px solid var(--warn);outline-offset:2px}
+.stage{display:flex;flex-wrap:wrap;gap:28px;justify-content:center;background:var(--panel);border:1px solid var(--line);
+  border-radius:20px;padding:26px 16px}
+.col{display:flex;flex-direction:column;align-items:center;gap:12px;width:300px}
+.col h2{margin:0;font-size:13px;letter-spacing:.08em;text-transform:uppercase;font-weight:600;color:var(--muted)}
+.col.new h2{color:var(--accent)}
+.col p{margin:0;font-size:14px;line-height:1.45;color:var(--muted);text-align:center;min-height:62px}
+.replay{font:inherit;font-size:14px;align-self:center;color:var(--text);background:transparent;border:1px solid var(--line);
+  padding:10px 18px;border-radius:999px;cursor:pointer;min-height:44px}
+
+/* ---------- phone ---------- */
+.phone{position:relative;width:300px;height:640px;background:#000;border-radius:30px;border:2px solid #33363a;overflow:hidden;
+  font-size:12px;user-select:none}
+.vf{position:absolute;left:4px;right:4px;top:26px;height:452px;border-radius:18px;overflow:hidden;
+  background:
+   radial-gradient(120px 90px at 72% 30%, #ffe9b0 0, #f3c877 35%, transparent 70%),
+   linear-gradient(180deg,#31506b 0,#5d7f95 40%,#c9a47a 62%,#3a2c26 63%,#1d1714 100%)}
+.vf.dark{background:
+   radial-gradient(40px 40px at 70% 22%, #d9dde6 0, #7c8596 40%, transparent 75%),
+   linear-gradient(180deg,#05070c 0,#0b1220 55%,#0a0a0b 56%,#050505 100%)}
+.vf::after{content:"";position:absolute;inset:0;background:
+  linear-gradient(90deg,transparent 33.2%,#ffffff26 33.2%,#ffffff26 33.5%,transparent 33.5%,transparent 66.5%,#ffffff26 66.5%,#ffffff26 66.8%,transparent 66.8%),
+  linear-gradient(180deg,transparent 33.2%,#ffffff26 33.2%,#ffffff26 33.5%,transparent 33.5%,transparent 66.5%,#ffffff26 66.5%,#ffffff26 66.8%,transparent 66.8%)}
+.blink{position:absolute;inset:0;background:#000;opacity:0;z-index:2}
+.blink.on{animation:blink .22s ease-out}
+@keyframes blink{0%{opacity:.95}100%{opacity:0}}
+.top{position:absolute;top:34px;left:12px;right:12px;display:flex;justify-content:flex-end;gap:6px;z-index:3}
+.tag{background:#1f2328aa;color:#e8eaed;border-radius:999px;padding:5px 10px;font-size:10px;font-weight:600;letter-spacing:.03em}
+.status{background:var(--accent);color:var(--accent-ink);border-radius:999px;padding:5px 9px;font-size:10px;font-weight:700;
+  transform:scale(0);transition:transform .22s cubic-bezier(.2,1.4,.4,1)}
+.status.on{transform:scale(1)}
+.zoom{position:absolute;left:50%;top:436px;transform:translateX(-50%);display:flex;gap:10px;background:#1f2328aa;border-radius:999px;
+  padding:4px 6px;z-index:3;color:#e8eaed;font-weight:600;font-size:11px;align-items:center}
+.zoom b{background:var(--accent);color:var(--accent-ink);border-radius:999px;padding:4px 8px}
+.zoom span{padding:0 4px}
+.controls{position:absolute;left:0;right:0;top:494px;height:76px;display:flex;align-items:center;justify-content:space-between;padding:0 26px}
+.thumb{position:relative;width:42px;height:42px;border-radius:50%;background:linear-gradient(135deg,#5d7f95,#c9a47a);border:1.5px solid #555}
+.thumb.pop{animation:pop .35s cubic-bezier(.2,1.5,.4,1)}
+@keyframes pop{0%{transform:scale(.4)}100%{transform:scale(1)}}
+.thumb svg{position:absolute;inset:-5px;width:52px;height:52px;opacity:0}
+.thumb.busy svg{opacity:1;animation:spin 1s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.shutter{position:relative;width:68px;height:68px;border-radius:50%;border:3px solid #fff;display:grid;place-items:center}
+.shutter i{width:54px;height:54px;border-radius:50%;background:#fff;transition:transform .12s, background .2s;display:grid;place-items:center;
+  font-style:normal;font-weight:700;font-size:20px;color:#111}
+.shutter.press i{transform:scale(.86)}
+.shutter.hold i{background:var(--warn)}
+.shutter svg{position:absolute;inset:-7px;width:76px;height:76px;transform:rotate(-90deg)}
+.shutter circle{fill:none;stroke:var(--accent);stroke-width:4;stroke-linecap:round;stroke-dasharray:220;stroke-dashoffset:220}
+.flip{width:42px;height:42px;border-radius:50%;border:1.5px solid #fff;display:grid;place-items:center}
+.flip svg{width:20px;height:20px}
+.modes{position:absolute;left:0;right:0;top:580px;display:flex;justify-content:center;gap:16px;color:#e8eaed;font-size:12px;align-items:center;white-space:nowrap}
+.modes b{background:var(--accent);color:var(--accent-ink);border-radius:999px;padding:6px 14px}
+
+/* current-app feedback */
+.fb{position:absolute;z-index:5;opacity:0;transition:opacity .18s;pointer-events:none}
+.fb.on{opacity:1}
+.pill{left:50%;top:70px;transform:translateX(-50%);background:#232528e6;border-radius:999px;padding:8px 14px;font-size:12px;white-space:nowrap}
+.bigcard{left:46px;right:46px;top:210px;background:#3a3f46cc;border-radius:16px;padding:22px 12px;text-align:center}
+.bigcard strong{display:block;color:var(--accent);font-size:13px}
+.bigcard small{display:block;margin-top:4px;font-size:10px;color:#e8eaed}
+.toast{left:50%;top:588px;transform:translateX(-50%);background:#fff;color:#1f1f1f;border-radius:999px;padding:10px 16px;font-size:12px;
+  width:max-content;max-width:260px;text-align:center;box-shadow:0 2px 8px #0008}
+/* proposed feedback */
+.tchip{left:50%;top:70px;transform:translateX(-50%) translateY(-6px);background:#101214d9;border-radius:999px;padding:7px 12px;
+  font-size:11px;font-weight:600;display:flex;gap:6px;align-items:center;white-space:nowrap;transition:opacity .18s, transform .18s}
+.tchip.on{transform:translateX(-50%) translateY(0)}
+.tchip svg{width:13px;height:13px}
+.hint{left:50%;top:400px;transform:translateX(-50%);width:max-content;background:#101214e6;border:1px solid var(--warn);color:var(--warn);border-radius:12px;
+  padding:8px 12px;font-size:11px;font-weight:600;max-width:240px;text-align:center}
+
+.notes{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:14px}
+.notes section{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:18px}
+.notes h3{margin:0 0 8px;font-size:15px}
+.notes ul{margin:0;padding-left:18px;color:var(--muted);font-size:14px;line-height:1.55}
+@media (prefers-reduced-motion:reduce){*{animation-duration:.01s!important;transition-duration:.01s!important}}
+</style>
+</head>
+<body>
+<main>
+  <h1>Capture feedback: now and proposed</h1>
+  <p class="lead">Pick a situation. The left phone replays what the app does today; the right phone shows the proposed behaviour. The idea: the shutter button and the gallery thumbnail carry the feedback, so nothing covers the picture and nothing needs reading.</p>
+
+  <div class="tabs" id="tabs"></div>
+
+  <div class="stage">
+    <div class="col"><h2>Now</h2><div class="phone" id="pA"></div><p id="capA"></p></div>
+    <div class="col new"><h2>Proposed</h2><div class="phone" id="pB"></div><p id="capB"></p></div>
+  </div>
+  <button class="replay" id="replay" type="button">Replay</button>
+
+  <div class="notes">
+    <section><h3>Rules behind the proposal</h3><ul>
+      <li>No toast for anything that succeeded. The thumbnail changing is the confirmation.</li>
+      <li>No card over the viewfinder. Progress lives on the shutter ring.</li>
+      <li>A setting shows its state as a small chip in the top bar, not a message.</li>
+      <li>Text appears only when you must do something, next to where you do it.</li>
+    </ul></section>
+    <section><h3>What stays as text</h3><ul>
+      <li>Real errors (camera failed to start, recording failed).</li>
+      <li>Guidance during a capture: “Hold steady”, panorama sweep direction.</li>
+      <li>One-line hints that fix a failed attempt, shown for 3 seconds.</li>
+    </ul></section>
+  </div>
+</main>
+
+<script>
+const ICON_MOON='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M20 14.5A8 8 0 0 1 9.5 4 8 8 0 1 0 20 14.5z"/></svg>';
+const ICON_HAND='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M12 2v4M12 18v4M2 12h4M18 12h4"/></svg>';
+
+function buildPhone(root){
+  root.innerHTML=`
+   <div class="vf"><div class="blink"></div></div>
+   <div class="top"><span class="status" data-s="hdr">HDR+</span><span class="status" data-s="timer">3s</span><span class="tag">12MP MAIN</span></div>
+   <div class="zoom"><b>1×</b><span>2</span><span>5</span></div>
+   <div class="fb pill"></div>
+   <div class="fb bigcard"><strong></strong><small></small></div>
+   <div class="fb tchip"></div>
+   <div class="fb hint"></div>
+   <div class="controls">
+     <div class="thumb"><svg viewBox="0 0 52 52" aria-hidden="true"><circle cx="26" cy="26" r="24" fill="none" stroke="#8ab4f8" stroke-width="3" stroke-dasharray="40 111" stroke-linecap="round"/></svg></div>
+     <div class="shutter"><svg viewBox="0 0 76 76" aria-hidden="true"><circle cx="38" cy="38" r="35"/></svg><i></i></div>
+     <div class="flip"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" aria-hidden="true"><path d="M4 12a8 8 0 0 1 14-5l2-2v6h-6M20 12a8 8 0 0 1-14 5l-2 2v-6h6"/></svg></div>
+   </div>
+   <div class="modes"><span>Portrait</span><b class="mode">Photo</b><span>Night Sight</span></div>
+   <div class="fb toast"></div>`;
+  const q=s=>root.querySelector(s);
+  const api={
+    reset(mode,dark){
+      root.querySelectorAll('.fb').forEach(e=>e.classList.remove('on'));
+      root.querySelectorAll('.status').forEach(e=>e.classList.remove('on'));
+      q('.thumb').classList.remove('busy','pop'); q('.thumb').style.background='';
+      q('.shutter').classList.remove('hold','press'); q('.shutter i').textContent='';
+      const c=q('.shutter circle'); c.style.transition='none'; c.style.strokeDashoffset=220;
+      q('.mode').textContent=mode||'Photo'; q('.vf').classList.toggle('dark',!!dark);
+    },
+    press(){const s=q('.shutter');s.classList.add('press');setTimeout(()=>s.classList.remove('press'),140)},
+    blink(){const b=q('.blink');b.classList.remove('on');void b.offsetWidth;b.classList.add('on')},
+    show(sel,html){const e=q(sel);if(html!==undefined){if(sel==='.bigcard'){e.querySelector('strong').textContent=html[0];e.querySelector('small').textContent=html[1]}else e.innerHTML=html}e.classList.add('on')},
+    hide(sel){q(sel).classList.remove('on')},
+    status(name,on){q('.status[data-s="'+name+'"]').classList.toggle('on',on)},
+    thumbBusy(on){q('.thumb').classList.toggle('busy',on)},
+    thumbNew(dark){const t=q('.thumb');t.style.background=dark?'linear-gradient(135deg,#0b1220,#7c8596)':'linear-gradient(135deg,#f3c877,#31506b)';t.classList.remove('pop');void t.offsetWidth;t.classList.add('pop')},
+    ring(ms){const c=q('.shutter circle');c.style.transition='none';c.style.strokeDashoffset=220;void c.getBoundingClientRect();c.style.transition='stroke-dashoffset '+ms+'ms linear';c.style.strokeDashoffset=0},
+    ringOff(){const c=q('.shutter circle');c.style.transition='none';c.style.strokeDashoffset=220},
+    hold(on){q('.shutter').classList.toggle('hold',on)},
+    count(t){q('.shutter i').textContent=t}
+  };
+  return api;
+}
+
+const A=buildPhone(document.getElementById('pA')), B=buildPhone(document.getElementById('pB'));
+let timers=[]; const at=(ms,fn)=>timers.push(setTimeout(fn,ms));
+
+const SCENES=[
+ {name:'Take a photo', len:4200,
+  capA:'A “Capturing…” pill, then a “Photo saved to Gallery” toast over the mode bar. Two messages for one tap.',
+  capB:'The viewfinder blinks like a shutter and the new photo lands in the thumbnail. No text.',
+  a(){A.reset();at(500,()=>{A.press();A.show('.pill','Capturing…')});at(1300,()=>{A.hide('.pill');A.thumbNew();A.show('.toast','Photo saved to Gallery')});at(3300,()=>A.hide('.toast'))},
+  b(){B.reset();at(500,()=>{B.press();B.blink();B.thumbBusy(true)});at(1000,()=>{B.thumbBusy(false);B.thumbNew()})}},
+ {name:'Night Sight / Long Exposure', len:7600,
+  capA:'A large card with two lines of text covers the middle of the picture for the whole capture, then a toast.',
+  capB:'The shutter ring fills and counts down. A small “Hold steady” chip sits at the top. Blending finishes on the thumbnail, so the camera is free again sooner.',
+  a(){A.reset('Night Sight',true);at(500,()=>{A.press();A.hold(true);A.show('.bigcard',['Hold still • Blending motion…','Capturing light • MediaTek Dimensity MFNR'])});
+      at(5000,()=>{A.hide('.bigcard');A.hold(false);A.thumbNew(true);A.show('.toast','Photo saved to Gallery')});at(7000,()=>A.hide('.toast'))},
+  b(){B.reset('Night Sight',true);at(500,()=>{B.press();B.ring(3000);B.count('3');B.show('.tchip',ICON_HAND+'Hold steady')});
+      at(1500,()=>B.count('2'));at(2500,()=>B.count('1'));
+      at(3500,()=>{B.count('');B.ringOff();B.hide('.tchip');B.blink();B.thumbBusy(true)});
+      at(5000,()=>{B.thumbBusy(false);B.thumbNew(true)})}},
+ {name:'Change a setting', len:5200,
+  capA:'Each change raises its own toast (“Timer 3s”, “HDR+ On”). They queue up and cover the mode bar for seconds.',
+  capB:'The setting appears as a chip in the top bar and stays there as long as it is active. No toast.',
+  a(){A.reset();at(500,()=>A.show('.toast','Timer 3s'));at(2300,()=>A.hide('.toast'));at(2600,()=>A.show('.toast','HDR+ On'));at(4500,()=>A.hide('.toast'))},
+  b(){B.reset();at(500,()=>B.status('timer',true));at(1300,()=>B.status('hdr',true))}},
+ {name:'Something went wrong', len:5200,
+  capA:'A long toast far from the action: “Panorama too short. Turn the phone further while capturing.”',
+  capB:'A short hint in the warning colour, placed over the picture just above the shutter, gone after 3 seconds.',
+  a(){A.reset('Panorama');at(600,()=>A.show('.toast','Panorama too short. Turn the phone further while capturing.'));at(4000,()=>A.hide('.toast'))},
+  b(){B.reset('Panorama');at(600,()=>B.show('.hint','Sweep too short · keep turning'));at(3800,()=>B.hide('.hint'))}},
+ {name:'Low light (photo quality)', len:5600,
+  capA:'Photo mode takes a single frame even in dim light. The result is grainy when zoomed, and nothing tells you.',
+  capB:'The camera notices dim light, shows a moon chip, and merges several frames automatically. About one second on the shutter ring.',
+  a(){A.reset('Photo',true);at(700,()=>{A.press();A.show('.pill','Capturing…')});at(1500,()=>{A.hide('.pill');A.thumbNew(true);A.show('.toast','Photo saved to Gallery')});at(3500,()=>A.hide('.toast'))},
+  b(){B.reset('Photo',true);at(300,()=>B.show('.tchip',ICON_MOON+'Low light · multi-frame'));
+      at(1400,()=>{B.press();B.ring(1100)});at(2500,()=>{B.ringOff();B.blink();B.thumbBusy(true)});at(3700,()=>{B.thumbBusy(false);B.thumbNew(true)})}}
+];
+
+let cur=0, loop=null;
+function play(){
+  timers.forEach(clearTimeout);timers=[];clearTimeout(loop);
+  const s=SCENES[cur];
+  document.getElementById('capA').textContent=s.capA;document.getElementById('capB').textContent=s.capB;
+  s.a();s.b();
+  loop=setTimeout(play,s.len+1200);
+}
+const tabs=document.getElementById('tabs');
+SCENES.forEach((s,i)=>{const b=document.createElement('button');b.type='button';b.textContent=s.name;b.setAttribute('aria-pressed',i===0);
+  b.onclick=()=>{cur=i;[...tabs.children].forEach((c,j)=>c.setAttribute('aria-pressed',j===i));play()};tabs.appendChild(b)});
+document.getElementById('replay').onclick=play;
+play();
+</script>
+</body>
+</html>

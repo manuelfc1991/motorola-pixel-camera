@@ -168,6 +168,12 @@ object BurstAligner {
         return out
     }
 
+    /** A frame after alignment: its pixels, its shift, and per-block trust in 1/[WEIGHT_ONE] steps. */
+    private class Aligned(val px: IntArray, val dx: Int, val dy: Int, val blockWeight: IntArray)
+
+    private fun parallelFor(count: Int, body: (Int) -> Unit) =
+        java.util.stream.IntStream.range(0, count).parallel().forEach { body(it) }
+
     /**
      * Align every frame to [referenceIndex] and merge with ghost rejection.
      * Returns a new ARGB array the same size as the reference.
@@ -176,8 +182,8 @@ object BurstAligner {
         alignAndMerge(frames.size, w, h, referenceIndex) { frames[it] }
 
     /**
-     * Streaming variant: [frameAt] is called once per frame, so the caller can decode
-     * frames lazily and only the reference plus one frame live in memory.
+     * [frameAt] is called once per frame, possibly from several threads at once.
+     * Frames are analysed in parallel, then merged row by row in parallel.
      */
     fun alignAndMerge(frameCount: Int, w: Int, h: Int, referenceIndex: Int, frameAt: (Int) -> IntArray): IntArray {
         require(frameCount > 0) { "No frames" }
@@ -192,21 +198,10 @@ object BurstAligner {
         val bh = (h + WEIGHT_BLOCK - 1) / WEIGHT_BLOCK
         val refBlocks = blockMeans(refLuma, w, h, 0, 0, bw, bh)
 
-        val sumR = FloatArray(w * h)
-        val sumG = FloatArray(w * h)
-        val sumB = FloatArray(w * h)
-        // Weights in 1/64 steps; ShortArray keeps this at 2 bytes per pixel
-        val sumW = ShortArray(w * h) { WEIGHT_ONE.toShort() }
-        for (i in 0 until w * h) {
-            val c = ref[i]
-            sumR[i] = ((c shr 16) and 0xFF).toFloat()
-            sumG[i] = ((c shr 8) and 0xFF).toFloat()
-            sumB[i] = (c and 0xFF).toFloat()
-        }
-
-        for (k in 0 until frameCount) {
-            if (k == referenceIndex) continue
-            val frame = frameAt(k)
+        val others = (0 until frameCount).filter { it != referenceIndex }
+        val slots = arrayOfNulls<Aligned>(others.size)
+        parallelFor(others.size) { n ->
+            val frame = frameAt(others[n])
             val frmLuma = luma(frame)
             val (dx, dy) = estimateOffset(refPyr, pyramid(frmLuma, w, h, levels))
             val frmBlocks = blockMeans(frmLuma, w, h, dx, dy, bw, bh)
@@ -217,47 +212,51 @@ object BurstAligner {
             for (b in 0 until bw * bh) {
                 if (frmBlocks[b] >= 0) diffs[nd++] = abs(refBlocks[b] - frmBlocks[b])
             }
-            if (nd == 0) continue
-            val sorted = diffs.copyOf(nd).also { it.sort() }
-            val t = 1.5f * sorted[nd / 2] + 4f
-
-            val blockW = FloatArray(bw * bh) { b ->
-                if (frmBlocks[b] < 0) 0f else {
-                    val d = abs(refBlocks[b] - frmBlocks[b])
-                    when {
-                        d <= t -> 1f
-                        d >= 3f * t -> 0f
-                        else -> 1f - (d - t) / (2f * t)
+            if (nd > 0) {
+                val sorted = diffs.copyOf(nd).also { it.sort() }
+                val t = 1.5f * sorted[nd / 2] + 4f
+                val blockWeight = IntArray(bw * bh) { b ->
+                    if (frmBlocks[b] < 0) 0 else {
+                        val d = abs(refBlocks[b] - frmBlocks[b])
+                        val trust = when {
+                            d <= t -> 1f
+                            d >= 3f * t -> 0f
+                            else -> 1f - (d - t) / (2f * t)
+                        }
+                        (trust * WEIGHT_ONE + 0.5f).toInt()
                     }
                 }
+                slots[n] = Aligned(frame, dx, dy, blockWeight)
             }
+        }
+        val aligned = slots.filterNotNull()
 
-            for (y in 0 until h) {
-                val sy = y + dy
-                if (sy < 0 || sy >= h) continue
-                val bRow = (y / WEIGHT_BLOCK) * bw
-                for (x in 0 until w) {
-                    val sx = x + dx
-                    if (sx < 0 || sx >= w) continue
-                    val wq = (blockW[bRow + x / WEIGHT_BLOCK] * WEIGHT_ONE + 0.5f).toInt()
+        val out = IntArray(w * h)
+        parallelFor(h) { y ->
+            val bRow = (y / WEIGHT_BLOCK) * bw
+            for (x in 0 until w) {
+                val i = y * w + x
+                val c = ref[i]
+                var r = ((c shr 16) and 0xFF) * WEIGHT_ONE
+                var g = ((c shr 8) and 0xFF) * WEIGHT_ONE
+                var b = (c and 0xFF) * WEIGHT_ONE
+                var weight = WEIGHT_ONE
+                for (a in aligned) {
+                    val sy = y + a.dy
+                    val sx = x + a.dx
+                    if (sy < 0 || sy >= h || sx < 0 || sx >= w) continue
+                    val wq = a.blockWeight[bRow + x / WEIGHT_BLOCK]
                     if (wq <= 0) continue
-                    val wt = wq.toFloat() / WEIGHT_ONE
-                    val c = frame[sy * w + sx]
-                    val i = y * w + x
-                    sumR[i] += wt * ((c shr 16) and 0xFF)
-                    sumG[i] += wt * ((c shr 8) and 0xFF)
-                    sumB[i] += wt * (c and 0xFF)
-                    sumW[i] = (sumW[i] + wq).toShort()
+                    val f = a.px[sy * w + sx]
+                    r += wq * ((f shr 16) and 0xFF)
+                    g += wq * ((f shr 8) and 0xFF)
+                    b += wq * (f and 0xFF)
+                    weight += wq
                 }
+                val half = weight / 2
+                out[i] = (0xFF shl 24) or (((r + half) / weight) shl 16) or (((g + half) / weight) shl 8) or ((b + half) / weight)
             }
         }
-
-        return IntArray(w * h) { i ->
-            val inv = WEIGHT_ONE.toFloat() / sumW[i]
-            val r = (sumR[i] * inv + 0.5f).toInt().coerceIn(0, 255)
-            val g = (sumG[i] * inv + 0.5f).toInt().coerceIn(0, 255)
-            val b = (sumB[i] * inv + 0.5f).toInt().coerceIn(0, 255)
-            (0xFF shl 24) or (r shl 16) or (g shl 8) or b
-        }
+        return out
     }
 }

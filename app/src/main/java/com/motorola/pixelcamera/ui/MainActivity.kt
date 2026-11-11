@@ -48,6 +48,7 @@ import com.motorola.pixelcamera.R
 import com.motorola.pixelcamera.computational.MotionPhotoEngine
 import com.motorola.pixelcamera.core.CameraManager
 import com.motorola.pixelcamera.core.CameraMode
+import com.motorola.pixelcamera.core.CaptureProgress
 import com.motorola.pixelcamera.databinding.ActivityMainBinding
 import java.io.File
 import kotlinx.coroutines.Dispatchers
@@ -99,6 +100,9 @@ class MainActivity : AppCompatActivity() {
     private var ambientLux: Float = 0f
     private var latestGalleryUri: Uri? = null
     private var timerJob: Job? = null
+    private var hintJob: Job? = null
+    private var lowLightJob: Job? = null
+    private var captureChipHeldByCapture = false
     private var lastEisPref: Boolean? = null
     private var filteredRoll = 0f
     private var isLevelAligned = false
@@ -363,11 +367,13 @@ class MainActivity : AppCompatActivity() {
         lightSensor?.let {
             sensorManager?.registerListener(sensorListener, it, SensorManager.SENSOR_DELAY_NORMAL)
         }
+        startLowLightWatcher()
     }
 
     override fun onPause() {
         super.onPause()
         timerJob?.cancel()
+        lowLightJob?.cancel()
         binding.tvCountdown.visibility = View.GONE
         cameraManager.locationHelper.stopListening()
         sensorManager?.unregisterListener(sensorListener)
@@ -427,6 +433,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun updateQuickSettingsUi() {
+        updateStatusChips()
         updateStorageBadge()
 
         if (currentMode == CameraMode.VIDEO) {
@@ -670,7 +677,7 @@ class MainActivity : AppCompatActivity() {
                 // The 0.6 lens button only makes sense when the ultrawide is really reachable.
                 binding.btnZoomUltrawide.visibility = if (cameraManager.isUltrawideAvailable()) View.VISIBLE else View.GONE
             } catch (e: Exception) {
-                Toast.makeText(this@MainActivity, "Failed to start camera: ${e.message}", Toast.LENGTH_SHORT).show()
+                showHint("Failed to start camera: ${e.message}")
             }
         }
     }
@@ -803,7 +810,7 @@ class MainActivity : AppCompatActivity() {
     private fun openInAppPhotoPreview() {
         val uri = latestCapturedUri ?: latestGalleryUri
         if (uri == null) {
-            Toast.makeText(this, "No photo in gallery yet", Toast.LENGTH_SHORT).show()
+            showHint("No photo in gallery yet")
             return
         }
 
@@ -884,7 +891,7 @@ class MainActivity : AppCompatActivity() {
                 }
             } catch (e: Exception) {
                 withContext(Dispatchers.Main) {
-                    Toast.makeText(this@MainActivity, "Could not open preview: ${e.message}", Toast.LENGTH_SHORT).show()
+                    showHint("Could not open preview: ${e.message}")
                 }
             }
         }
@@ -945,46 +952,37 @@ class MainActivity : AppCompatActivity() {
         // Quick Settings - Row 3: HDR+ (Off / Auto / Enhanced)
         binding.btnQsTopShotOff.setOnClickListener {
             setHdrMode(0)
-            Toast.makeText(this, "HDR+ Off", Toast.LENGTH_SHORT).show()
         }
         binding.btnQsTopShotAuto.setOnClickListener {
             setHdrMode(1)
-            Toast.makeText(this, "HDR+ On", Toast.LENGTH_SHORT).show()
         }
         binding.btnQsTopShotOn.setOnClickListener {
             setHdrMode(2)
-            Toast.makeText(this, "HDR+ Enhanced", Toast.LENGTH_SHORT).show()
         }
 
         // Quick Settings - Row 4: Timer
         binding.btnQsTimerOff.setOnClickListener {
             timerDuration = 0
             updateQuickSettingsUi()
-            Toast.makeText(this, "Timer Off", Toast.LENGTH_SHORT).show()
         }
         binding.btnQsTimer3s.setOnClickListener {
             timerDuration = 3
             updateQuickSettingsUi()
-            Toast.makeText(this, "Timer 3s", Toast.LENGTH_SHORT).show()
         }
         binding.btnQsTimer10s.setOnClickListener {
             timerDuration = 10
             updateQuickSettingsUi()
-            Toast.makeText(this, "Timer 10s", Toast.LENGTH_SHORT).show()
         }
 
         // Quick Settings - Row 6: Grid Type (Off / 3x3 / Golden Ratio)
         binding.btnQsGridOff.setOnClickListener {
             setGridType(0)
-            Toast.makeText(this, "Grid Off", Toast.LENGTH_SHORT).show()
         }
         binding.btnQsGrid3x3.setOnClickListener {
             setGridType(1)
-            Toast.makeText(this, "Grid 3×3", Toast.LENGTH_SHORT).show()
         }
         binding.btnQsGridGolden.setOnClickListener {
             setGridType(2)
-            Toast.makeText(this, "Grid Golden Ratio", Toast.LENGTH_SHORT).show()
         }
 
         // MGC 9.7 Segmented Tabs: [ General | Pro ]
@@ -1039,14 +1037,12 @@ class MainActivity : AppCompatActivity() {
             applyPreviewScale()
             cameraManager.bindCameraUseCases()
             updateQuickSettingsUi()
-            Toast.makeText(this, "Aspect Ratio: 4:3 Standard", Toast.LENGTH_SHORT).show()
         }
         binding.btnQsRatio169.setOnClickListener {
             cameraManager.aspectRatio = AspectRatio.RATIO_16_9
             applyPreviewScale()
             cameraManager.bindCameraUseCases()
             updateQuickSettingsUi()
-            Toast.makeText(this, "Aspect Ratio: 16:9 Widescreen", Toast.LENGTH_SHORT).show()
         }
 
         // Quick Settings - Row 6: Google AWB
@@ -1054,13 +1050,11 @@ class MainActivity : AppCompatActivity() {
             cameraManager.isGoogleAwbEnabled = false
             cameraManager.bindCameraUseCases()
             updateQuickSettingsUi()
-            Toast.makeText(this, "Google AWB: Standard", Toast.LENGTH_SHORT).show()
         }
         binding.btnQsAwbOn.setOnClickListener {
             cameraManager.isGoogleAwbEnabled = true
             cameraManager.bindCameraUseCases()
             updateQuickSettingsUi()
-            Toast.makeText(this, "Google AWB: ON", Toast.LENGTH_SHORT).show()
         }
 
         // Quick Settings - Floating "More settings" Pill
@@ -1078,7 +1072,6 @@ class MainActivity : AppCompatActivity() {
             updateVideoQsUi()
             updateVideoBadgeText()
             updateStorageBadge()
-            Toast.makeText(this, "Video: 1080p 30 fps", Toast.LENGTH_SHORT).show()
         }
 
         binding.btnQsPreset1080p60.setOnClickListener {
@@ -1089,13 +1082,12 @@ class MainActivity : AppCompatActivity() {
             updateVideoQsUi()
             updateVideoBadgeText()
             updateStorageBadge()
-            Toast.makeText(this, "Video: 1080p 60 fps", Toast.LENGTH_SHORT).show()
         }
 
         binding.btnQsPreset4k30.setOnClickListener {
             if (cameraManager.isRecordingVideo()) return@setOnClickListener
             if (cameraManager.isFrontCamera()) {
-                Toast.makeText(this, "4K UHD is available on rear camera", Toast.LENGTH_SHORT).show()
+                showHint("4K is on the rear camera only")
                 return@setOnClickListener
             }
             cameraManager.setVideoProfile(CameraManager.VideoResolution.UHD, CameraManager.VideoFps.FPS_30)
@@ -1104,7 +1096,6 @@ class MainActivity : AppCompatActivity() {
             updateVideoQsUi()
             updateVideoBadgeText()
             updateStorageBadge()
-            Toast.makeText(this, "Video: 4K UHD 30 fps", Toast.LENGTH_SHORT).show()
         }
 
         binding.btnQsVideoResFhd.setOnClickListener {
@@ -1119,7 +1110,7 @@ class MainActivity : AppCompatActivity() {
         binding.btnQsVideoRes4k.setOnClickListener {
             if (cameraManager.isRecordingVideo()) return@setOnClickListener
             if (cameraManager.isFrontCamera()) {
-                Toast.makeText(this, "4K UHD is available on rear camera", Toast.LENGTH_SHORT).show()
+                showHint("4K is on the rear camera only")
                 return@setOnClickListener
             }
             cameraManager.setVideoResolution(CameraManager.VideoResolution.UHD)
@@ -1128,7 +1119,6 @@ class MainActivity : AppCompatActivity() {
             updateVideoQsUi()
             updateVideoBadgeText()
             updateStorageBadge()
-            Toast.makeText(this, "Video: 4K UHD 30 fps", Toast.LENGTH_SHORT).show()
         }
 
         binding.btnQsVideoFps30.setOnClickListener {
@@ -1146,11 +1136,10 @@ class MainActivity : AppCompatActivity() {
                 cameraManager.setVideoProfile(CameraManager.VideoResolution.FHD, CameraManager.VideoFps.FPS_60)
                 prefs.edit().putString(SettingsActivity.KEY_VIDEO_QUALITY, "1080p")
                     .putInt(SettingsActivity.KEY_VIDEO_FPS, 60).apply()
-                Toast.makeText(this, "60 fps active (switched to 1080p)", Toast.LENGTH_SHORT).show()
+                showHint("60 fps needs 1080p · switched")
             } else {
                 cameraManager.setVideoFps(CameraManager.VideoFps.FPS_60)
                 prefs.edit().putInt(SettingsActivity.KEY_VIDEO_FPS, 60).apply()
-                Toast.makeText(this, "Video: 60 fps", Toast.LENGTH_SHORT).show()
             }
             updateVideoQsUi()
             updateVideoBadgeText()
@@ -1169,13 +1158,11 @@ class MainActivity : AppCompatActivity() {
         binding.btnQsAudioZoomOff.setOnClickListener {
             cameraManager.audioZoomEnabled = false
             updateVideoQsUi()
-            Toast.makeText(this, "Audio Zoom Off", Toast.LENGTH_SHORT).show()
         }
 
         binding.btnQsAudioZoomOn.setOnClickListener {
             cameraManager.audioZoomEnabled = true
             updateVideoQsUi()
-            Toast.makeText(this, "Audio Zoom On", Toast.LENGTH_SHORT).show()
         }
 
         binding.btnQsVideoGridOff.setOnClickListener {
@@ -1246,7 +1233,7 @@ class MainActivity : AppCompatActivity() {
         // MGC 9.7 Dual Zoom Selectors (Upper Physical Lenses + Lower Multipliers)
         binding.btnZoomUltrawide.setOnClickListener {
             if (!cameraManager.isUltrawideAvailable()) {
-                Toast.makeText(this, "Ultrawide camera is not available to this app", Toast.LENGTH_SHORT).show()
+                showHint("Ultrawide is not available in this build")
                 return@setOnClickListener
             }
             cameraManager.switchToLens(CameraManager.CAMERA_ULTRAWIDE, 1.0f)
@@ -1287,14 +1274,12 @@ class MainActivity : AppCompatActivity() {
         // Tier 2: Mode Ribbon / Carousel
         binding.modeLongExposure.setOnClickListener {
             setMode(CameraMode.LONG_EXPOSURE, binding.modeLongExposure)
-            Toast.makeText(this, "Long Exposure • Handheld Motion Blur", Toast.LENGTH_SHORT).show()
         }
         binding.modePortrait.setOnClickListener { setMode(CameraMode.PORTRAIT, binding.modePortrait) }
         binding.modeCamera.setOnClickListener { setMode(CameraMode.CAMERA, binding.modeCamera) }
         binding.modeNightSight.setOnClickListener { setMode(CameraMode.NIGHT_SIGHT, binding.modeNightSight) }
         binding.modePanorama.setOnClickListener {
             setMode(CameraMode.PANORAMA, binding.modePanorama)
-            Toast.makeText(this, "Panorama Mode", Toast.LENGTH_SHORT).show()
         }
         binding.modePro.setOnClickListener { setMode(CameraMode.PRO, binding.modePro) }
         setupModeCarousel()
@@ -1825,13 +1810,12 @@ class MainActivity : AppCompatActivity() {
         prefs.edit().putBoolean(SettingsActivity.KEY_RAW_ENABLED, enabled).apply()
         cameraManager.bindCameraUseCases()
         updateQuickSettingsUi()
-        val msg = when {
-            !enabled -> "JPEG only"
-            cameraManager.isRawActive() -> "RAW (DNG) + JPEG"
-            currentMode == CameraMode.CAMERA || currentMode == CameraMode.PRO -> "RAW is not supported on this camera"
-            else -> "RAW applies in Photo and Pro"
+        if (enabled && !cameraManager.isRawActive()) {
+            showHint(
+                if (currentMode == CameraMode.CAMERA || currentMode == CameraMode.PRO) "RAW is not supported on this camera"
+                else "RAW applies in Photo and Pro"
+            )
         }
-        Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
     }
 
     private fun setHdrMode(mode: Int) {
@@ -2286,18 +2270,7 @@ class MainActivity : AppCompatActivity() {
             binding.btnShutter.animate().scaleX(1.0f).scaleY(1.0f).setDuration(120).start()
         }.start()
 
-        // If Night Sight or Long Exposure is active, show the countdown overlay
-        if (currentMode == CameraMode.NIGHT_SIGHT) {
-            binding.overlayNightHoldStill.visibility = View.VISIBLE
-            binding.tvNightTimer.text = if (cameraManager.isAstrophotographyActive) "Astrophotography • Tracking stars..." else "Hold still..."
-        } else if (currentMode == CameraMode.LONG_EXPOSURE) {
-            binding.overlayNightHoldStill.visibility = View.VISIBLE
-            binding.tvNightTimer.text = "Hold still • Blending motion..."
-        } else {
-            binding.processingPill.visibility = View.VISIBLE
-            binding.tvProcessingStatus.text = "Capturing..."
-        }
-        binding.progressThumbnailSpin.visibility = View.VISIBLE
+        binding.btnShutter.alpha = 0.6f
 
         val isFrontFlash = cameraManager.isFrontCamera() && cameraManager.flashMode != ImageCapture.FLASH_MODE_OFF
         if (isFrontFlash) {
@@ -2310,10 +2283,8 @@ class MainActivity : AppCompatActivity() {
                 delay(120)
             }
             val blurStrength = 2f + (portraitBlurProgress / 100f) * 24f
-            val uri: Uri? = cameraManager.capturePhoto(currentMode, blurStrength) { status ->
-                runOnUiThread {
-                    binding.tvProcessingStatus.text = status
-                }
+            val uri: Uri? = cameraManager.capturePhoto(currentMode, blurStrength) { progress ->
+                runOnUiThread { showCaptureProgress(progress) }
             }
 
             if (isFrontFlash) {
@@ -2321,9 +2292,7 @@ class MainActivity : AppCompatActivity() {
                 checkSelfieRingLight()
             }
 
-            binding.processingPill.visibility = View.GONE
-            binding.overlayNightHoldStill.visibility = View.GONE
-            binding.progressThumbnailSpin.visibility = View.GONE
+            endCaptureFeedback()
             isCapturing = false
 
             if (uri != null) {
@@ -2335,9 +2304,105 @@ class MainActivity : AppCompatActivity() {
                     .withEndAction {
                         binding.cardGalleryThumbnail.animate().scaleX(1.0f).scaleY(1.0f).setDuration(150).start()
                     }.start()
-                Toast.makeText(this@MainActivity, "Photo saved to Gallery", Toast.LENGTH_SHORT).show()
             } else {
-                Toast.makeText(this@MainActivity, "Capture failed", Toast.LENGTH_SHORT).show()
+                showHint("Capture failed")
+            }
+        }
+    }
+
+    /**
+     * Capture feedback lives on the shutter and the gallery thumbnail, so nothing covers the picture:
+     * a ring and a frames-left count while the phone has to stay still, then a spinner on the thumbnail.
+     */
+    private fun showCaptureProgress(progress: CaptureProgress) {
+        when (progress) {
+            is CaptureProgress.Frames -> {
+                val isBurst = progress.total > 1
+                if (progress.done == 0) {
+                    if (isBurst) {
+                        binding.progressShutterRing.setProgressCompat(0, false)
+                        binding.progressShutterRing.visibility = View.VISIBLE
+                        binding.tvShutterCount.visibility = View.VISIBLE
+                        showCaptureChip("Hold steady", 0)
+                    } else {
+                        blinkViewfinder()
+                        binding.progressThumbnailSpin.visibility = View.VISIBLE
+                    }
+                }
+                if (isBurst) {
+                    binding.progressShutterRing.setProgressCompat(1000 * progress.done / progress.total, true)
+                    binding.tvShutterCount.text = (progress.total - progress.done).coerceAtLeast(1).toString()
+                }
+            }
+            CaptureProgress.Processing -> {
+                blinkViewfinder()
+                hideShutterProgress()
+                binding.progressThumbnailSpin.visibility = View.VISIBLE
+            }
+        }
+    }
+
+    private fun hideShutterProgress() {
+        binding.progressShutterRing.visibility = View.INVISIBLE
+        binding.tvShutterCount.visibility = View.GONE
+        captureChipHeldByCapture = false
+        binding.tvCaptureChip.visibility = View.GONE
+    }
+
+    private fun endCaptureFeedback() {
+        hideShutterProgress()
+        binding.progressThumbnailSpin.visibility = View.GONE
+        binding.btnShutter.alpha = 1f
+    }
+
+    private fun blinkViewfinder() {
+        binding.viewShutterBlink.animate().cancel()
+        binding.viewShutterBlink.alpha = 0.9f
+        binding.viewShutterBlink.animate().alpha(0f).setDuration(220).start()
+    }
+
+    private fun showCaptureChip(text: String, iconRes: Int) {
+        captureChipHeldByCapture = iconRes == 0
+        binding.tvCaptureChip.text = text
+        binding.tvCaptureChip.setCompoundDrawablesRelativeWithIntrinsicBounds(iconRes, 0, 0, 0)
+        binding.tvCaptureChip.visibility = View.VISIBLE
+    }
+
+    /** One short line for something the user has to act on. Success never gets a message. */
+    private fun showHint(message: String) {
+        hintJob?.cancel()
+        binding.tvHint.text = message
+        binding.tvHint.alpha = 1f
+        binding.tvHint.visibility = View.VISIBLE
+        hintJob = lifecycleScope.launch {
+            delay(HINT_DURATION_MS)
+            binding.tvHint.animate().alpha(0f).setDuration(200).withEndAction {
+                binding.tvHint.visibility = View.GONE
+            }.start()
+        }
+    }
+
+    /** Active settings show as chips in the top bar for as long as they apply. */
+    private fun updateStatusChips() {
+        val photoMode = currentMode != CameraMode.VIDEO
+        binding.chipTimer.text = "${timerDuration}s"
+        binding.chipTimer.visibility = if (photoMode && timerDuration > 0) View.VISIBLE else View.GONE
+        binding.chipHdr.text = if (hdrMode == 2) "HDR+ E" else "HDR+"
+        binding.chipHdr.visibility = if (currentMode == CameraMode.CAMERA && hdrMode > 0) View.VISIBLE else View.GONE
+        binding.chipRaw.visibility = if (cameraManager.isRawActive()) View.VISIBLE else View.GONE
+    }
+
+    /** In dim light Photo mode merges several frames; the moon chip says so before the shot. */
+    private fun startLowLightWatcher() {
+        lowLightJob?.cancel()
+        lowLightJob = lifecycleScope.launch {
+            while (isActive) {
+                if (!captureChipHeldByCapture) {
+                    val lowLight = !isCapturing && cameraManager.lowLightFrameCount() > 1
+                    if (lowLight) showCaptureChip("Low light · multi-frame", R.drawable.ic_moon)
+                    else binding.tvCaptureChip.visibility = View.GONE
+                }
+                delay(LOW_LIGHT_POLL_MS)
             }
         }
     }
@@ -2359,9 +2424,8 @@ class MainActivity : AppCompatActivity() {
                             stopVideoRecordingUi()
                             if (!event.hasError()) {
                                 loadLatestGalleryThumbnail()
-                                Toast.makeText(this, "Video saved to Gallery", Toast.LENGTH_SHORT).show()
                             } else {
-                                Toast.makeText(this, "Video record error: ${event.error}", Toast.LENGTH_SHORT).show()
+                                showHint("Video record error: ${event.error}")
                             }
                         }
                     }
@@ -2370,7 +2434,7 @@ class MainActivity : AppCompatActivity() {
             if (started) {
                 startVideoRecordingUi()
             } else {
-                Toast.makeText(this, "Failed to start recording", Toast.LENGTH_SHORT).show()
+                showHint("Failed to start recording")
             }
         }
     }
@@ -2382,23 +2446,20 @@ class MainActivity : AppCompatActivity() {
             binding.tvPanoramaPrompt.text = "Pan steadily along the line →"
             binding.tvPanoramaAngle.text = "0° / 180°"
             binding.pbPanoramaProgress.progress = 0
-            Toast.makeText(this, "Panorama capture started. Pan right steadily.", Toast.LENGTH_SHORT).show()
         } else {
             binding.tvPanoramaPrompt.text = "Finalizing panorama..."
             binding.btnShutter.setImageResource(R.drawable.bg_shutter_button)
             lifecycleScope.launch {
-                binding.processingPill.visibility = View.VISIBLE
-                binding.tvProcessingStatus.text = "Stitching panorama..."
+                binding.progressThumbnailSpin.visibility = View.VISIBLE
                 val uri = cameraManager.stopPanoramaCapture()
-                binding.processingPill.visibility = View.GONE
+                binding.progressThumbnailSpin.visibility = View.GONE
                 if (uri != null) {
                     latestCapturedUri = uri
                     loadLatestGalleryThumbnail()
                     updateStorageBadge()
-                    Toast.makeText(this@MainActivity, "Panorama saved successfully", Toast.LENGTH_SHORT).show()
                 } else {
                     binding.tvPanoramaPrompt.text = "Pan steadily along the line"
-                    Toast.makeText(this@MainActivity, "Panorama too short. Turn the phone further while capturing.", Toast.LENGTH_LONG).show()
+                    showHint("Sweep too short · keep turning")
                 }
             }
         }
@@ -2479,6 +2540,8 @@ class MainActivity : AppCompatActivity() {
     }
 
     companion object {
+        private const val HINT_DURATION_MS = 3000L
+        private const val LOW_LIGHT_POLL_MS = 700L
         private val REQUIRED_PERMISSIONS = arrayOf(
             Manifest.permission.CAMERA,
             Manifest.permission.RECORD_AUDIO

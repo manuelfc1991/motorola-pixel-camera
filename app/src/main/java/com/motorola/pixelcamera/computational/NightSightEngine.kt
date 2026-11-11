@@ -19,17 +19,11 @@ object NightSightEngine {
         val width = frames[0].width
         val height = frames[0].height
 
-        // Frames can differ in size if the HAL changes output mid-burst; drop mismatches
-        val usable = frames.filter { it.width == width && it.height == height }
-        fun pixelsOf(bmp: Bitmap) = IntArray(width * height).also { bmp.getPixels(it, 0, width, 0, 0, width, height) }
-
         // Handheld frames are taken hundreds of ms apart, so they are shifted by tens of pixels.
         // Use the least-shaken frame as reference, align the rest to it, and merge with
         // ghost rejection. Averaging them unaligned is what caused double/blurred images.
         val t0 = SystemClock.elapsedRealtime()
-        val refIndex = usable.indices.maxByOrNull { BurstAligner.sharpness(pixelsOf(usable[it]), width, height) } ?: 0
-        val t1 = SystemClock.elapsedRealtime()
-        val merged = BurstAligner.alignAndMerge(usable.size, width, height, refIndex) { pixelsOf(usable[it]) }
+        val merged = HdrProcessor.mergeAligned(frames)
         val t2 = SystemClock.elapsedRealtime()
 
         // Shadow lift: same curve for every channel, so a 256-entry table replaces
@@ -46,7 +40,7 @@ object NightSightEngine {
         val output = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
         output.setPixels(merged, 0, width, 0, 0, width, height)
         val t3 = SystemClock.elapsedRealtime()
-        Log.i(TAG, "frames=${usable.size} ref=$refIndex sharpness=${t1 - t0}ms merge=${t2 - t1}ms tone=${t3 - t2}ms")
+        Log.i(TAG, "frames=${frames.size} merge=${t2 - t0}ms tone=${t3 - t2}ms")
         return@withContext output
     }
 

@@ -153,16 +153,42 @@ object HdrProcessor {
         return@withContext output
     }
 
+    /** Aligned noise-reducing merge of a burst, with no tone or sharpening changes. */
+    suspend fun mergeBurst(frames: List<Bitmap>): Bitmap = withContext(DimensityOptimizer.computationDispatcher) {
+        require(frames.isNotEmpty()) { "Frame list is empty" }
+        if (frames.size == 1) return@withContext frames[0]
+        val width = frames[0].width
+        val height = frames[0].height
+        val t0 = android.os.SystemClock.elapsedRealtime()
+        val merged = mergeAligned(frames)
+        android.util.Log.i("HdrProcessor", "mergeBurst ${frames.size} frames: ${android.os.SystemClock.elapsedRealtime() - t0}ms")
+        Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888).also {
+            it.setPixels(merged, 0, width, 0, 0, width, height)
+        }
+    }
+
     /**
      * Multi-frame merge. Handheld burst frames are shifted against each other, so they are
      * aligned to the sharpest frame and merged with ghost rejection (same path as Night Sight).
+     * Frames whose size differs from the first are dropped.
      */
-    private fun fuseBurstFrames(frames: List<Bitmap>, width: Int, height: Int, outPixels: IntArray) {
+    internal fun mergeAligned(frames: List<Bitmap>): IntArray {
+        val width = frames[0].width
+        val height = frames[0].height
         val usable = frames.filter { it.width == width && it.height == height }
-        fun pixelsOf(bmp: Bitmap) = IntArray(width * height).also { bmp.getPixels(it, 0, width, 0, 0, width, height) }
-        val refIndex = usable.indices.maxByOrNull { BurstAligner.sharpness(pixelsOf(usable[it]), width, height) } ?: 0
-        val merged = BurstAligner.alignAndMerge(usable.size, width, height, refIndex) { pixelsOf(usable[it]) }
-        System.arraycopy(merged, 0, outPixels, 0, width * height)
+        val pixels = arrayOfNulls<IntArray>(usable.size)
+        val sharpness = DoubleArray(usable.size)
+        java.util.stream.IntStream.range(0, usable.size).parallel().forEach { i ->
+            val px = IntArray(width * height).also { usable[i].getPixels(it, 0, width, 0, 0, width, height) }
+            pixels[i] = px
+            sharpness[i] = BurstAligner.sharpness(px, width, height)
+        }
+        val refIndex = sharpness.indices.maxByOrNull { sharpness[it] } ?: 0
+        return BurstAligner.alignAndMerge(usable.size, width, height, refIndex) { pixels[it]!! }
+    }
+
+    private fun fuseBurstFrames(frames: List<Bitmap>, width: Int, height: Int, outPixels: IntArray) {
+        System.arraycopy(mergeAligned(frames), 0, outPixels, 0, width * height)
     }
 
     /**
