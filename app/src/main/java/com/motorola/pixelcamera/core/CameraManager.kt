@@ -214,6 +214,7 @@ class CameraManager(private val context: Context) {
     // Reused while [portraitPreviewBusy] is held: the model's square input and the colour grid.
     private val portraitModelInput = IntArray(PortraitSegmenter.PREVIEW_INPUT * PortraitSegmenter.PREVIEW_INPUT)
     private var portraitGrid = IntArray(0)
+    private var portraitFrameBytes = ByteArray(0)
 
     /**
      * Reads the frame straight into the model input and a half-size colour grid, upright and
@@ -231,10 +232,16 @@ class CameraManager(private val context: Context) {
         val gw = cols.count() / 2
         val gh = uprightH / 2
         if (portraitGrid.size != gw * gh) portraitGrid = IntArray(gw * gh)
+        // One bulk copy: reading the camera buffer a byte at a time cost a fifth of a core.
         val buffer = plane.buffer
+        buffer.rewind()
+        val length = buffer.remaining()
+        if (portraitFrameBytes.size < length) portraitFrameBytes = ByteArray(length)
+        buffer.get(portraitFrameBytes, 0, length)
+        val bytes = portraitFrameBytes
         val size = PortraitSegmenter.PREVIEW_INPUT
-        PortraitPreview.sampleUpright(buffer, plane.rowStride, image.width, image.height, rotation, cols, size, size, portraitModelInput)
-        PortraitPreview.sampleUpright(buffer, plane.rowStride, image.width, image.height, rotation, cols, gw, gh, portraitGrid)
+        PortraitPreview.sampleUpright(bytes, plane.rowStride, image.width, image.height, rotation, cols, size, size, portraitModelInput)
+        PortraitPreview.sampleUpright(bytes, plane.rowStride, image.width, image.height, rotation, cols, gw, gh, portraitGrid)
         return gw to gh
     }
 

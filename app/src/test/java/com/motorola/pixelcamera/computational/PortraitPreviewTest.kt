@@ -51,6 +51,7 @@ class PortraitPreviewTest {
     @Test
     fun radiusFollowsTheSliderAndGrid() {
         assertEquals(3, PortraitPreview.radiusFor(14f, 240))
+        assertEquals(1, PortraitPreview.radiusFor(14f, 120))
         assertTrue(PortraitPreview.radiusFor(26f, 240) > PortraitPreview.radiusFor(2f, 240))
         assertEquals(1, PortraitPreview.radiusFor(2f, 120))
     }
@@ -63,10 +64,10 @@ class PortraitPreviewTest {
     }
 
     /** A 4 x 3 RGBA frame (row stride 20 bytes) whose red value is 10 * x + y. */
-    private fun frame(): java.nio.ByteBuffer {
-        val buf = java.nio.ByteBuffer.allocate(20 * 3)
+    private fun frame(): ByteArray {
+        val buf = ByteArray(20 * 3)
         for (y in 0 until 3) for (x in 0 until 4) {
-            buf.put(y * 20 + x * 4, (10 * x + y).toByte()); buf.put(y * 20 + x * 4 + 3, 0xFF.toByte())
+            buf[y * 20 + x * 4] = (10 * x + y).toByte(); buf[y * 20 + x * 4 + 3] = 0xFF.toByte()
         }
         return buf
     }
