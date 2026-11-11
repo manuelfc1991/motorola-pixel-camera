@@ -1025,8 +1025,10 @@ class CameraManager(private val context: Context) {
     }
 
     /** Stores a finished JPEG as it is; mirroring is recorded in its orientation tag. */
-    private fun saveJpegToMediaStore(jpeg: ByteArray, mirror: Boolean): Uri? {
-        val name = "IMG_${SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())}_PXL"
+    private fun saveJpegToMediaStore(
+        jpeg: ByteArray, mirror: Boolean,
+        name: String = "IMG_${SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())}_PXL"
+    ): Uri? {
         val values = ContentValues().apply {
             put(MediaStore.MediaColumns.DISPLAY_NAME, "$name.jpg")
             put(MediaStore.MediaColumns.MIME_TYPE, "image/jpeg")
@@ -1186,11 +1188,39 @@ class CameraManager(private val context: Context) {
         saveBitmapToMediaStore(frame)
     }
 
-    /** One plain frame, as fast as the camera allows: used for the hold-the-shutter burst. */
-    suspend fun captureQuickPhoto(): Uri? = withContext(Dispatchers.IO) {
-        val capture = imageCapture ?: return@withContext null
-        playSound(android.media.MediaActionSound.SHUTTER_CLICK)
-        takePictureDirect(capture)
+    /**
+     * The hold-the-shutter burst: one frame after another while [isHeld] says so, up to [max].
+     * Frames are taken into memory and written to storage in the background, so the camera never
+     * waits for a file. [onShot] gets the running count. Returns the last photo saved.
+     *
+     * With RAW on, each shot is a RAW and JPEG pair written by the camera itself, which is slower.
+     */
+    suspend fun captureBurst(isHeld: () -> Boolean, max: Int, onShot: suspend (Int) -> Unit): Uri? = coroutineScope {
+        val capture = imageCapture ?: return@coroutineScope null
+        val raw = capture.outputFormat == ImageCapture.OUTPUT_FORMAT_RAW_JPEG
+        val mirror = mirrorEnabled
+        val stamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())
+        val saves = ArrayDeque<kotlinx.coroutines.Deferred<Uri?>>()
+        var last: Uri? = null
+        var taken = 0
+        val started = android.os.SystemClock.elapsedRealtime()
+        while (isHeld() && taken < max) {
+            playSound(android.media.MediaActionSound.SHUTTER_CLICK)
+            if (raw) {
+                last = withContext(Dispatchers.IO) { takePictureRawAndJpeg(capture) } ?: break
+            } else {
+                val frame = runCatching { withContext(Dispatchers.IO) { takeJpegFrame(capture) } }.getOrNull() ?: break
+                val name = "IMG_${stamp}_%02d_PXL".format(taken + 1)
+                saves.addLast(async(Dispatchers.IO) { saveJpegToMediaStore(frame.bytes, mirror, name) })
+                // Each frame is about 10 MB: never hold more than a few waiting for storage.
+                while (saves.size > BURST_PENDING_SAVES) saves.removeFirst().await()?.let { last = it }
+            }
+            taken++
+            onShot(taken)
+        }
+        for (save in saves) save.await()?.let { last = it }
+        Log.i(TAG, "Burst: $taken photos in ${android.os.SystemClock.elapsedRealtime() - started} ms (raw=$raw)")
+        last
     }
 
     /** One captured JPEG, copied out of the camera buffer so the camera can take the next frame. */
@@ -1348,6 +1378,7 @@ class CameraManager(private val context: Context) {
         private const val NIGHT_HANDHELD_CAPTURES = 2
         private const val DARK_4K_ISO_LIMIT = 2500
         private const val QR_SCAN_INTERVAL_MS = 300L
+        private const val BURST_PENDING_SAVES = 3
         private const val LOW_LIGHT_VIDEO_MIN_FPS = 10
         /** Two seconds at 30 frames a second. */
         private const val DARK_4K_FRAMES = 60

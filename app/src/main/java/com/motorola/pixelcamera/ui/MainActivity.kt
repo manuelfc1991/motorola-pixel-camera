@@ -2645,12 +2645,7 @@ class MainActivity : AppCompatActivity() {
         binding.tvShutterCount.text = "0"
         binding.tvShutterCount.visibility = View.VISIBLE
         lifecycleScope.launch {
-            var taken = 0
-            var lastUri: Uri? = null
-            while (shutterHeld && taken < MAX_HOLD_BURST) {
-                val uri = cameraManager.captureQuickPhoto() ?: break
-                lastUri = uri
-                taken++
+            val lastUri = cameraManager.captureBurst({ shutterHeld }, MAX_HOLD_BURST) { taken ->
                 binding.tvShutterCount.text = taken.toString()
                 blinkViewfinder()
             }
