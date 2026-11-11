@@ -21,24 +21,52 @@ class PortraitMathTest {
     }
 
     @Test
-    fun `subject stays sharp and blur grows with depth distance`() {
-        val alpha = floatArrayOf(1f, 0f, 0f, 0f)
-        val depth = floatArrayOf(0.8f, 0.8f, 0.6f, 0.1f)
+    fun `subject stays sharp and blur grows with distance behind it`() {
+        // 64 x 64: subject on the left, then columns ever farther behind it.
+        val w = 64
+        val h = 64
+        val alpha = FloatArray(w * h) { if (it % w < 8) 1f else 0f }
+        val depth = FloatArray(w * h) { 0.9f - (it % w) / 64f * 0.8f }
 
-        val amount = PortraitMath.blurAmount(alpha, depth, subjectDepth = 0.8f)
+        val amount = PortraitMath.blurAmount(alpha, depth, subjectDepth = 0.9f, w, h)
 
-        assertEquals(0f, amount[0], 1e-6f)          // the subject itself
-        assertEquals(0f, amount[1], 1e-6f)          // same distance as the subject
-        assertTrue(amount[2] > 0f && amount[2] < 1f) // a little behind
-        assertEquals(1f, amount[3], 1e-6f)          // far behind
+        val row = 32 * w
+        assertEquals(0f, amount[row + 2], 1e-6f)                 // the subject itself
+        assertTrue(amount[row + 20] < amount[row + 40])          // farther means blurrier
+        assertEquals(1f, amount[row + 60], 0.02f)                // far behind: full blur
+    }
+
+    @Test
+    fun `things in front of the subject blur less than things behind it`() {
+        val w = 64
+        val h = 64
+        val front = PortraitMath.blurAmount(null, FloatArray(w * h) { 0.9f }, subjectDepth = 0.5f, w, h)
+        val behind = PortraitMath.blurAmount(null, FloatArray(w * h) { 0.1f }, subjectDepth = 0.5f, w, h)
+        assertTrue(front[0] > 0f && front[0] < behind[0])
     }
 
     @Test
     fun `without depth everything outside the mask is fully blurred`() {
-        val amount = PortraitMath.blurAmount(floatArrayOf(1f, 0.25f, 0f), null, 0f)
+        val amount = PortraitMath.blurAmount(floatArrayOf(1f, 0.25f, 0f), null, 0f, 3, 1)
         assertEquals(0f, amount[0], 1e-6f)
         assertEquals(0.75f, amount[1], 1e-6f)
         assertEquals(1f, amount[2], 1e-6f)
+    }
+
+    @Test
+    fun `only the focused object stays in the subject mask`() {
+        // Two separate blobs and a third one touching the first but far behind it.
+        val w = 60
+        val h = 40
+        fun inBox(i: Int, x0: Int, x1: Int) = i % w in x0..x1 && i / w in 5..34
+        val alpha = FloatArray(w * h) { if (inBox(it, 5, 24) || inBox(it, 25, 34) || inBox(it, 45, 54)) 1f else 0f }
+        val depth = FloatArray(w * h) { if (inBox(it, 25, 34)) 0.3f else 0.8f }
+
+        val kept = PortraitMath.isolateSubject(alpha, depth, w, h, focusX = 14f / w, focusY = 0.5f)
+
+        assertEquals(1f, kept[20 * w + 14], 1e-6f)  // focused object
+        assertEquals(0f, kept[20 * w + 33], 1e-6f)  // touching it, but well behind
+        assertEquals(0f, kept[20 * w + 50], 1e-6f)  // separate object
     }
 
     @Test

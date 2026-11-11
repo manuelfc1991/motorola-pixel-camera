@@ -45,6 +45,7 @@ import android.hardware.SensorManager
 import android.hardware.camera2.CaptureRequest
 import android.view.HapticFeedbackConstants
 import androidx.lifecycle.lifecycleScope
+import com.motorola.pixelcamera.computational.PortraitSegmenter
 import com.motorola.pixelcamera.R
 import com.motorola.pixelcamera.computational.MotionPhotoEngine
 import com.motorola.pixelcamera.core.CameraManager
@@ -2083,6 +2084,8 @@ class MainActivity : AppCompatActivity() {
         // Rebinding the camera mid-capture drops the frames still being taken.
         if (isModeChangeBlocked()) return
         selectModeUi(selectedView, smoothScroll = true)
+        // Get the portrait models ready while the user is still framing.
+        if (mode == CameraMode.PORTRAIT) PortraitSegmenter.warmUp(this)
 
         if (currentMode == CameraMode.PRO) {
             // Manual exposure/focus/white balance belong to Pro only.

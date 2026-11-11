@@ -92,6 +92,8 @@ dependencies {
 
     // Runs the optional portrait models (assets/gmodels, not in the repository)
     implementation("com.google.ai.edge.litert:litert:1.0.1")
+    implementation("com.google.ai.edge.litert:litert-gpu:1.0.1")
+    implementation("com.google.ai.edge.litert:litert-gpu-api:1.0.1")
 
     testImplementation("junit:junit:4.13.2")
 }
