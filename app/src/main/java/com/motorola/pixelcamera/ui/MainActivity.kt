@@ -408,6 +408,7 @@ class MainActivity : AppCompatActivity() {
 
         setupListeners()
         setupAudioZoom()
+        setupBackButton()
         setupPanoramaEngine()
         setupPortraitPreview()
         initDefaultUiState()
@@ -3041,6 +3042,27 @@ class MainActivity : AppCompatActivity() {
         binding.tvPanoramaPrompt.visibility = View.VISIBLE
         binding.tvPanoramaPrompt.removeCallbacks(hidePanoramaMessage)
         binding.tvPanoramaPrompt.postDelayed(hidePanoramaMessage, 4000)
+    }
+
+    /** Back closes what is open first (settings, manual controls, blur slider); only then leaves the app. */
+    private fun setupBackButton() {
+        onBackPressedDispatcher.addCallback(this, object : androidx.activity.OnBackPressedCallback(true) {
+            override fun handleOnBackPressed() {
+                when {
+                    binding.quickSettingsContainer.visibility == View.VISIBLE -> toggleQuickSettings()
+                    binding.overlayPortraitAperture.visibility == View.VISIBLE -> {
+                        binding.overlayPortraitAperture.visibility = View.GONE
+                        updateProControlsButton()
+                    }
+                    currentMode == CameraMode.PRO -> setMode(CameraMode.CAMERA, binding.modeCamera)
+                    else -> {
+                        isEnabled = false
+                        onBackPressedDispatcher.onBackPressed()
+                        isEnabled = true
+                    }
+                }
+            }
+        })
     }
 
     private fun setupPanoramaEngine() {
