@@ -1,332 +1,586 @@
 <?xml version="1.0" encoding="utf-8"?>
-<LinearLayout
-    xmlns:android="http://schemas.android.com/apk/res/android"
+<!-- "More settings", as Google Camera's Camera settings page: white, a plain list with blue
+     section headers, an icon on every row and Material switches. -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
-    xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="@color/pixel_black"
+    android:background="@android:color/white"
     android:orientation="vertical">
 
-    <!-- Top App Bar -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="64dp"
         android:gravity="center_vertical"
-        android:orientation="horizontal"
-        android:paddingHorizontal="12dp">
+        android:orientation="horizontal">
 
         <ImageView
             android:id="@+id/btnBack"
-            android:layout_width="44dp"
-            android:layout_height="44dp"
-            android:background="?attr/selectableItemBackgroundBorderless"
-            android:clickable="true"
-            android:focusable="true"
-            android:padding="10dp"
-            android:src="@drawable/ic_arrow_back" />
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:layout_marginStart="12dp"
+            android:background="?android:attr/selectableItemBackgroundBorderless"
+            android:contentDescription="Back"
+            android:padding="12dp"
+            android:src="@drawable/ic_arrow_back"
+            app:tint="@color/gc_set_summary" />
 
         <TextView
-            android:layout_width="0dp"
+            android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_marginStart="8dp"
-            android:layout_weight="1"
-            android:text="Settings"
-            android:textColor="@color/pixel_text_white"
-            android:textSize="20sp"
-            android:textStyle="bold" />
+            android:layout_marginStart="12dp"
+            android:text="Camera settings"
+            android:textColor="@color/gc_set_title"
+            android:textSize="22sp" />
     </LinearLayout>
 
     <ScrollView
         android:layout_width="match_parent"
-        android:layout_height="match_parent"
-        android:fillViewport="true">
+        android:layout_height="0dp"
+        android:layout_weight="1">
 
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="vertical"
-            android:padding="16dp">
+            android:paddingBottom="24dp">
 
-            <!-- Device Hardware Banner Card -->
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:background="@drawable/bg_pill_container"
-                android:backgroundTint="#1F2430"
-                android:orientation="vertical"
-                android:padding="16dp">
-
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="Motorola Edge 20 Fusion"
-                    android:textColor="@color/pixel_text_white"
-                    android:textSize="15sp"
-                    android:textStyle="bold" />
-
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="2dp"
-                    android:text="MediaTek Dimensity 800U • 12 MP photos"
-                    android:textColor="@color/pixel_accent_blue"
-                    android:textSize="12sp" />
-            </LinearLayout>
-
-            <!-- GENERAL CATEGORY -->
             <TextView
-                android:layout_width="wrap_content"
+                android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginStart="4dp"
-                android:layout_marginTop="20dp"
-                android:layout_marginBottom="8dp"
-                android:text="GENERAL"
-                android:textColor="@color/pixel_accent_blue"
-                android:textSize="12sp"
-                android:textStyle="bold" />
+                android:paddingStart="24dp"
+                android:paddingTop="12dp"
+                android:paddingBottom="12dp"
+                android:text="General"
+                android:textColor="@color/gc_set_accent"
+                android:textSize="14sp"
+                android:fontFamily="sans-serif-medium" />
 
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:background="@drawable/bg_pill_container"
-                android:backgroundTint="#181A1D"
-                android:orientation="vertical"
-                android:padding="16dp">
+                android:background="?android:attr/selectableItemBackground"
+                android:gravity="center_vertical"
+                android:minHeight="72dp"
+                android:onClick="toggleRowSwitch"
+                android:orientation="horizontal"
+                android:paddingVertical="18dp"
+                android:paddingStart="24dp"
+                android:paddingEnd="20dp">
+
+                <ImageView
+                    android:layout_width="24dp"
+                    android:layout_height="24dp"
+                    android:src="@drawable/ic_set_location"
+                    app:tint="@color/gc_set_summary" />
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="24dp"
+                    android:layout_marginEnd="16dp"
+                    android:layout_weight="1"
+                    android:orientation="vertical">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Save location"
+                        android:textColor="@color/gc_set_title"
+                        android:textSize="16sp" />
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="2dp"
+                        android:text="Add GPS coordinates to photos"
+                        android:textColor="@color/gc_set_summary"
+                        android:textSize="14sp" />
+                </LinearLayout>
 
                 <com.google.android.material.switchmaterial.SwitchMaterial
                     android:id="@+id/swLocation"
-                    android:layout_width="match_parent"
+                    android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:checked="true"
-                    android:text="Save location\nAdd GPS coordinates to EXIF"
-                    android:textColor="@color/pixel_text_white"
-                    android:textSize="14sp" />
+                    app:thumbTint="@color/gc_switch_thumb"
+                    app:trackTint="@color/gc_switch_track"
+                    app:trackTintMode="src_in"
+                    app:useMaterialThemeColors="false" />
+            </LinearLayout>
 
-                <View
-                    android:layout_width="match_parent"
-                    android:layout_height="1dp"
-                    android:layout_marginVertical="8dp"
-                    android:background="#26282E" />
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:background="?android:attr/selectableItemBackground"
+                android:gravity="center_vertical"
+                android:minHeight="72dp"
+                android:onClick="toggleRowSwitch"
+                android:orientation="horizontal"
+                android:paddingVertical="18dp"
+                android:paddingStart="24dp"
+                android:paddingEnd="20dp">
+
+                <ImageView
+                    android:layout_width="24dp"
+                    android:layout_height="24dp"
+                    android:src="@drawable/ic_set_sound"
+                    app:tint="@color/gc_set_summary" />
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="24dp"
+                    android:layout_marginEnd="16dp"
+                    android:layout_weight="1"
+                    android:orientation="vertical">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Camera sounds"
+                        android:textColor="@color/gc_set_title"
+                        android:textSize="16sp" />
+                </LinearLayout>
 
                 <com.google.android.material.switchmaterial.SwitchMaterial
                     android:id="@+id/swSounds"
-                    android:layout_width="match_parent"
+                    android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:checked="true"
-                    android:text="Camera sounds\nShutter click audio"
-                    android:textColor="@color/pixel_text_white"
-                    android:textSize="14sp" />
+                    app:thumbTint="@color/gc_switch_thumb"
+                    app:trackTint="@color/gc_switch_track"
+                    app:trackTintMode="src_in"
+                    app:useMaterialThemeColors="false" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:background="?android:attr/selectableItemBackground"
+                android:gravity="center_vertical"
+                android:minHeight="72dp"
+                android:onClick="toggleRowSwitch"
+                android:orientation="horizontal"
+                android:paddingVertical="18dp"
+                android:paddingStart="24dp"
+                android:paddingEnd="20dp">
+
+                <ImageView
+                    android:layout_width="24dp"
+                    android:layout_height="24dp"
+                    android:src="@drawable/ic_set_history"
+                    app:tint="@color/gc_set_summary" />
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="24dp"
+                    android:layout_marginEnd="16dp"
+                    android:layout_weight="1"
+                    android:orientation="vertical">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Remember last mode"
+                        android:textColor="@color/gc_set_title"
+                        android:textSize="16sp" />
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="2dp"
+                        android:text="Open in the mode you used last"
+                        android:textColor="@color/gc_set_summary"
+                        android:textSize="14sp" />
+                </LinearLayout>
 
                 <com.google.android.material.switchmaterial.SwitchMaterial
                     android:id="@+id/swRememberMode"
-                    android:layout_width="match_parent"
+                    android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:checked="false"
-                    android:text="Remember last mode\nOpen in the mode you used last"
-                    android:textColor="@color/pixel_text_white"
-                    android:textSize="14sp" />
+                    app:thumbTint="@color/gc_switch_thumb"
+                    app:trackTint="@color/gc_switch_track"
+                    app:trackTintMode="src_in"
+                    app:useMaterialThemeColors="false" />
+            </LinearLayout>
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:paddingStart="24dp"
+                android:paddingTop="24dp"
+                android:paddingBottom="12dp"
+                android:text="Photo"
+                android:textColor="@color/gc_set_accent"
+                android:textSize="14sp"
+                android:fontFamily="sans-serif-medium" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:background="?android:attr/selectableItemBackground"
+                android:gravity="center_vertical"
+                android:minHeight="72dp"
+                android:onClick="toggleRowSwitch"
+                android:orientation="horizontal"
+                android:paddingVertical="18dp"
+                android:paddingStart="24dp"
+                android:paddingEnd="20dp">
+
+                <ImageView
+                    android:layout_width="24dp"
+                    android:layout_height="24dp"
+                    android:src="@drawable/ic_moon"
+                    app:tint="@color/gc_set_summary" />
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="24dp"
+                    android:layout_marginEnd="16dp"
+                    android:layout_weight="1"
+                    android:orientation="vertical">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Multi-frame in low light"
+                        android:textColor="@color/gc_set_title"
+                        android:textSize="16sp" />
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="2dp"
+                        android:text="Merges 3-4 frames for less grain; takes a few seconds"
+                        android:textColor="@color/gc_set_summary"
+                        android:textSize="14sp" />
+                </LinearLayout>
 
                 <com.google.android.material.switchmaterial.SwitchMaterial
                     android:id="@+id/swMultiFrameLowLight"
-                    android:layout_width="match_parent"
+                    android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:checked="true"
-                    android:text="Multi-frame in low light\nMerges 3-4 frames for less grain; takes a few seconds"
-                    android:textColor="@color/pixel_text_white"
-                    android:textSize="14sp" />
+                    app:thumbTint="@color/gc_switch_thumb"
+                    app:trackTint="@color/gc_switch_track"
+                    app:trackTintMode="src_in"
+                    app:useMaterialThemeColors="false" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:background="?android:attr/selectableItemBackground"
+                android:gravity="center_vertical"
+                android:minHeight="72dp"
+                android:onClick="toggleRowSwitch"
+                android:orientation="horizontal"
+                android:paddingVertical="18dp"
+                android:paddingStart="24dp"
+                android:paddingEnd="20dp">
+
+                <ImageView
+                    android:layout_width="24dp"
+                    android:layout_height="24dp"
+                    android:src="@drawable/ic_set_zoom"
+                    app:tint="@color/gc_set_summary" />
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="24dp"
+                    android:layout_marginEnd="16dp"
+                    android:layout_weight="1"
+                    android:orientation="vertical">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Multi-frame when zoomed"
+                        android:textColor="@color/gc_set_title"
+                        android:textSize="16sp" />
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="2dp"
+                        android:text="Merges 3 frames at 2x and above"
+                        android:textColor="@color/gc_set_summary"
+                        android:textSize="14sp" />
+                </LinearLayout>
 
                 <com.google.android.material.switchmaterial.SwitchMaterial
                     android:id="@+id/swMultiFrameZoom"
-                    android:layout_width="match_parent"
+                    android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:checked="true"
-                    android:text="Multi-frame when zoomed\nMerges 3 frames at 2x and above"
-                    android:textColor="@color/pixel_text_white"
-                    android:textSize="14sp" />
+                    app:thumbTint="@color/gc_switch_thumb"
+                    app:trackTint="@color/gc_switch_track"
+                    app:trackTintMode="src_in"
+                    app:useMaterialThemeColors="false" />
             </LinearLayout>
-
-            <!-- COMPUTATIONAL PHOTOGRAPHY CATEGORY -->
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginStart="4dp"
-                android:layout_marginTop="20dp"
-                android:layout_marginBottom="8dp"
-                android:text="COMPUTATIONAL PHOTOGRAPHY"
-                android:textColor="@color/pixel_accent_yellow"
-                android:textSize="12sp"
-                android:textStyle="bold" />
 
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:background="@drawable/bg_pill_container"
-                android:backgroundTint="#181A1D"
-                android:orientation="vertical"
-                android:padding="16dp">
+                android:orientation="horizontal"
+                android:paddingVertical="18dp"
+                android:paddingStart="24dp"
+                android:paddingEnd="20dp">
 
-                <!-- Color Saturation Tuning Slider -->
-                <TextView
-                    android:id="@+id/tvSaturationLabel"
-                    android:layout_width="wrap_content"
+                <ImageView
+                    android:layout_width="24dp"
+                    android:layout_height="24dp"
+                    android:src="@drawable/ic_set_palette"
+                    app:tint="@color/gc_set_summary" />
+
+                <LinearLayout
+                    android:layout_width="0dp"
                     android:layout_height="wrap_content"
-                    android:text="Color Saturation: 1.00x"
-                    android:textColor="@color/pixel_text_white"
-                    android:textSize="14sp" />
+                    android:layout_marginStart="24dp"
+                    android:layout_weight="1"
+                    android:orientation="vertical">
 
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="Vibrancy &amp; chroma punch in processed JPEG"
-                    android:textColor="@color/pixel_text_secondary"
-                    android:textSize="12sp" />
+                    <TextView
+                        android:id="@+id/tvSaturationLabel"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Colour saturation"
+                        android:textColor="@color/gc_set_title"
+                        android:textSize="16sp" />
 
-                <SeekBar
-                    android:id="@+id/sbSaturation"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="8dp"
-                    android:max="150"
-                    android:min="50"
-                    android:progress="100"
-                    android:progressTint="@color/pixel_accent_blue"
-                    android:thumbTint="@color/pixel_accent_blue" />
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="2dp"
+                        android:text="How vivid colours come out"
+                        android:textColor="@color/gc_set_summary"
+                        android:textSize="14sp" />
 
-                <View
-                    android:layout_width="match_parent"
-                    android:layout_height="1dp"
-                    android:layout_marginVertical="8dp"
-                    android:background="#26282E" />
-
-                <!-- Micro-Contrast Tuning Slider -->
-                <TextView
-                    android:id="@+id/tvMicroContrastLabel"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="Micro-Contrast: 1.00x"
-                    android:textColor="@color/pixel_text_white"
-                    android:textSize="14sp" />
-
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="Pixel Hermite tone curve local dynamic depth"
-                    android:textColor="@color/pixel_text_secondary"
-                    android:textSize="12sp" />
-
-                <SeekBar
-                    android:id="@+id/sbMicroContrast"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="8dp"
-                    android:max="150"
-                    android:min="50"
-                    android:progress="100"
-                    android:progressTint="@color/pixel_accent_blue"
-                    android:thumbTint="@color/pixel_accent_blue" />
-
-                <View
-                    android:layout_width="match_parent"
-                    android:layout_height="1dp"
-                    android:layout_marginVertical="8dp"
-                    android:background="#26282E" />
-
-                <!-- Noise-Cored Sharpening Slider -->
-                <TextView
-                    android:id="@+id/tvSharpnessLabel"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="Edge Sharpening: 1.00x"
-                    android:textColor="@color/pixel_text_white"
-                    android:textSize="14sp" />
-
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="8-neighbor omnidirectional detail boost with anti-halo"
-                    android:textColor="@color/pixel_text_secondary"
-                    android:textSize="12sp" />
-
-                <SeekBar
-                    android:id="@+id/sbSharpness"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="8dp"
-                    android:max="200"
-                    android:min="0"
-                    android:progress="100"
-                    android:progressTint="@color/pixel_accent_blue"
-                    android:thumbTint="@color/pixel_accent_blue" />
-
+                    <SeekBar
+                        android:id="@+id/sbSaturation"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="-16dp"
+                        android:layout_marginTop="8dp"
+                        android:min="50"
+                        android:max="150"
+                        android:progressBackgroundTint="#C4C7C5"
+                        android:progressTint="@color/gc_set_accent"
+                        android:thumbTint="@color/gc_set_accent" />
+                </LinearLayout>
             </LinearLayout>
-
-            <!-- VIDEO CATEGORY -->
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginStart="4dp"
-                android:layout_marginTop="20dp"
-                android:layout_marginBottom="8dp"
-                android:text="VIDEO RECORDING"
-                android:textColor="@color/pixel_accent_blue"
-                android:textSize="12sp"
-                android:textStyle="bold" />
 
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:background="@drawable/bg_pill_container"
-                android:backgroundTint="#181A1D"
-                android:orientation="vertical"
-                android:padding="16dp">
+                android:orientation="horizontal"
+                android:paddingVertical="18dp"
+                android:paddingStart="24dp"
+                android:paddingEnd="20dp">
+
+                <ImageView
+                    android:layout_width="24dp"
+                    android:layout_height="24dp"
+                    android:src="@drawable/ic_set_contrast"
+                    app:tint="@color/gc_set_summary" />
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="24dp"
+                    android:layout_weight="1"
+                    android:orientation="vertical">
+
+                    <TextView
+                        android:id="@+id/tvMicroContrastLabel"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Local contrast"
+                        android:textColor="@color/gc_set_title"
+                        android:textSize="16sp" />
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="2dp"
+                        android:text="Depth in light and shade"
+                        android:textColor="@color/gc_set_summary"
+                        android:textSize="14sp" />
+
+                    <SeekBar
+                        android:id="@+id/sbMicroContrast"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="-16dp"
+                        android:layout_marginTop="8dp"
+                        android:min="50"
+                        android:max="150"
+                        android:progressBackgroundTint="#C4C7C5"
+                        android:progressTint="@color/gc_set_accent"
+                        android:thumbTint="@color/gc_set_accent" />
+                </LinearLayout>
+            </LinearLayout>
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:paddingVertical="18dp"
+                android:paddingStart="24dp"
+                android:paddingEnd="20dp">
+
+                <ImageView
+                    android:layout_width="24dp"
+                    android:layout_height="24dp"
+                    android:src="@drawable/ic_set_sharp"
+                    app:tint="@color/gc_set_summary" />
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="24dp"
+                    android:layout_weight="1"
+                    android:orientation="vertical">
+
+                    <TextView
+                        android:id="@+id/tvSharpnessLabel"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Sharpening"
+                        android:textColor="@color/gc_set_title"
+                        android:textSize="16sp" />
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="2dp"
+                        android:text="Edge detail, with halos kept down"
+                        android:textColor="@color/gc_set_summary"
+                        android:textSize="14sp" />
+
+                    <SeekBar
+                        android:id="@+id/sbSharpness"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="-16dp"
+                        android:layout_marginTop="8dp"
+                        android:min="0"
+                        android:max="200"
+                        android:progressBackgroundTint="#C4C7C5"
+                        android:progressTint="@color/gc_set_accent"
+                        android:thumbTint="@color/gc_set_accent" />
+                </LinearLayout>
+            </LinearLayout>
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:paddingStart="24dp"
+                android:paddingTop="24dp"
+                android:paddingBottom="12dp"
+                android:text="Video"
+                android:textColor="@color/gc_set_accent"
+                android:textSize="14sp"
+                android:fontFamily="sans-serif-medium" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:background="?android:attr/selectableItemBackground"
+                android:gravity="center_vertical"
+                android:minHeight="72dp"
+                android:onClick="toggleRowSwitch"
+                android:orientation="horizontal"
+                android:paddingVertical="18dp"
+                android:paddingStart="24dp"
+                android:paddingEnd="20dp">
+
+                <ImageView
+                    android:layout_width="24dp"
+                    android:layout_height="24dp"
+                    android:src="@drawable/ic_set_stabilize"
+                    app:tint="@color/gc_set_summary" />
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="24dp"
+                    android:layout_marginEnd="16dp"
+                    android:layout_weight="1"
+                    android:orientation="vertical">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Electronic video stabilization"
+                        android:textColor="@color/gc_set_title"
+                        android:textSize="16sp" />
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="2dp"
+                        android:text="Reduce camera shake to make videos smoother. Will result in a zoomed-in view."
+                        android:textColor="@color/gc_set_summary"
+                        android:textSize="14sp" />
+                </LinearLayout>
 
                 <com.google.android.material.switchmaterial.SwitchMaterial
                     android:id="@+id/swEis"
-                    android:layout_width="match_parent"
+                    android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:checked="true"
-                    android:text="Video stabilization (EIS)\nGyroscope-assisted shake reduction"
-                    android:textColor="@color/pixel_text_white"
-                    android:textSize="14sp" />
-
-                <com.google.android.material.switchmaterial.SwitchMaterial
-                    android:id="@+id/swHighBitrate"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:checked="false"
-                    android:text="High bitrate 1080p video\nLarger files, finer detail"
-                    android:textColor="@color/pixel_text_white"
-                    android:textSize="14sp" />
-
+                    app:thumbTint="@color/gc_switch_thumb"
+                    app:trackTint="@color/gc_switch_track"
+                    app:trackTintMode="src_in"
+                    app:useMaterialThemeColors="false" />
             </LinearLayout>
 
-            <!-- ABOUT FOOTER -->
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="24dp"
-                android:layout_marginBottom="32dp"
-                android:gravity="center"
-                android:orientation="vertical">
+                android:background="?android:attr/selectableItemBackground"
+                android:gravity="center_vertical"
+                android:minHeight="72dp"
+                android:onClick="toggleRowSwitch"
+                android:orientation="horizontal"
+                android:paddingVertical="18dp"
+                android:paddingStart="24dp"
+                android:paddingEnd="20dp">
 
-                <TextView
+                <ImageView
+                    android:layout_width="24dp"
+                    android:layout_height="24dp"
+                    android:src="@drawable/ic_set_bitrate"
+                    app:tint="@color/gc_set_summary" />
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="24dp"
+                    android:layout_marginEnd="16dp"
+                    android:layout_weight="1"
+                    android:orientation="vertical">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="High bitrate 1080p video"
+                        android:textColor="@color/gc_set_title"
+                        android:textSize="16sp" />
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="2dp"
+                        android:text="Larger files, finer detail"
+                        android:textColor="@color/gc_set_summary"
+                        android:textSize="14sp" />
+                </LinearLayout>
+
+                <com.google.android.material.switchmaterial.SwitchMaterial
+                    android:id="@+id/swHighBitrate"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="Pixel Camera (kyoto edition)"
-                    android:textColor="@color/pixel_text_white"
-                    android:textSize="14sp"
-                    android:textStyle="bold" />
-
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="Version 1.0.0-kyoto • Open source"
-                    android:textColor="@color/pixel_text_secondary"
-                    android:textSize="12sp" />
+                    app:thumbTint="@color/gc_switch_thumb"
+                    app:trackTint="@color/gc_switch_track"
+                    app:trackTintMode="src_in"
+                    app:useMaterialThemeColors="false" />
             </LinearLayout>
 
         </LinearLayout>
     </ScrollView>
-
 </LinearLayout>

@@ -23,6 +23,21 @@ class SettingsActivity : AppCompatActivity() {
 
         loadPreferences()
         setupListeners()
+        // Full screen with dark system icons on white, as Google Camera's settings.
+        androidx.core.view.WindowCompat.getInsetsController(window, window.decorView).apply {
+            hide(androidx.core.view.WindowInsetsCompat.Type.statusBars())
+            systemBarsBehavior = androidx.core.view.WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+            isAppearanceLightNavigationBars = true
+        }
+        window.navigationBarColor = android.graphics.Color.WHITE
+    }
+
+    /** Tapping anywhere on a row flips its switch, as in Google Camera. */
+    fun toggleRowSwitch(row: android.view.View) {
+        val group = row as? android.view.ViewGroup ?: return
+        for (i in 0 until group.childCount) {
+            (group.getChildAt(i) as? android.widget.CompoundButton)?.toggle()
+        }
     }
 
     private fun loadPreferences() {
@@ -36,15 +51,15 @@ class SettingsActivity : AppCompatActivity() {
 
         val sat = prefs.getInt(KEY_SATURATION, 100)
         binding.sbSaturation.progress = sat
-        binding.tvSaturationLabel.text = String.format(Locale.US, "Color Saturation: %.2fx", sat / 100f)
+        binding.tvSaturationLabel.text = String.format(Locale.US, "Colour saturation · %.2f×", sat / 100f)
 
         val contrast = prefs.getInt(KEY_MICRO_CONTRAST, 100)
         binding.sbMicroContrast.progress = contrast
-        binding.tvMicroContrastLabel.text = String.format(Locale.US, "Micro-Contrast: %.2fx", contrast / 100f)
+        binding.tvMicroContrastLabel.text = String.format(Locale.US, "Local contrast · %.2f×", contrast / 100f)
 
         val sharp = prefs.getInt(KEY_SHARPNESS, 100)
         binding.sbSharpness.progress = sharp
-        binding.tvSharpnessLabel.text = String.format(Locale.US, "Edge Sharpening: %.2fx", sharp / 100f)
+        binding.tvSharpnessLabel.text = String.format(Locale.US, "Sharpening · %.2f×", sharp / 100f)
     }
 
     private fun setupListeners() {
@@ -76,7 +91,7 @@ class SettingsActivity : AppCompatActivity() {
         binding.sbSaturation.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
             override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
                 val mult = progress / 100f
-                binding.tvSaturationLabel.text = String.format(Locale.US, "Color Saturation: %.2fx", mult)
+                binding.tvSaturationLabel.text = String.format(Locale.US, "Colour saturation · %.2f×", mult)
                 HdrProcessor.saturationMultiplier = mult
                 prefs.edit().putInt(KEY_SATURATION, progress).apply()
             }
@@ -87,7 +102,7 @@ class SettingsActivity : AppCompatActivity() {
         binding.sbMicroContrast.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
             override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
                 val mult = progress / 100f
-                binding.tvMicroContrastLabel.text = String.format(Locale.US, "Micro-Contrast: %.2fx", mult)
+                binding.tvMicroContrastLabel.text = String.format(Locale.US, "Local contrast · %.2f×", mult)
                 HdrProcessor.microContrastMultiplier = mult
                 prefs.edit().putInt(KEY_MICRO_CONTRAST, progress).apply()
             }
@@ -98,7 +113,7 @@ class SettingsActivity : AppCompatActivity() {
         binding.sbSharpness.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
             override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
                 val mult = progress / 100f
-                binding.tvSharpnessLabel.text = String.format(Locale.US, "Edge Sharpening: %.2fx", mult)
+                binding.tvSharpnessLabel.text = String.format(Locale.US, "Sharpening · %.2f×", mult)
                 HdrProcessor.sharpnessMultiplier = mult
                 prefs.edit().putInt(KEY_SHARPNESS, progress).apply()
             }
