@@ -120,6 +120,22 @@ class PortraitMathTest {
     }
 
     @Test
+    fun `a large object behind the subject leaves no sharp strip beside it`() {
+        // A bottle with a keyboard directly behind and touching it in the picture.
+        val w = 400
+        val h = 100
+        fun bottle(i: Int) = i % w in 100..199 && i / w in 10..89
+        fun keyboard(i: Int) = i % w in 200..399 && i / w in 10..89
+        val alpha = FloatArray(w * h) { if (bottle(it) || keyboard(it)) 1f else 0f }
+        val depth = FloatArray(w * h) { if (bottle(it)) 0.8f else 0.4f }
+
+        val kept = PortraitMath.isolateSubject(alpha, depth, w, h, focusX = 150f / w, focusY = 0.5f)
+
+        assertEquals(1f, kept[50 * w + 150], 1e-6f)  // the bottle
+        assertEquals(0f, kept[50 * w + 208], 1e-6f)  // keyboard right beside it
+    }
+
+    @Test
     fun `transpose swaps rows and columns and back`() {
         val src = floatArrayOf(1f, 2f, 3f, 4f, 5f, 6f) // 3 wide, 2 tall
         val flipped = PortraitMath.transpose(src, 3, 2) // 2 wide, 3 tall
