@@ -32,6 +32,15 @@ android {
             isDebuggable = true
             applicationIdSuffix = ".debug"
         }
+        // Motorola Edge 20 Fusion only: the vendor camera HAL exposes the
+        // ultrawide lens solely to packages on vendor.camera.aux.packagelist.
+        // This variant installs under one of those names (not present on the
+        // phone) so the lens becomes visible. Sideload only.
+        create("kyoto") {
+            initWith(getByName("debug"))
+            applicationIdSuffix = ""
+            matchingFallbacks += "debug"
+        }
     }
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
@@ -42,6 +51,12 @@ android {
     }
     buildFeatures {
         viewBinding = true
+    }
+}
+
+androidComponents {
+    onVariants(selector().withBuildType("kyoto")) { variant ->
+        variant.applicationId.set("com.motorola.camera2")
     }
 }
 
