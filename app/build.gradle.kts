@@ -63,6 +63,8 @@ android {
 androidComponents {
     onVariants(selector().withBuildType("kyoto")) { variant ->
         variant.applicationId.set("com.motorola.camera2")
+        // The Edge 20 Fusion runs 64-bit code; the 32-bit libraries are dead weight there.
+        variant.packaging.jniLibs.excludes.add("lib/armeabi-v7a/**")
     }
 }
 
