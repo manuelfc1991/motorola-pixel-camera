@@ -650,99 +650,96 @@
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent" />
 
-    <!-- PANORAMA MODE GUIDANCE OVERLAY -->
+    <!-- Panorama, as Google Camera: the picture only in a band between two thin white lines,
+         black above and below, an arrow each side. While sweeping, the arrow you follow stays
+         and the stitched strip fills the band's foot; messages appear in the chip at the top. -->
     <androidx.constraintlayout.widget.ConstraintLayout
         android:id="@+id/overlayPanoramaGuide"
         android:layout_width="0dp"
         android:layout_height="0dp"
-        android:elevation="7dp"
         android:visibility="gone"
-        app:layout_constraintBottom_toBottomOf="@+id/viewFinderCard"
-        app:layout_constraintEnd_toEndOf="@+id/viewFinderCard"
-        app:layout_constraintStart_toStartOf="@+id/viewFinderCard"
-        app:layout_constraintTop_toTopOf="@+id/viewFinderCard">
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent">
 
-        <!-- Center Horizontal Alignment Tracking Line -->
         <View
-            android:id="@+id/linePanoramaHorizon"
+            android:id="@+id/panoMaskTop"
             android:layout_width="0dp"
-            android:layout_height="2dp"
-            android:background="#66FFFFFF"
-            app:layout_constraintBottom_toBottomOf="parent"
+            android:layout_height="@dimen/gc_pano_band_top"
+            android:background="@android:color/black"
             app:layout_constraintEnd_toEndOf="parent"
             app:layout_constraintStart_toStartOf="parent"
             app:layout_constraintTop_toTopOf="parent" />
 
-        <!-- Target Center Circle Reticle -->
         <View
-            android:id="@+id/reticlePanoramaCenter"
-            android:layout_width="16dp"
-            android:layout_height="16dp"
-            android:background="@drawable/bg_pill_container"
-            android:backgroundTint="@color/pixel_accent_yellow"
-            app:layout_constraintBottom_toBottomOf="parent"
+            android:id="@+id/panoLineTop"
+            android:layout_width="0dp"
+            android:layout_height="1dp"
+            android:background="@android:color/white"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toBottomOf="@+id/panoMaskTop" />
+
+        <View
+            android:id="@+id/panoLineBottom"
+            android:layout_width="0dp"
+            android:layout_height="1dp"
+            android:layout_marginTop="@dimen/gc_pano_band_bottom"
+            android:background="@android:color/white"
             app:layout_constraintEnd_toEndOf="parent"
             app:layout_constraintStart_toStartOf="parent"
             app:layout_constraintTop_toTopOf="parent" />
 
-        <!-- Directional Pan Arrow -->
+        <View
+            android:layout_width="0dp"
+            android:layout_height="0dp"
+            android:background="@android:color/black"
+            app:layout_constraintBottom_toTopOf="@+id/panoDeckTop"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toBottomOf="@+id/panoLineBottom" />
+
+        <Space
+            android:id="@+id/panoDeckTop"
+            android:layout_width="0dp"
+            android:layout_height="0dp"
+            android:layout_marginTop="@dimen/gc_deck_top"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toTopOf="parent" />
+
+        <ImageView
+            android:id="@+id/ivPanoramaArrowLeft"
+            android:layout_width="36dp"
+            android:layout_height="36dp"
+            android:layout_marginStart="54dp"
+            android:rotation="180"
+            android:src="@drawable/ic_panorama_arrow"
+            app:layout_constraintBottom_toTopOf="@+id/panoLineBottom"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toBottomOf="@+id/panoLineTop"
+            app:tint="@android:color/white" />
+
         <ImageView
             android:id="@+id/ivPanoramaArrow"
-            android:layout_width="32dp"
-            android:layout_height="32dp"
-            android:layout_marginStart="24dp"
+            android:layout_width="36dp"
+            android:layout_height="36dp"
+            android:layout_marginEnd="54dp"
             android:src="@drawable/ic_panorama_arrow"
-            app:layout_constraintBottom_toBottomOf="parent"
-            app:layout_constraintStart_toEndOf="@+id/reticlePanoramaCenter"
-            app:layout_constraintTop_toTopOf="parent"
-            app:tint="@color/pixel_accent_cyan" />
-
-        <!-- Prompt Text Pill -->
-        <TextView
-            android:id="@+id/tvPanoramaPrompt"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginBottom="24dp"
-            android:background="@drawable/bg_pill_container"
-            android:backgroundTint="#CC181A1D"
-            android:paddingHorizontal="16dp"
-            android:paddingVertical="6dp"
-            android:text="Pan steadily along the line"
-            android:textColor="@color/pixel_text_white"
-            android:textSize="13sp"
-            android:textStyle="bold"
-            app:layout_constraintBottom_toTopOf="@+id/linePanoramaHorizon"
+            app:layout_constraintBottom_toTopOf="@+id/panoLineBottom"
             app:layout_constraintEnd_toEndOf="parent"
-            app:layout_constraintStart_toStartOf="parent" />
+            app:layout_constraintTop_toBottomOf="@+id/panoLineTop"
+            app:tint="@android:color/white" />
 
-        <!-- Sweep Angle & Progress Badge -->
-        <TextView
-            android:id="@+id/tvPanoramaAngle"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="20dp"
-            android:background="@drawable/bg_pill_container"
-            android:backgroundTint="#CC181A1D"
-            android:paddingHorizontal="14dp"
-            android:paddingVertical="4dp"
-            android:text="0° / 180°"
-            android:textColor="@color/pixel_accent_yellow"
-            android:textSize="12sp"
-            android:textStyle="bold"
-            app:layout_constraintEnd_toEndOf="parent"
-            app:layout_constraintStart_toStartOf="parent"
-            app:layout_constraintTop_toBottomOf="@+id/linePanoramaHorizon" />
-
-        <!-- Bottom Live Panoramic Preview Strip & Progress Bar -->
+        <!-- The stitched picture so far, along the band's foot while sweeping. -->
         <FrameLayout
+            android:id="@+id/panoStripFrame"
             android:layout_width="0dp"
-            android:layout_height="44dp"
-            android:layout_marginHorizontal="24dp"
-            android:layout_marginBottom="16dp"
-            android:background="@drawable/bg_pill_container"
-            android:backgroundTint="#DD121316"
-            android:padding="3dp"
-            app:layout_constraintBottom_toBottomOf="parent"
+            android:layout_height="64dp"
+            android:layout_marginHorizontal="16dp"
+            android:layout_marginBottom="12dp"
+            android:visibility="gone"
+            app:layout_constraintBottom_toTopOf="@+id/panoLineBottom"
             app:layout_constraintEnd_toEndOf="parent"
             app:layout_constraintStart_toStartOf="parent">
 
@@ -750,18 +747,46 @@
                 android:id="@+id/ivPanoramaStrip"
                 android:layout_width="match_parent"
                 android:layout_height="match_parent"
-                android:scaleType="fitCenter" />
+                android:scaleType="fitStart" />
 
             <ProgressBar
                 android:id="@+id/pbPanoramaProgress"
                 style="?android:attr/progressBarStyleHorizontal"
                 android:layout_width="match_parent"
-                android:layout_height="4dp"
+                android:layout_height="3dp"
                 android:layout_gravity="bottom"
                 android:max="100"
-                android:progress="0"
-                android:progressTint="@color/pixel_accent_yellow" />
+                android:progressTint="@color/gc_mode_pill" />
         </FrameLayout>
+
+        <!-- Google Camera's message chip: dark, full width, a magenta dot. -->
+        <TextView
+            android:id="@+id/tvPanoramaPrompt"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginHorizontal="16dp"
+            android:layout_marginTop="83dp"
+            android:background="@drawable/bg_gc_chip"
+            android:drawableStart="@drawable/ic_magenta_dot"
+            android:drawablePadding="12dp"
+            android:gravity="center"
+            android:minHeight="56dp"
+            android:paddingHorizontal="20dp"
+            android:paddingVertical="12dp"
+            android:textColor="@color/gc_icon"
+            android:textSize="14sp"
+            android:visibility="gone"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toTopOf="parent" />
+
+        <TextView
+            android:id="@+id/tvPanoramaAngle"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:visibility="gone"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toTopOf="parent" />
     </androidx.constraintlayout.widget.ConstraintLayout>
 
     <!-- Manual controls, as Google Camera: the current values across the top of the frame,

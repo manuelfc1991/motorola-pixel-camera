@@ -7,4 +7,6 @@
     <dimen name="gc_sheet_top">288dp</dimen>
     <dimen name="gc_pro_slider_top">580dp</dimen>
     <dimen name="gc_pro_bar_top">788dp</dimen>
+    <dimen name="gc_pano_band_top">282dp</dimen>
+    <dimen name="gc_pano_band_bottom">627dp</dimen>
 </resources>

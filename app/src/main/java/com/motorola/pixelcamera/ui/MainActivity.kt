@@ -2232,11 +2232,13 @@ class MainActivity : AppCompatActivity() {
                 binding.histogramView.visibility = View.GONE
                 binding.overlayPortraitAperture.visibility = View.GONE
                 binding.overlayPanoramaGuide.visibility = View.VISIBLE
-                binding.tvPanoramaPrompt.text = "Pan steadily along the line"
-                binding.tvPanoramaAngle.text = "0° / 180°"
-                binding.pbPanoramaProgress.progress = 0
+                resetPanoramaUi()
             }
         }
+
+        // Google Camera's Panorama shows neither the switch button nor the level.
+        binding.btnSwitchCamera.visibility = if (mode == CameraMode.PANORAMA) View.INVISIBLE else View.VISIBLE
+        binding.horizonLevelContainer.visibility = if (mode == CameraMode.PANORAMA) View.GONE else View.VISIBLE
 
         // Rebind use cases for optimal performance in active mode
         applyPreviewScale()
@@ -2907,14 +2909,14 @@ class MainActivity : AppCompatActivity() {
         if (!cameraManager.isCapturingPanorama()) {
             cameraManager.startPanoramaCapture()
             binding.btnShutter.setImageResource(R.drawable.bg_shutter_video_recording)
-            binding.tvPanoramaPrompt.text = "Pan steadily along the line →"
-            binding.tvPanoramaAngle.text = "0° / 180°"
-            binding.pbPanoramaProgress.progress = 0
+            resetPanoramaUi()
+            binding.panoStripFrame.visibility = View.VISIBLE
+            showPanoramaMessage("Move the phone slowly to the left or right")
         } else {
             // The automatic finish at 100% and a tap can arrive together; only one may run.
             if (panoramaFinishing) return
             panoramaFinishing = true
-            binding.tvPanoramaPrompt.text = "Finalizing panorama..."
+            showPanoramaMessage("Saving panorama…")
             binding.btnShutter.setImageResource(R.drawable.bg_shutter_button)
             lifecycleScope.launch {
                 binding.progressThumbnailSpin.visibility = View.VISIBLE
@@ -2922,14 +2924,14 @@ class MainActivity : AppCompatActivity() {
                 // The engine has freed the strip picture; the view must not draw it again.
                 binding.ivPanoramaStrip.setImageDrawable(null)
                 panoramaFinishing = false
+                resetPanoramaUi()
                 binding.progressThumbnailSpin.visibility = View.GONE
                 if (uri != null) {
                     latestCapturedUri = uri
                     loadLatestGalleryThumbnail()
                     updateStorageBadge()
                 } else {
-                    binding.tvPanoramaPrompt.text = "Pan steadily along the line"
-                    showHint("Sweep too short · keep turning")
+                    showPanoramaMessage("Capture stopped. Keep turning the phone a little further.")
                 }
             }
         }
@@ -2999,15 +3001,40 @@ class MainActivity : AppCompatActivity() {
         binding.ivPortraitPreview.setImageDrawable(null)
     }
 
+    /** Band with both arrows and nothing else, as Google Camera shows before a sweep. */
+    private fun resetPanoramaUi() {
+        binding.ivPanoramaArrow.visibility = View.VISIBLE
+        binding.ivPanoramaArrowLeft.visibility = View.VISIBLE
+        binding.panoStripFrame.visibility = View.GONE
+        binding.ivPanoramaStrip.scaleType = ImageView.ScaleType.FIT_START
+        binding.pbPanoramaProgress.progress = 0
+        binding.tvPanoramaPrompt.removeCallbacks(hidePanoramaMessage)
+        binding.tvPanoramaPrompt.visibility = View.GONE
+    }
+
+    private val hidePanoramaMessage = Runnable { binding.tvPanoramaPrompt.visibility = View.GONE }
+
+    private fun showPanoramaMessage(text: String) {
+        binding.tvPanoramaPrompt.text = text
+        binding.tvPanoramaPrompt.visibility = View.VISIBLE
+        binding.tvPanoramaPrompt.removeCallbacks(hidePanoramaMessage)
+        binding.tvPanoramaPrompt.postDelayed(hidePanoramaMessage, 4000)
+    }
+
     private fun setupPanoramaEngine() {
         cameraManager.panoramaEngine.onPanoramaProgress = { degrees, progressPercent, stripPreview ->
             runOnUiThread {
                 binding.tvPanoramaAngle.text = "${degrees.toInt()}° / 180°"
                 binding.pbPanoramaProgress.progress = progressPercent
+                // Once the way is clear, only the arrow being followed stays, as Google Camera.
+                when (cameraManager.panoramaEngine.direction) {
+                    1 -> binding.ivPanoramaArrowLeft.visibility = View.INVISIBLE
+                    -1 -> binding.ivPanoramaArrow.visibility = View.INVISIBLE
+                }
+                if (cameraManager.panoramaEngine.direction == -1) binding.ivPanoramaStrip.scaleType = ImageView.ScaleType.FIT_END
                 if (stripPreview != null && !stripPreview.isRecycled && !panoramaFinishing) {
                     binding.ivPanoramaStrip.setImageBitmap(stripPreview)
                 }
-                binding.ivPanoramaArrow.translationX = (progressPercent * 1.5f).coerceAtMost(160f)
                 if (progressPercent >= 100 && cameraManager.isCapturingPanorama()) {
                     handlePanoramaShutter()
                 }
