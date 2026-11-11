@@ -9,4 +9,5 @@
     <dimen name="gc_pro_bar_top">788dp</dimen>
     <dimen name="gc_pano_band_top">282dp</dimen>
     <dimen name="gc_pano_band_bottom">627dp</dimen>
+    <dimen name="gc_rec_pill_top">798dp</dimen>
 </resources>

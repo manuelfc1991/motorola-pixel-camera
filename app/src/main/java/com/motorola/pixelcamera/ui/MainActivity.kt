@@ -2963,7 +2963,8 @@ class MainActivity : AppCompatActivity() {
         cameraManager.audioZoomManager.onAudioZoomStateChanged = { isActive, zoomRatio, _ ->
             runOnUiThread {
                 if (isActive) {
-                    binding.tvAudioZoomIndicator.visibility = View.VISIBLE
+                    // Google Camera shows nothing but the time while recording.
+                    binding.tvAudioZoomIndicator.visibility = View.GONE
                     binding.tvAudioZoomIndicator.text = "AUDIO ZOOM ${String.format(Locale.US, "%.1f", zoomRatio)}×"
                 } else {
                     binding.tvAudioZoomIndicator.visibility = View.GONE
@@ -3073,6 +3074,10 @@ class MainActivity : AppCompatActivity() {
         binding.btnVideoSnapshot.visibility = View.VISIBLE
         binding.cardGalleryThumbnail.visibility = View.INVISIBLE
         binding.btnSwitchCamera.visibility = View.INVISIBLE
+        // Google Camera hides the mode row, settings and photo/video switch while recording.
+        binding.modeCarousel.visibility = View.INVISIBLE
+        binding.bottomNavBar.visibility = View.INVISIBLE
+        binding.tvMiniBadge.visibility = View.GONE
 
         recordingSeconds = 0
         binding.tvVideoTimer.text = "00:00"
@@ -3102,6 +3107,9 @@ class MainActivity : AppCompatActivity() {
     private fun stopVideoRecordingUi() {
         binding.btnShutter.setImageResource(R.drawable.bg_shutter_video)
         binding.videoRecordingBanner.visibility = View.GONE
+        binding.modeCarousel.visibility = View.VISIBLE
+        binding.bottomNavBar.visibility = View.VISIBLE
+        updateMiniBadge()
         videoPaused = false
         binding.btnVideoPause.visibility = View.GONE
         binding.btnVideoSnapshot.visibility = View.GONE
