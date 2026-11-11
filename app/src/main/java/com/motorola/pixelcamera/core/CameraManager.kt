@@ -223,6 +223,11 @@ class CameraManager(private val context: Context) {
 
         val previewBuilder = Preview.Builder()
             .setResolutionSelector(previewResolutionSelector)
+            // The front preview is always a mirror. The back preview only when its mirror is on.
+            .setMirrorMode(
+                if (currentCameraId != CAMERA_FRONT && mirrorBack) MirrorMode.MIRROR_MODE_ON
+                else MirrorMode.MIRROR_MODE_ON_FRONT_ONLY
+            )
 
         val previewExtender = Camera2Interop.Extender(previewBuilder)
         previewExtender.setSessionCaptureCallback(exposureTracker)
@@ -296,6 +301,7 @@ class CameraManager(private val context: Context) {
             Quality.FHD
         }
         val recorder = Recorder.Builder()
+            .apply { if (highBitrateVideo && targetQuality == Quality.FHD) setTargetVideoEncodingBitRate(HIGH_BITRATE_FHD) }
             .setQualitySelector(
                 QualitySelector.from(
                     targetQuality,
@@ -305,6 +311,7 @@ class CameraManager(private val context: Context) {
             .build()
         val wants60 = currentVideoFps == VideoFps.FPS_60 && targetQuality != Quality.UHD && currentCameraId != CAMERA_FRONT
         val videoBuilder = VideoCapture.Builder(recorder)
+            .setMirrorMode(if (mirrorEnabled) MirrorMode.MIRROR_MODE_ON else MirrorMode.MIRROR_MODE_OFF)
             .setTargetFrameRate(if (wants60) android.util.Range(60, 60) else android.util.Range(30, 30))
         // The HAL only keeps full frame rate with EIS at 1080p30.
         val stabilizationSupported = selectedInfo != null && runCatching {
@@ -345,6 +352,11 @@ class CameraManager(private val context: Context) {
                         }
                         onHistogramUpdate?.invoke(histR, histG, histB)
                     }
+                }
+
+                val qrListener = onQrDetected
+                if (qrListener != null && currentCameraMode == CameraMode.CAMERA) {
+                    qrScanner.scan(imageProxy)?.let(qrListener)
                 }
 
                 // If Top Shot or Panorama active, stream frames
@@ -631,15 +643,34 @@ class CameraManager(private val context: Context) {
         }
     }
 
-    fun focusAt(meteringPoint: MeteringPoint) {
+    /** Focus and meter at a point. With [lock] the camera keeps both until the next call. */
+    fun focusAt(meteringPoint: MeteringPoint, lock: Boolean = false) {
         val action = FocusMeteringAction.Builder(meteringPoint, FocusMeteringAction.FLAG_AF or FocusMeteringAction.FLAG_AE)
-            .setAutoCancelDuration(3, java.util.concurrent.TimeUnit.SECONDS)
+            .apply {
+                if (lock) disableAutoCancel() else setAutoCancelDuration(3, java.util.concurrent.TimeUnit.SECONDS)
+            }
             .build()
         camera?.cameraControl?.startFocusAndMetering(action)
     }
 
     /** Low-light bursts are cleaned by the aligned merge instead of the ISP's noise reduction. */
     var ownNoiseCleanup = true
+
+    /** Photo mode merges several frames in dim light and/or when zoomed in. */
+    var multiFrameLowLight = true
+    var multiFrameZoom = true
+
+    /** Mirror the saved photo and video left-to-right, remembered separately for each side. */
+    var mirrorFront = false
+    var mirrorBack = false
+    val mirrorEnabled: Boolean get() = if (isFrontCamera()) mirrorFront else mirrorBack
+
+    /** 1080p video at a higher bitrate than the encoder default. */
+    var highBitrateVideo = false
+
+    /** Called with the text of a QR code seen in Photo mode. */
+    var onQrDetected: ((String) -> Unit)? = null
+    private val qrScanner = QrScanner()
 
     @OptIn(ExperimentalCamera2Interop::class)
     private fun setIspCleanup(enabled: Boolean) {
@@ -661,17 +692,24 @@ class CameraManager(private val context: Context) {
         }.onFailure { Log.w(TAG, "Could not switch ISP cleanup: ${it.message}") }
     }
 
+    private fun isLowLight(): Boolean = lastAutoIso >= LOW_LIGHT_ISO
+
     /**
-     * Frames merged for a Photo-mode shot in the current light. 1 means a plain single shot.
-     * High ISO single frames are grainy, so dim scenes are shot as a short aligned burst.
+     * Frames merged for a Photo-mode shot right now. 1 means a plain single shot.
+     * High ISO single frames are grainy, and a zoomed crop magnifies whatever noise there is,
+     * so both are shot as a short aligned burst.
      */
-    fun lowLightFrameCount(): Int = when {
+    fun multiFrameCount(): Int = when {
         currentCameraMode != CameraMode.CAMERA || rawBound -> 1
         flashMode != ImageCapture.FLASH_MODE_OFF -> 1
-        lastAutoIso >= LOW_LIGHT_ISO_HIGH -> 4
-        lastAutoIso >= LOW_LIGHT_ISO -> 3
+        multiFrameLowLight && lastAutoIso >= LOW_LIGHT_ISO_HIGH -> 4
+        multiFrameLowLight && isLowLight() -> 3
+        multiFrameZoom && currentZoomRatio >= ZOOM_MERGE_RATIO -> 3
         else -> 1
     }
+
+    /** True when the next Photo-mode shot is a low-light burst (as opposed to a zoom burst). */
+    fun isLowLightBurst(): Boolean = multiFrameLowLight && multiFrameCount() > 1 && isLowLight()
 
     /**
      * Executes photo capture with maximum clarity and appropriate computational processing
@@ -679,6 +717,8 @@ class CameraManager(private val context: Context) {
     suspend fun capturePhoto(
         mode: CameraMode,
         portraitBlurStrength: Float = 14f,
+        portraitFocusX: Float = 0.5f,
+        portraitFocusY: Float = 0.45f,
         onProgress: (CaptureProgress) -> Unit
     ): Uri? = withContext(Dispatchers.IO) {
         val capture = imageCapture ?: return@withContext null
@@ -689,12 +729,13 @@ class CameraManager(private val context: Context) {
          * Each JPEG is decoded on the compute pool while the next frame is being exposed.
          */
         suspend fun burst(count: Int): List<Bitmap> = coroutineScope {
+            val mirror = mirrorEnabled
             val t0 = android.os.SystemClock.elapsedRealtime()
             onProgress(CaptureProgress.Frames(0, count))
             val decoding = (0 until count).mapNotNull { i ->
                 val jpeg = runCatching { takeJpegFrame(capture) }.getOrNull()
                 onProgress(CaptureProgress.Frames(i + 1, count))
-                jpeg?.let { async(DimensityOptimizer.computationDispatcher) { runCatching { it.decode() }.getOrNull() } }
+                jpeg?.let { async(DimensityOptimizer.computationDispatcher) { runCatching { it.decode(mirror) }.getOrNull() } }
             }
             val tCaptured = android.os.SystemClock.elapsedRealtime()
             onProgress(CaptureProgress.Processing)
@@ -726,20 +767,20 @@ class CameraManager(private val context: Context) {
             CameraMode.PRO -> single()
             CameraMode.CAMERA -> {
                 val motionFrames = if (topShotMode != TopShotMode.OFF) MotionPhotoEngine.snapshotFrames() else emptyList()
-                val lowLightFrames = lowLightFrameCount()
+                val multiFrames = multiFrameCount()
                 val hdrFrames = if (hdrPlusMode == 2) 3 else if (hdrPlusMode == 1) 2 else 1
                 val toneMapped = hdrPlusMode != 0 || isGoogleAwbEnabled
 
-                val savedUri = if (rawBound || (!toneMapped && lowLightFrames <= 1)) {
+                val savedUri = if (rawBound || (!toneMapped && multiFrames <= 1)) {
                     single()
                 } else {
                     // Low light with HDR+ off: the aligned merge is the noise cleanup, so the ISP's own
                     // noise reduction and sharpening (which smear high-ISO noise into worms) are off.
-                    val ownCleanup = ownNoiseCleanup && !toneMapped
+                    val ownCleanup = ownNoiseCleanup && !toneMapped && isLowLightBurst()
                     val t0 = android.os.SystemClock.elapsedRealtime()
                     if (ownCleanup) setIspCleanup(false)
                     val frames = try {
-                        burst(maxOf(hdrFrames, lowLightFrames))
+                        burst(maxOf(hdrFrames, multiFrames))
                     } finally {
                         if (ownCleanup) setIspCleanup(true)
                     }
@@ -759,9 +800,10 @@ class CameraManager(private val context: Context) {
                 val motionFrames = if (topShotMode != TopShotMode.OFF) MotionPhotoEngine.snapshotFrames() else emptyList()
                 val baseBitmap = burst(1).firstOrNull() ?: return@withContext null
                 val portraitBitmap = PortraitEngine.applyPortraitBokeh(
+                    context,
                     baseBitmap,
-                    focusX = 0.5f,
-                    focusY = 0.45f,
+                    focusX = portraitFocusX,
+                    focusY = portraitFocusY,
                     blurIntensity = portraitBlurStrength
                 )
                 val savedUri = saveBitmapToMediaStore(portraitBitmap)
@@ -829,11 +871,12 @@ class CameraManager(private val context: Context) {
                 context.contentResolver,
                 MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
                 contentValues
-            ).apply {
-                if (gpsLocation != null) {
-                    setMetadata(ImageCapture.Metadata().apply { location = gpsLocation })
+            ).setMetadata(
+                ImageCapture.Metadata().apply {
+                    if (gpsLocation != null) location = gpsLocation
+                    isReversedHorizontal = mirrorEnabled
                 }
-            }.build()
+            ).build()
 
             capture.takePicture(
                 outputOptions,
@@ -880,9 +923,13 @@ class CameraManager(private val context: Context) {
                     put(MediaStore.MediaColumns.MIME_TYPE, mime)
                     put(MediaStore.MediaColumns.RELATIVE_PATH, Environment.DIRECTORY_DCIM + "/Camera")
                 }
-            ).apply {
-                if (gpsLocation != null) setMetadata(ImageCapture.Metadata().apply { location = gpsLocation })
-            }.build()
+            ).setMetadata(
+                ImageCapture.Metadata().apply {
+                    if (gpsLocation != null) location = gpsLocation
+                    // The DNG stays as the sensor saw it; only the JPEG is mirrored
+                    isReversedHorizontal = mirrorEnabled && ext == "jpg"
+                }
+            ).build()
 
             var jpegUri: Uri? = null
             var saved = 0
@@ -974,12 +1021,31 @@ class CameraManager(private val context: Context) {
 
     fun isRecordingVideo(): Boolean = activeRecording != null
 
+    fun pauseVideoRecording() { activeRecording?.pause() }
+
+    fun resumeVideoRecording() { activeRecording?.resume() }
+
+    /** Saves a frame grabbed from the viewfinder while recording (video resolution, not 12 MP). */
+    suspend fun saveVideoSnapshot(frame: Bitmap): Uri? = withContext(Dispatchers.IO) {
+        saveBitmapToMediaStore(frame)
+    }
+
+    /** One plain frame, as fast as the camera allows: used for the hold-the-shutter burst. */
+    suspend fun captureQuickPhoto(): Uri? = withContext(Dispatchers.IO) {
+        val capture = imageCapture ?: return@withContext null
+        playSound(android.media.MediaActionSound.SHUTTER_CLICK)
+        takePictureDirect(capture)
+    }
+
     /** One captured JPEG, copied out of the camera buffer so the camera can take the next frame. */
     private class JpegFrame(val bytes: ByteArray, val rotationDegrees: Int) {
-        fun decode(): Bitmap {
+        fun decode(mirror: Boolean): Bitmap {
             val bitmap = BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
-            if (rotationDegrees == 0) return bitmap
-            val matrix = Matrix().apply { postRotate(rotationDegrees.toFloat()) }
+            if (rotationDegrees == 0 && !mirror) return bitmap
+            val matrix = Matrix().apply {
+                postRotate(rotationDegrees.toFloat())
+                if (mirror) postScale(-1f, 1f)
+            }
             return Bitmap.createBitmap(bitmap, 0, 0, bitmap.width, bitmap.height, matrix, true)
         }
     }
@@ -1071,7 +1137,8 @@ class CameraManager(private val context: Context) {
                     }
                     exif.setAttribute(androidx.exifinterface.media.ExifInterface.TAG_MAKE, Build.MANUFACTURER.replaceFirstChar { it.uppercase() })
                     exif.setAttribute(androidx.exifinterface.media.ExifInterface.TAG_MODEL, Build.MODEL)
-                    exif.setAttribute(androidx.exifinterface.media.ExifInterface.TAG_SOFTWARE, "Pixel Camera 9.7 (HDR+)")
+                    exif.setAttribute(androidx.exifinterface.media.ExifInterface.TAG_SOFTWARE, "Pixel Camera kyoto")
+                    writeExposureExif(exif)
                     val timeStr = SimpleDateFormat("yyyy:MM:dd HH:mm:ss", Locale.US).format(Date())
                     exif.setAttribute(androidx.exifinterface.media.ExifInterface.TAG_DATETIME, timeStr)
                     exif.setAttribute(androidx.exifinterface.media.ExifInterface.TAG_DATETIME_ORIGINAL, timeStr)
@@ -1096,7 +1163,28 @@ class CameraManager(private val context: Context) {
         }
     }
 
+    /**
+     * Merged photos are re-encoded, so the camera's own EXIF is gone. Exposure values come from the
+     * auto-exposure reading at the moment of the shot; lens values from the camera's static info.
+     */
+    @OptIn(ExperimentalCamera2Interop::class)
+    private fun writeExposureExif(exif: androidx.exifinterface.media.ExifInterface) {
+        val iso = if (currentManualIso > 0) currentManualIso else lastAutoIso
+        val exposureNs = if (currentManualExposureTimeNs > 0) currentManualExposureTimeNs else lastAutoExposureNs
+        if (iso > 0) exif.setAttribute(androidx.exifinterface.media.ExifInterface.TAG_PHOTOGRAPHIC_SENSITIVITY, iso.toString())
+        if (exposureNs > 0) exif.setAttribute(androidx.exifinterface.media.ExifInterface.TAG_EXPOSURE_TIME, (exposureNs / 1e9).toString())
+        val info = camera?.cameraInfo?.let { runCatching { Camera2CameraInfo.from(it) }.getOrNull() } ?: return
+        info.getCameraCharacteristic(android.hardware.camera2.CameraCharacteristics.LENS_INFO_AVAILABLE_APERTURES)
+            ?.firstOrNull()?.let { exif.setAttribute(androidx.exifinterface.media.ExifInterface.TAG_F_NUMBER, it.toString()) }
+        info.getCameraCharacteristic(android.hardware.camera2.CameraCharacteristics.LENS_INFO_AVAILABLE_FOCAL_LENGTHS)
+            ?.firstOrNull()?.let {
+                exif.setAttribute(androidx.exifinterface.media.ExifInterface.TAG_FOCAL_LENGTH, "${(it * 1000).toInt()}/1000")
+            }
+    }
+
     companion object {
+        private const val ZOOM_MERGE_RATIO = 2f
+        private const val HIGH_BITRATE_FHD = 36_000_000
         private const val TAG = "CameraManager"
         const val CAMERA_MAIN = "0"
         const val CAMERA_FRONT = "1"

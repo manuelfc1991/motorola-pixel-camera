@@ -164,6 +164,21 @@
             style="@style/StatusChip"
             android:text="RAW" />
 
+        <TextView
+            android:id="@+id/chipMirror"
+            style="@style/StatusChip"
+            android:text="MIRROR" />
+
+        <TextView
+            android:id="@+id/chipMotion"
+            style="@style/StatusChip"
+            android:text="MOTION" />
+
+        <TextView
+            android:id="@+id/chipLock"
+            style="@style/StatusChip"
+            android:text="AE/AF LOCK" />
+
         <View
             android:layout_width="0dp"
             android:layout_height="1dp"
@@ -179,7 +194,7 @@
             android:backgroundTint="#801F2328"
             android:gravity="center"
             android:paddingHorizontal="10dp"
-            android:text="108MP HM2"
+            android:text="12MP MAIN"
             android:textColor="@color/pixel_text_secondary"
             android:textSize="11sp"
             android:textStyle="bold" />
@@ -549,6 +564,30 @@
         android:textStyle="bold"
         android:visibility="gone"
         app:layout_constraintBottom_toBottomOf="@+id/viewFinderCard"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="@+id/viewFinderCard" />
+
+    <!-- QR code found in the viewfinder: tap to open the link or copy the text -->
+    <TextView
+        android:id="@+id/tvQrResult"
+        android:layout_width="wrap_content"
+        android:layout_height="36dp"
+        android:layout_marginTop="96dp"
+        android:background="@drawable/bg_pill_container"
+        android:backgroundTint="@color/pixel_accent_blue"
+        android:clickable="true"
+        android:elevation="10dp"
+        android:ellipsize="middle"
+        android:focusable="true"
+        android:gravity="center_vertical"
+        android:maxWidth="300dp"
+        android:paddingHorizontal="14dp"
+        android:singleLine="true"
+        android:textColor="@color/pixel_pill_text_active"
+        android:textSize="13sp"
+        android:textStyle="bold"
+        android:visibility="gone"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toTopOf="@+id/viewFinderCard" />
@@ -1485,6 +1524,136 @@
                                 </LinearLayout>
                             </LinearLayout>
 
+                            <LinearLayout
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:gravity="center_vertical"
+                                android:orientation="horizontal"
+                                android:paddingVertical="8dp">
+
+                                <LinearLayout
+                                    android:layout_width="0dp"
+                                    android:layout_height="wrap_content"
+                                    android:layout_weight="1"
+                                    android:orientation="vertical">
+
+                                    <TextView
+                                        android:layout_width="wrap_content"
+                                        android:layout_height="wrap_content"
+                                        android:text="Mirror"
+                                        android:textColor="@color/pixel_text_white"
+                                        android:textSize="13sp" />
+
+                                    <TextView
+                                        android:id="@+id/tvQsMirrorSubtitle"
+                                        android:layout_width="wrap_content"
+                                        android:layout_height="wrap_content"
+                                        android:layout_marginTop="2dp"
+                                        android:text="Off"
+                                        android:textColor="@color/pixel_accent_blue"
+                                        android:textSize="14sp"
+                                        android:textStyle="bold" />
+                                </LinearLayout>
+
+                                <LinearLayout
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:orientation="horizontal">
+
+                                    <TextView
+                                        android:id="@+id/btnQsMirrorOff"
+                                        android:layout_width="40dp"
+                                        android:layout_height="40dp"
+                                        android:background="@drawable/bg_qs_btn_active"
+                                        android:clickable="true"
+                                        android:focusable="true"
+                                        android:gravity="center"
+                                        android:text="Off"
+                                        android:textColor="@color/pixel_pill_text_active"
+                                        android:textSize="12sp"
+                                        android:textStyle="bold" />
+
+                                    <TextView
+                                        android:id="@+id/btnQsMirrorOn"
+                                        android:layout_width="40dp"
+                                        android:layout_height="40dp"
+                                        android:layout_marginStart="10dp"
+                                        android:background="@drawable/bg_qs_btn_inactive"
+                                        android:clickable="true"
+                                        android:focusable="true"
+                                        android:gravity="center"
+                                        android:text="On"
+                                        android:textColor="@color/pixel_text_white"
+                                        android:textSize="12sp"
+                                        android:textStyle="bold" />
+                                </LinearLayout>
+                            </LinearLayout>
+
+                            <LinearLayout
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:gravity="center_vertical"
+                                android:orientation="horizontal"
+                                android:paddingVertical="8dp">
+
+                                <LinearLayout
+                                    android:layout_width="0dp"
+                                    android:layout_height="wrap_content"
+                                    android:layout_weight="1"
+                                    android:orientation="vertical">
+
+                                    <TextView
+                                        android:layout_width="wrap_content"
+                                        android:layout_height="wrap_content"
+                                        android:text="Motion photo"
+                                        android:textColor="@color/pixel_text_white"
+                                        android:textSize="13sp" />
+
+                                    <TextView
+                                        android:id="@+id/tvQsMotionSubtitle"
+                                        android:layout_width="wrap_content"
+                                        android:layout_height="wrap_content"
+                                        android:layout_marginTop="2dp"
+                                        android:text="Off"
+                                        android:textColor="@color/pixel_accent_blue"
+                                        android:textSize="14sp"
+                                        android:textStyle="bold" />
+                                </LinearLayout>
+
+                                <LinearLayout
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:orientation="horizontal">
+
+                                    <TextView
+                                        android:id="@+id/btnQsMotionOff"
+                                        android:layout_width="40dp"
+                                        android:layout_height="40dp"
+                                        android:background="@drawable/bg_qs_btn_active"
+                                        android:clickable="true"
+                                        android:focusable="true"
+                                        android:gravity="center"
+                                        android:text="Off"
+                                        android:textColor="@color/pixel_pill_text_active"
+                                        android:textSize="12sp"
+                                        android:textStyle="bold" />
+
+                                    <TextView
+                                        android:id="@+id/btnQsMotionOn"
+                                        android:layout_width="40dp"
+                                        android:layout_height="40dp"
+                                        android:layout_marginStart="10dp"
+                                        android:background="@drawable/bg_qs_btn_inactive"
+                                        android:clickable="true"
+                                        android:focusable="true"
+                                        android:gravity="center"
+                                        android:text="On"
+                                        android:textColor="@color/pixel_text_white"
+                                        android:textSize="12sp"
+                                        android:textStyle="bold" />
+                                </LinearLayout>
+                            </LinearLayout>
+
                         </LinearLayout>
 
                         <!-- PRO TAB CONTENT CONTAINER (MGC 9.7 Pro Drawer) -->
@@ -2110,6 +2279,71 @@
                                 </LinearLayout>
                             </LinearLayout>
 
+                            <LinearLayout
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:gravity="center_vertical"
+                                android:orientation="horizontal"
+                                android:paddingVertical="8dp">
+
+                                <LinearLayout
+                                    android:layout_width="0dp"
+                                    android:layout_height="wrap_content"
+                                    android:layout_weight="1"
+                                    android:orientation="vertical">
+
+                                    <TextView
+                                        android:layout_width="wrap_content"
+                                        android:layout_height="wrap_content"
+                                        android:text="Mirror"
+                                        android:textColor="@color/pixel_text_white"
+                                        android:textSize="13sp" />
+
+                                    <TextView
+                                        android:id="@+id/tvQsVideoMirrorSubtitle"
+                                        android:layout_width="wrap_content"
+                                        android:layout_height="wrap_content"
+                                        android:layout_marginTop="2dp"
+                                        android:text="Off"
+                                        android:textColor="@color/pixel_accent_blue"
+                                        android:textSize="14sp"
+                                        android:textStyle="bold" />
+                                </LinearLayout>
+
+                                <LinearLayout
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:orientation="horizontal">
+
+                                    <TextView
+                                        android:id="@+id/btnQsVideoMirrorOff"
+                                        android:layout_width="40dp"
+                                        android:layout_height="40dp"
+                                        android:background="@drawable/bg_qs_btn_active"
+                                        android:clickable="true"
+                                        android:focusable="true"
+                                        android:gravity="center"
+                                        android:text="Off"
+                                        android:textColor="@color/pixel_pill_text_active"
+                                        android:textSize="12sp"
+                                        android:textStyle="bold" />
+
+                                    <TextView
+                                        android:id="@+id/btnQsVideoMirrorOn"
+                                        android:layout_width="40dp"
+                                        android:layout_height="40dp"
+                                        android:layout_marginStart="10dp"
+                                        android:background="@drawable/bg_qs_btn_inactive"
+                                        android:clickable="true"
+                                        android:focusable="true"
+                                        android:gravity="center"
+                                        android:text="On"
+                                        android:textColor="@color/pixel_text_white"
+                                        android:textSize="12sp"
+                                        android:textStyle="bold" />
+                                </LinearLayout>
+                            </LinearLayout>
+
                         </LinearLayout>
 
                     </LinearLayout>
@@ -2199,6 +2433,41 @@
                 app:layout_constraintEnd_toEndOf="parent"
                 app:layout_constraintStart_toStartOf="parent"
                 app:layout_constraintTop_toTopOf="parent" />
+
+            <!-- While recording: pause/resume takes the gallery slot, photo snapshot the flip slot -->
+            <ImageView
+                android:id="@+id/btnVideoPause"
+                android:layout_width="56dp"
+                android:layout_height="56dp"
+                android:background="@drawable/bg_camera_switch_circle"
+                android:clickable="true"
+                android:contentDescription="Pause recording"
+                android:focusable="true"
+                android:padding="14dp"
+                android:src="@drawable/ic_pause"
+                android:visibility="gone"
+                app:layout_constraintBottom_toBottomOf="@+id/cardGalleryThumbnail"
+                app:layout_constraintEnd_toEndOf="@+id/cardGalleryThumbnail"
+                app:layout_constraintStart_toStartOf="@+id/cardGalleryThumbnail"
+                app:layout_constraintTop_toTopOf="@+id/cardGalleryThumbnail"
+                app:tint="@color/pixel_text_white" />
+
+            <ImageView
+                android:id="@+id/btnVideoSnapshot"
+                android:layout_width="56dp"
+                android:layout_height="56dp"
+                android:background="@drawable/bg_camera_switch_circle"
+                android:clickable="true"
+                android:contentDescription="Take a photo while recording"
+                android:focusable="true"
+                android:padding="14dp"
+                android:src="@drawable/ic_camera"
+                android:visibility="gone"
+                app:layout_constraintBottom_toBottomOf="@+id/btnSwitchCamera"
+                app:layout_constraintEnd_toEndOf="@+id/btnSwitchCamera"
+                app:layout_constraintStart_toStartOf="@+id/btnSwitchCamera"
+                app:layout_constraintTop_toTopOf="@+id/btnSwitchCamera"
+                app:tint="@color/pixel_text_white" />
 
             <!-- Burst progress ring around the shutter, and the frames left inside it -->
             <com.google.android.material.progressindicator.CircularProgressIndicator
@@ -2543,7 +2812,7 @@
                 android:id="@+id/tvPreviewDetails"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="Motorola Edge 20 Fusion • 108MP HM2 • HDR+"
+                android:text="Motorola Edge 20 Fusion"
                 android:textColor="@color/pixel_text_white"
                 android:textSize="13sp"
                 android:textStyle="bold" />

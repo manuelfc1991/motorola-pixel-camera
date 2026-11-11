@@ -18,6 +18,7 @@ import android.os.Environment
 import android.os.StatFs
 import android.provider.MediaStore
 import android.util.Size
+import android.graphics.PointF
 import android.view.GestureDetector
 import android.view.KeyEvent
 import android.view.MotionEvent
@@ -103,6 +104,11 @@ class MainActivity : AppCompatActivity() {
     private var hintJob: Job? = null
     private var lowLightJob: Job? = null
     private var captureChipHeldByCapture = false
+    private var shutterHeld = false
+    private var videoPaused = false
+    private var lastTapFocus: PointF? = null   // where the last tap lands in the saved photo
+    private var qrText: String? = null
+    private var qrHideJob: Job? = null
     private var lastEisPref: Boolean? = null
     private var filteredRoll = 0f
     private var isLevelAligned = false
@@ -334,6 +340,15 @@ class MainActivity : AppCompatActivity() {
                 return true
             }
 
+            override fun onLongPress(e: MotionEvent) {
+                if (binding.quickSettingsContainer.visibility == View.VISIBLE) return
+                val point = binding.viewFinder.meteringPointFactory.createPoint(e.x, e.y)
+                cameraManager.focusAt(point, lock = true)
+                isDraggingExposure = false
+                setFocusLocked(true)
+                binding.viewFinder.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
+            }
+
             override fun onFling(e1: MotionEvent?, e2: MotionEvent, velocityX: Float, velocityY: Float): Boolean {
                 if (e1 != null && (e1.x - e2.x > 140) && kotlin.math.abs(velocityX) > 200) {
                     openInAppPhotoPreview()
@@ -388,6 +403,7 @@ class MainActivity : AppCompatActivity() {
         binding.proControlPanel.visibility = View.GONE
         binding.histogramView.visibility = View.GONE
         binding.quickSettingsContainer.visibility = View.GONE
+        updateProControlsButton()
         binding.focusReticleContainer.visibility = View.GONE
         binding.tvExposureEvBadge.visibility = View.GONE
         selectProTab(ProTab.ISO)
@@ -411,6 +427,23 @@ class MainActivity : AppCompatActivity() {
             cameraManager.bindCameraUseCases()
         }
         lastEisPref = eisPref
+
+        val bitratePref = prefs.getBoolean(SettingsActivity.KEY_HIGH_BITRATE, false)
+        val bitrateChanged = cameraManager.highBitrateVideo != bitratePref
+        cameraManager.highBitrateVideo = bitratePref
+        if (bitrateChanged && currentMode == CameraMode.VIDEO && !cameraManager.isRecordingVideo()) {
+            cameraManager.bindCameraUseCases()
+        }
+
+        cameraManager.multiFrameLowLight = prefs.getBoolean(SettingsActivity.KEY_MULTI_FRAME_LOW_LIGHT, true)
+        cameraManager.multiFrameZoom = prefs.getBoolean(SettingsActivity.KEY_MULTI_FRAME_ZOOM, true)
+        cameraManager.mirrorFront = prefs.getBoolean(SettingsActivity.KEY_MIRROR_FRONT, false)
+        cameraManager.mirrorBack = prefs.getBoolean(SettingsActivity.KEY_MIRROR_BACK, false)
+        cameraManager.topShotMode = if (prefs.getBoolean(SettingsActivity.KEY_MOTION_PHOTO, false)) {
+            CameraManager.TopShotMode.ON
+        } else {
+            CameraManager.TopShotMode.OFF
+        }
 
         val flashPref = prefs.getInt(SettingsActivity.KEY_FLASH_MODE, ImageCapture.FLASH_MODE_OFF)
         cameraManager.flashMode = flashPref
@@ -676,6 +709,8 @@ class MainActivity : AppCompatActivity() {
                 cameraManager.initialize(this@MainActivity, binding.viewFinder)
                 // The 0.6 lens button only makes sense when the ultrawide is really reachable.
                 binding.btnZoomUltrawide.visibility = if (cameraManager.isUltrawideAvailable()) View.VISIBLE else View.GONE
+                cameraManager.onQrDetected = { text -> runOnUiThread { showQrResult(text) } }
+                restoreLastMode()
             } catch (e: Exception) {
                 showHint("Failed to start camera: ${e.message}")
             }
@@ -960,6 +995,20 @@ class MainActivity : AppCompatActivity() {
             setHdrMode(2)
         }
 
+        // Quick Settings: Mirror (per camera) and Motion photo
+        binding.btnQsMirrorOff.setOnClickListener { setMirror(false) }
+        binding.btnQsMirrorOn.setOnClickListener { setMirror(true) }
+        binding.btnQsVideoMirrorOff.setOnClickListener { setMirror(false) }
+        binding.btnQsVideoMirrorOn.setOnClickListener { setMirror(true) }
+        binding.btnQsMotionOff.setOnClickListener { setMotionPhoto(false) }
+        binding.btnQsMotionOn.setOnClickListener { setMotionPhoto(true) }
+
+        // While recording: pause/resume and photo snapshot
+        binding.btnVideoPause.setOnClickListener { toggleVideoPause() }
+        binding.btnVideoSnapshot.setOnClickListener { takeVideoSnapshot() }
+
+        binding.tvQrResult.setOnClickListener { openQrResult() }
+
         // Quick Settings - Row 4: Timer
         binding.btnQsTimerOff.setOnClickListener {
             timerDuration = 0
@@ -1206,23 +1255,27 @@ class MainActivity : AppCompatActivity() {
 
         // Tier 3: Pro Controls Button (ic_tune)
         binding.btnProControls.setOnClickListener {
-            val isShowing = binding.proControlPanel.visibility == View.VISIBLE
-            if (isShowing) {
-                binding.proControlPanel.visibility = View.GONE
-                binding.histogramView.visibility = View.GONE
-                binding.btnProControls.setBackgroundResource(R.drawable.bg_settings_circle)
-                ImageViewCompat.setImageTintList(binding.btnProControls, ContextCompat.getColorStateList(this, R.color.pixel_text_white))
-            } else {
-                binding.proControlPanel.visibility = View.VISIBLE
-                binding.histogramView.visibility = View.VISIBLE
-                binding.btnProControls.setBackgroundResource(R.drawable.bg_qs_btn_active)
-                ImageViewCompat.setImageTintList(binding.btnProControls, ContextCompat.getColorStateList(this, R.color.pixel_icon_active))
-            }
+            val show = binding.proControlPanel.visibility != View.VISIBLE
+            binding.proControlPanel.visibility = if (show) View.VISIBLE else View.GONE
+            binding.histogramView.visibility = if (show) View.VISIBLE else View.GONE
+            updateProControlsButton()
         }
 
         // Tier 1: Shutter Button
         binding.btnShutter.setOnClickListener {
             onShutterClicked()
+        }
+        // Holding the shutter in Photo mode shoots a burst until it is released
+        binding.btnShutter.setOnLongClickListener {
+            startHoldBurst()
+        }
+        binding.btnShutter.setOnTouchListener { _, event ->
+            if (event.actionMasked == MotionEvent.ACTION_UP || event.actionMasked == MotionEvent.ACTION_CANCEL) {
+                shutterHeld = false
+            } else if (event.actionMasked == MotionEvent.ACTION_DOWN) {
+                shutterHeld = true
+            }
+            false
         }
 
         // Tier 1: Camera Switch (Front <-> Rear)
@@ -1439,6 +1492,8 @@ class MainActivity : AppCompatActivity() {
                     val factory = binding.viewFinder.meteringPointFactory
                     val point = factory.createPoint(event.x, event.y)
                     cameraManager.focusAt(point)
+                    setFocusLocked(false)
+                    lastTapFocus = viewToImagePoint(event.x, event.y)
                     showFocusReticleAndSlider(event.x, event.y)
                     true
                 }
@@ -1617,6 +1672,9 @@ class MainActivity : AppCompatActivity() {
             selectZoomPill(binding.btnZoom1x)
         }
         checkSelfieRingLight()
+        lastTapFocus = null
+        setFocusLocked(false)
+        updateQuickSettingsUi()
     }
 
     /** 16:9 photos and video are letterboxed so the viewfinder shows exactly what is saved. */
@@ -2124,6 +2182,23 @@ class MainActivity : AppCompatActivity() {
         cameraManager.bindCameraUseCases()
         updateZoomPillVisibility()
         updateQuickSettingsUi()
+        updateProControlsButton()
+        lastTapFocus = null
+        setFocusLocked(false)
+        hideQrResult()
+        prefs.edit().putString(SettingsActivity.KEY_LAST_MODE, mode.name).apply()
+    }
+
+    /** The manual-controls button belongs to Pro mode only; it is highlighted while the panel is open. */
+    private fun updateProControlsButton() {
+        // INVISIBLE keeps its slot, so the photo/video toggle stays centred
+        binding.btnProControls.visibility = if (currentMode == CameraMode.PRO) View.VISIBLE else View.INVISIBLE
+        val panelOpen = binding.proControlPanel.visibility == View.VISIBLE
+        binding.btnProControls.setBackgroundResource(if (panelOpen) R.drawable.bg_qs_btn_active else R.drawable.bg_settings_circle)
+        ImageViewCompat.setImageTintList(
+            binding.btnProControls,
+            ContextCompat.getColorStateList(this, if (panelOpen) R.color.pixel_icon_active else R.color.pixel_text_white)
+        )
     }
 
     private fun showFocusReticleAndSlider(x: Float, y: Float) {
@@ -2283,7 +2358,8 @@ class MainActivity : AppCompatActivity() {
                 delay(120)
             }
             val blurStrength = 2f + (portraitBlurProgress / 100f) * 24f
-            val uri: Uri? = cameraManager.capturePhoto(currentMode, blurStrength) { progress ->
+            val focus = lastTapFocus ?: PointF(0.5f, 0.45f)
+            val uri: Uri? = cameraManager.capturePhoto(currentMode, blurStrength, focus.x, focus.y) { progress ->
                 runOnUiThread { showCaptureProgress(progress) }
             }
 
@@ -2323,7 +2399,7 @@ class MainActivity : AppCompatActivity() {
                         binding.progressShutterRing.setProgressCompat(0, false)
                         binding.progressShutterRing.visibility = View.VISIBLE
                         binding.tvShutterCount.visibility = View.VISIBLE
-                        showCaptureChip("Hold steady", 0)
+                        showCaptureChip("Hold steady", 0, duringCapture = true)
                     } else {
                         blinkViewfinder()
                         binding.progressThumbnailSpin.visibility = View.VISIBLE
@@ -2361,8 +2437,9 @@ class MainActivity : AppCompatActivity() {
         binding.viewShutterBlink.animate().alpha(0f).setDuration(220).start()
     }
 
-    private fun showCaptureChip(text: String, iconRes: Int) {
-        captureChipHeldByCapture = iconRes == 0
+    /** [duringCapture] chips belong to a running burst; the others describe what the next shot will do. */
+    private fun showCaptureChip(text: String, iconRes: Int, duringCapture: Boolean) {
+        captureChipHeldByCapture = duringCapture
         binding.tvCaptureChip.text = text
         binding.tvCaptureChip.setCompoundDrawablesRelativeWithIntrinsicBounds(iconRes, 0, 0, 0)
         binding.tvCaptureChip.visibility = View.VISIBLE
@@ -2390,6 +2467,175 @@ class MainActivity : AppCompatActivity() {
         binding.chipHdr.text = if (hdrMode == 2) "HDR+ E" else "HDR+"
         binding.chipHdr.visibility = if (currentMode == CameraMode.CAMERA && hdrMode > 0) View.VISIBLE else View.GONE
         binding.chipRaw.visibility = if (cameraManager.isRawActive()) View.VISIBLE else View.GONE
+
+        val mirror = cameraManager.mirrorEnabled
+        binding.chipMirror.visibility = if (mirror && currentMode != CameraMode.PANORAMA) View.VISIBLE else View.GONE
+        val mirrorText = when {
+            !mirror -> "Off"
+            cameraManager.isFrontCamera() -> "On · saved as previewed"
+            else -> "On · flipped left-to-right"
+        }
+        binding.tvQsMirrorSubtitle.text = mirrorText
+        binding.tvQsVideoMirrorSubtitle.text = mirrorText
+        setQsTextButtonActive(binding.btnQsMirrorOff, !mirror)
+        setQsTextButtonActive(binding.btnQsMirrorOn, mirror)
+        setQsTextButtonActive(binding.btnQsVideoMirrorOff, !mirror)
+        setQsTextButtonActive(binding.btnQsVideoMirrorOn, mirror)
+
+        val motion = cameraManager.topShotMode != CameraManager.TopShotMode.OFF
+        val motionApplies = currentMode == CameraMode.CAMERA || currentMode == CameraMode.PORTRAIT
+        binding.chipMotion.visibility = if (motion && motionApplies) View.VISIBLE else View.GONE
+        binding.tvQsMotionSubtitle.text = if (motion) "On · Photo and Portrait" else "Off"
+        setQsTextButtonActive(binding.btnQsMotionOff, !motion)
+        setQsTextButtonActive(binding.btnQsMotionOn, motion)
+    }
+
+    private fun setQsTextButtonActive(button: TextView, active: Boolean) {
+        button.setBackgroundResource(if (active) R.drawable.bg_qs_btn_active else R.drawable.bg_qs_btn_inactive)
+        button.setTextColor(ContextCompat.getColor(this, if (active) R.color.pixel_pill_text_active else R.color.pixel_text_white))
+    }
+
+    /** Mirror is remembered separately for the front and the back camera. */
+    private fun setMirror(enabled: Boolean) {
+        if (cameraManager.isRecordingVideo() || isCapturing) return
+        if (cameraManager.isFrontCamera()) {
+            cameraManager.mirrorFront = enabled
+            prefs.edit().putBoolean(SettingsActivity.KEY_MIRROR_FRONT, enabled).apply()
+        } else {
+            cameraManager.mirrorBack = enabled
+            prefs.edit().putBoolean(SettingsActivity.KEY_MIRROR_BACK, enabled).apply()
+        }
+        cameraManager.bindCameraUseCases()
+        updateQuickSettingsUi()
+    }
+
+    private fun setMotionPhoto(enabled: Boolean) {
+        cameraManager.topShotMode = if (enabled) CameraManager.TopShotMode.ON else CameraManager.TopShotMode.OFF
+        prefs.edit().putBoolean(SettingsActivity.KEY_MOTION_PHOTO, enabled).apply()
+        updateQuickSettingsUi()
+    }
+
+    /** Long-press holds focus and exposure where you pressed; the next tap releases them. */
+    private fun setFocusLocked(locked: Boolean) {
+        binding.chipLock.visibility = if (locked) View.VISIBLE else View.GONE
+    }
+
+    /**
+     * Where a viewfinder touch lands in the saved photo, as 0..1 fractions.
+     * The viewfinder crops (fill) or letterboxes (fit) the picture, and the front preview is a mirror.
+     */
+    private fun viewToImagePoint(x: Float, y: Float): PointF {
+        val vw = binding.viewFinder.width.toFloat().coerceAtLeast(1f)
+        val vh = binding.viewFinder.height.toFloat().coerceAtLeast(1f)
+        val wide = cameraManager.aspectRatio == AspectRatio.RATIO_16_9
+        val imageAspect = if (wide) 9f / 16f else 3f / 4f   // portrait width / height
+        val viewAspect = vw / vh
+        // Fraction of the image seen across each view axis (>1 means the view shows bars)
+        val fill = binding.viewFinder.scaleType == androidx.camera.view.PreviewView.ScaleType.FILL_CENTER
+        val spanX = if ((viewAspect < imageAspect) == fill) viewAspect / imageAspect else 1f
+        val spanY = if ((viewAspect < imageAspect) == fill) 1f else imageAspect / viewAspect
+        var ix = 0.5f + (x / vw - 0.5f) * spanX
+        val iy = 0.5f + (y / vh - 0.5f) * spanY
+        // Front preview is mirrored; the saved photo is not unless mirror is on
+        if (cameraManager.isFrontCamera() && !cameraManager.mirrorFront) ix = 1f - ix
+        return PointF(ix.coerceIn(0f, 1f), iy.coerceIn(0f, 1f))
+    }
+
+    /** Burst: one photo after another for as long as the shutter stays pressed. */
+    private fun startHoldBurst(): Boolean {
+        if (currentMode != CameraMode.CAMERA || isCapturing || timerJob?.isActive == true) return false
+        isCapturing = true
+        binding.tvShutterCount.text = "0"
+        binding.tvShutterCount.visibility = View.VISIBLE
+        lifecycleScope.launch {
+            var taken = 0
+            var lastUri: Uri? = null
+            while (shutterHeld && taken < MAX_HOLD_BURST) {
+                val uri = cameraManager.captureQuickPhoto() ?: break
+                lastUri = uri
+                taken++
+                binding.tvShutterCount.text = taken.toString()
+                blinkViewfinder()
+            }
+            binding.tvShutterCount.visibility = View.GONE
+            isCapturing = false
+            if (lastUri != null) {
+                latestCapturedUri = lastUri
+                loadLatestGalleryThumbnail()
+                updateStorageBadge()
+            } else {
+                showHint("Capture failed")
+            }
+        }
+        return true
+    }
+
+    private fun toggleVideoPause() {
+        if (!cameraManager.isRecordingVideo()) return
+        videoPaused = !videoPaused
+        if (videoPaused) cameraManager.pauseVideoRecording() else cameraManager.resumeVideoRecording()
+        binding.btnVideoPause.setImageResource(if (videoPaused) R.drawable.ic_play_arrow else R.drawable.ic_pause)
+        binding.btnVideoPause.contentDescription = if (videoPaused) "Resume recording" else "Pause recording"
+        if (videoPaused) {
+            recordingDotAnimator?.pause()
+            binding.viewRecordingDot.alpha = 0.3f
+        } else {
+            recordingDotAnimator?.resume()
+        }
+    }
+
+    /** A photo while recording: the frame on screen, at video resolution. */
+    private fun takeVideoSnapshot() {
+        val frame = binding.viewFinder.bitmap ?: return
+        blinkViewfinder()
+        lifecycleScope.launch {
+            val uri = cameraManager.saveVideoSnapshot(frame)
+            if (uri == null) showHint("Could not save the photo")
+        }
+    }
+
+    private fun showQrResult(text: String) {
+        if (currentMode != CameraMode.CAMERA || isCapturing) return
+        qrText = text
+        val isLink = text.startsWith("http://") || text.startsWith("https://")
+        binding.tvQrResult.text = if (isLink) "Open  ${text.substringAfter("://")}" else "Copy  $text"
+        binding.tvQrResult.visibility = View.VISIBLE
+        qrHideJob?.cancel()
+        qrHideJob = lifecycleScope.launch {
+            delay(QR_RESULT_MS)
+            hideQrResult()
+        }
+    }
+
+    private fun hideQrResult() {
+        qrHideJob?.cancel()
+        binding.tvQrResult.visibility = View.GONE
+    }
+
+    private fun openQrResult() {
+        val text = qrText ?: return
+        hideQrResult()
+        if (text.startsWith("http://") || text.startsWith("https://")) {
+            runCatching { startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(text))) }
+                .onFailure { showHint("No app can open this link") }
+        } else {
+            val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+            clipboard.setPrimaryClip(android.content.ClipData.newPlainText("QR code", text))
+            showHint("Copied")
+        }
+    }
+
+    /** Opens in the mode used last, when that setting is on. */
+    private fun restoreLastMode() {
+        if (!prefs.getBoolean(SettingsActivity.KEY_REMEMBER_MODE, false)) return
+        when (prefs.getString(SettingsActivity.KEY_LAST_MODE, null)) {
+            CameraMode.PORTRAIT.name -> binding.modePortrait.performClick()
+            CameraMode.NIGHT_SIGHT.name -> binding.modeNightSight.performClick()
+            CameraMode.LONG_EXPOSURE.name -> binding.modeLongExposure.performClick()
+            CameraMode.PANORAMA.name -> binding.modePanorama.performClick()
+            CameraMode.PRO.name -> binding.modePro.performClick()
+            CameraMode.VIDEO.name -> binding.btnToggleVideo.performClick()
+        }
     }
 
     /** In dim light Photo mode merges several frames; the moon chip says so before the shot. */
@@ -2398,9 +2644,12 @@ class MainActivity : AppCompatActivity() {
         lowLightJob = lifecycleScope.launch {
             while (isActive) {
                 if (!captureChipHeldByCapture) {
-                    val lowLight = !isCapturing && cameraManager.lowLightFrameCount() > 1
-                    if (lowLight) showCaptureChip("Low light · multi-frame", R.drawable.ic_moon)
-                    else binding.tvCaptureChip.visibility = View.GONE
+                    when {
+                        isCapturing || cameraManager.multiFrameCount() <= 1 -> binding.tvCaptureChip.visibility = View.GONE
+                        cameraManager.isLowLightBurst() ->
+                            showCaptureChip("Low light · multi-frame", R.drawable.ic_moon, duringCapture = false)
+                        else -> showCaptureChip("Zoom · multi-frame", 0, duringCapture = false)
+                    }
                 }
                 delay(LOW_LIGHT_POLL_MS)
             }
@@ -2497,6 +2746,12 @@ class MainActivity : AppCompatActivity() {
     private fun startVideoRecordingUi() {
         binding.btnShutter.setImageResource(R.drawable.bg_shutter_video_recording)
         binding.videoRecordingBanner.visibility = View.VISIBLE
+        videoPaused = false
+        binding.btnVideoPause.setImageResource(R.drawable.ic_pause)
+        binding.btnVideoPause.visibility = View.VISIBLE
+        binding.btnVideoSnapshot.visibility = View.VISIBLE
+        binding.cardGalleryThumbnail.visibility = View.INVISIBLE
+        binding.btnSwitchCamera.visibility = View.INVISIBLE
 
         recordingSeconds = 0
         binding.tvVideoTimer.text = "00:00"
@@ -2514,6 +2769,7 @@ class MainActivity : AppCompatActivity() {
         videoTimerJob = lifecycleScope.launch {
             while (isActive) {
                 delay(1000)
+                if (videoPaused) continue
                 recordingSeconds++
                 val min = recordingSeconds / 60
                 val sec = recordingSeconds % 60
@@ -2525,6 +2781,11 @@ class MainActivity : AppCompatActivity() {
     private fun stopVideoRecordingUi() {
         binding.btnShutter.setImageResource(R.drawable.bg_shutter_video)
         binding.videoRecordingBanner.visibility = View.GONE
+        videoPaused = false
+        binding.btnVideoPause.visibility = View.GONE
+        binding.btnVideoSnapshot.visibility = View.GONE
+        binding.cardGalleryThumbnail.visibility = View.VISIBLE
+        binding.btnSwitchCamera.visibility = View.VISIBLE
         videoTimerJob?.cancel()
         videoTimerJob = null
         recordingDotAnimator?.cancel()
@@ -2542,6 +2803,8 @@ class MainActivity : AppCompatActivity() {
     companion object {
         private const val HINT_DURATION_MS = 3000L
         private const val LOW_LIGHT_POLL_MS = 700L
+        private const val QR_RESULT_MS = 4000L
+        private const val MAX_HOLD_BURST = 30
         private val REQUIRED_PERMISSIONS = arrayOf(
             Manifest.permission.CAMERA,
             Manifest.permission.RECORD_AUDIO
