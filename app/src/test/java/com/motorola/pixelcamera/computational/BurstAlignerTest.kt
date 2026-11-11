@@ -118,4 +118,46 @@ class BurstAlignerTest {
         }
         assertEquals(1, BurstAligner.sharpestIndex(listOf(blurred, sharp, blurred), w, h))
     }
+
+    /**
+     * A near object in front of a plain wall, moving against the background between frames
+     * (parallax), while the frames also differ slightly in brightness. Where a frame's copy of
+     * the object is rejected, the wall must not come out as a visibly different patch.
+     */
+    @Test
+    fun rejectedAreaLeavesNoBrightnessStep() {
+        val texture = scene(w, h, seed = 7)
+        fun frame(objectX: Int, wall: Int, seed: Int): IntArray {
+            val noise = Random(seed)
+            return IntArray(w * h) { i ->
+                val x = i % w
+                val y = i / w
+                // Textured strip along the bottom gives the aligner something to lock onto.
+                val v = when {
+                    y >= 330 -> lum(texture[i])
+                    x in objectX until objectX + 120 && y in 150 until 300 -> 50
+                    else -> wall
+                }
+                gray(v + noise.nextInt(-3, 4))
+            }
+        }
+        val frames = listOf(frame(260, 200, 1), frame(300, 190, 2), frame(340, 192, 3), frame(380, 189, 4))
+
+        val merged = BurstAligner.alignAndMerge(frames, w, h, referenceIndex = 0)
+
+        fun mean(x0: Int, x1: Int, y0: Int, y1: Int): Double {
+            var sum = 0L
+            for (y in y0 until y1) for (x in x0 until x1) sum += lum(merged[y * w + x])
+            return sum.toDouble() / ((x1 - x0) * (y1 - y0))
+        }
+        // Wall the object covered only in the other frames, against wall no frame's object touched.
+        val wherePatchWouldBe = mean(400, 480, 180, 270)
+        val cleanWall = mean(520, 600, 180, 270)
+        assertTrue(
+            "wall brightness differs by ${abs(wherePatchWouldBe - cleanWall)} levels",
+            abs(wherePatchWouldBe - cleanWall) < 0.5
+        )
+        // The object itself must stay where the reference has it, at the reference's darkness.
+        assertEquals(50.0, mean(280, 360, 170, 280), 3.0)
+    }
 }
