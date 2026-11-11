@@ -30,4 +30,9 @@
     <color name="gc_button_bg">#202020</color>
     <color name="gc_icon">#E3E3E3</color>
     <color name="gc_zoom_row">#B31D1D1D</color>
+    <!-- Google Camera settings sheet -->
+    <color name="gc_sheet">#EB000000</color>
+    <color name="gc_qs_btn">#292B2F</color>
+    <color name="gc_qs_icon">#C4C7C5</color>
+    <color name="gc_scrollbar">#6B6B6B</color>
 </resources>

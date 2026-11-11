@@ -649,8 +649,8 @@ class MainActivity : AppCompatActivity() {
         // 8. Grid row
         val activeBg = R.drawable.bg_qs_btn_active
         val inactiveBg = R.drawable.bg_qs_btn_inactive
-        val activeTextColor = ContextCompat.getColor(this, R.color.pixel_pill_text_active)
-        val inactiveTextColor = ContextCompat.getColor(this, R.color.pixel_text_white)
+        val activeTextColor = ContextCompat.getColor(this, R.color.gc_toggle_icon_active)
+        val inactiveTextColor = ContextCompat.getColor(this, R.color.gc_icon)
 
         binding.btnQsGridOff.setBackgroundResource(if (gridMode == 0) activeBg else inactiveBg)
         binding.btnQsGridOff.setTextColor(if (gridMode == 0) activeTextColor else inactiveTextColor)
@@ -736,8 +736,8 @@ class MainActivity : AppCompatActivity() {
         }
         val activeBg = R.drawable.bg_qs_btn_active
         val inactiveBg = R.drawable.bg_qs_btn_inactive
-        val activeTextColor = ContextCompat.getColor(this, R.color.pixel_pill_text_active)
-        val inactiveTextColor = ContextCompat.getColor(this, R.color.pixel_text_white)
+        val activeTextColor = ContextCompat.getColor(this, R.color.gc_toggle_icon_active)
+        val inactiveTextColor = ContextCompat.getColor(this, R.color.gc_icon)
         binding.btnQsVideoGridOff.setBackgroundResource(if (gridMode == 0) activeBg else inactiveBg)
         binding.btnQsVideoGridOff.setTextColor(if (gridMode == 0) activeTextColor else inactiveTextColor)
         binding.btnQsVideoGrid3x3.setBackgroundResource(if (gridMode == 1) activeBg else inactiveBg)
@@ -748,12 +748,12 @@ class MainActivity : AppCompatActivity() {
 
     private fun setQsPillActive(view: TextView, active: Boolean) {
         if (active) {
-            view.setBackgroundResource(R.drawable.bg_segmented_pill_active)
-            view.setTextColor(ContextCompat.getColor(this, R.color.pixel_pill_text_active))
-            view.paint.isFakeBoldText = true
+            view.setBackgroundResource(R.drawable.bg_qs_btn_active)
+            view.setTextColor(ContextCompat.getColor(this, R.color.gc_toggle_icon_active))
+            view.paint.isFakeBoldText = false
         } else {
-            view.background = null
-            view.setTextColor(ContextCompat.getColor(this, R.color.pixel_text_white))
+            view.setBackgroundResource(R.drawable.bg_qs_btn_inactive)
+            view.setTextColor(ContextCompat.getColor(this, R.color.gc_icon))
             view.paint.isFakeBoldText = false
         }
     }
@@ -769,10 +769,10 @@ class MainActivity : AppCompatActivity() {
     private fun setQsButtonActive(button: ImageView, active: Boolean) {
         if (active) {
             button.setBackgroundResource(R.drawable.bg_qs_btn_active)
-            ImageViewCompat.setImageTintList(button, ContextCompat.getColorStateList(this, R.color.pixel_icon_active))
+            ImageViewCompat.setImageTintList(button, ContextCompat.getColorStateList(this, R.color.gc_toggle_icon_active))
         } else {
             button.setBackgroundResource(R.drawable.bg_qs_btn_inactive)
-            ImageViewCompat.setImageTintList(button, ContextCompat.getColorStateList(this, R.color.pixel_text_secondary))
+            ImageViewCompat.setImageTintList(button, ContextCompat.getColorStateList(this, R.color.gc_qs_icon))
         }
     }
 
@@ -873,6 +873,8 @@ class MainActivity : AppCompatActivity() {
             toggleQuickSettings()
         }
 
+        setupSettingsSheetDrag()
+
         // Tapping viewfinder when Quick Settings is open closes it
         binding.viewFinder.setOnClickListener {
             if (binding.quickSettingsContainer.visibility == View.VISIBLE) {
@@ -954,13 +956,9 @@ class MainActivity : AppCompatActivity() {
         // MGC 9.7 Segmented Tabs: [ General | Pro ]
         binding.tabQsGeneral.setOnClickListener {
             isProTabActive = false
-            binding.tabQsGeneral.setBackgroundResource(R.drawable.bg_segmented_pill_active)
-            binding.tabQsGeneral.setTextColor(ContextCompat.getColor(this, R.color.pixel_pill_text_active))
-            binding.tabQsGeneral.paint.isFakeBoldText = true
-
-            binding.tabQsPro.background = null
-            binding.tabQsPro.setTextColor(ContextCompat.getColor(this, R.color.pixel_text_white))
-            binding.tabQsPro.paint.isFakeBoldText = false
+            binding.quickSettingsSheet.minimumHeight = binding.quickSettingsSheet.height
+            setQsTab(binding.tabQsGeneral, true)
+            setQsTab(binding.tabQsPro, false)
 
             binding.containerQsGeneral.visibility = View.VISIBLE
             binding.containerQsPro.visibility = View.GONE
@@ -968,13 +966,9 @@ class MainActivity : AppCompatActivity() {
 
         binding.tabQsPro.setOnClickListener {
             isProTabActive = true
-            binding.tabQsPro.setBackgroundResource(R.drawable.bg_segmented_pill_active)
-            binding.tabQsPro.setTextColor(ContextCompat.getColor(this, R.color.pixel_pill_text_active))
-            binding.tabQsPro.paint.isFakeBoldText = true
-
-            binding.tabQsGeneral.background = null
-            binding.tabQsGeneral.setTextColor(ContextCompat.getColor(this, R.color.pixel_text_white))
-            binding.tabQsGeneral.paint.isFakeBoldText = false
+            binding.quickSettingsSheet.minimumHeight = binding.quickSettingsSheet.height
+            setQsTab(binding.tabQsPro, true)
+            setQsTab(binding.tabQsGeneral, false)
 
             binding.containerQsGeneral.visibility = View.GONE
             binding.containerQsPro.visibility = View.VISIBLE
@@ -983,17 +977,17 @@ class MainActivity : AppCompatActivity() {
         // Pro Tab: Lens Selection (Auto vs Manual)
         binding.btnQsLensAuto.setOnClickListener {
             binding.btnQsLensAuto.setBackgroundResource(R.drawable.bg_segmented_pill_active)
-            binding.btnQsLensAuto.setTextColor(ContextCompat.getColor(this, R.color.pixel_pill_text_active))
+            binding.btnQsLensAuto.setTextColor(ContextCompat.getColor(this, R.color.gc_toggle_icon_active))
             binding.btnQsLensManual.setBackgroundResource(R.drawable.bg_qs_btn_inactive)
-            binding.btnQsLensManual.setTextColor(ContextCompat.getColor(this, R.color.pixel_text_white))
+            binding.btnQsLensManual.setTextColor(ContextCompat.getColor(this, R.color.gc_icon))
             binding.tvQsLensSubtitle.text = "Auto"
         }
 
         binding.btnQsLensManual.setOnClickListener {
             binding.btnQsLensManual.setBackgroundResource(R.drawable.bg_segmented_pill_active)
-            binding.btnQsLensManual.setTextColor(ContextCompat.getColor(this, R.color.pixel_pill_text_active))
+            binding.btnQsLensManual.setTextColor(ContextCompat.getColor(this, R.color.gc_toggle_icon_active))
             binding.btnQsLensAuto.setBackgroundResource(R.drawable.bg_qs_btn_inactive)
-            binding.btnQsLensAuto.setTextColor(ContextCompat.getColor(this, R.color.pixel_text_white))
+            binding.btnQsLensAuto.setTextColor(ContextCompat.getColor(this, R.color.gc_icon))
             binding.tvQsLensSubtitle.text = "Manual"
         }
 
@@ -1480,25 +1474,54 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun toggleQuickSettings() {
-        if (binding.quickSettingsContainer.visibility == View.VISIBLE) {
-            binding.quickSettingsContainer.animate()
-                .alpha(0f)
-                .translationY(-40f)
-                .setDuration(180)
+        val sheet = binding.quickSettingsContainer
+        val travel = (sheet.height.takeIf { it > 0 } ?: resources.displayMetrics.heightPixels / 2).toFloat()
+        if (sheet.visibility == View.VISIBLE) {
+            sheet.animate()
+                .translationY(travel)
+                .setDuration(200)
                 .withEndAction {
-                    binding.quickSettingsContainer.visibility = View.GONE
+                    sheet.visibility = View.GONE
+                    sheet.translationY = 0f
                 }
                 .start()
         } else {
             updateQuickSettingsUi()
-            binding.quickSettingsContainer.alpha = 0f
-            binding.quickSettingsContainer.translationY = -40f
-            binding.quickSettingsContainer.visibility = View.VISIBLE
-            binding.quickSettingsContainer.animate()
-                .alpha(1f)
+            binding.quickSettingsSheet.minimumHeight = 0
+            sheet.alpha = 1f
+            sheet.translationY = travel
+            sheet.visibility = View.VISIBLE
+            sheet.animate()
                 .translationY(0f)
-                .setDuration(220)
+                .setDuration(250)
+                .setInterpolator(android.view.animation.DecelerateInterpolator())
                 .start()
+        }
+    }
+
+    /** Google Camera's settings tabs: two separate pills, the chosen one light blue. */
+    private fun setQsTab(tab: TextView, active: Boolean) {
+        tab.setBackgroundResource(if (active) R.drawable.bg_gc_tab_active else R.drawable.bg_gc_tab_inactive)
+        tab.setTextColor(ContextCompat.getColor(this, if (active) R.color.gc_toggle_icon_active else R.color.gc_icon))
+    }
+
+    /** Dragging the sheet's top part (handle, title) down closes it, as a bottom sheet does. */
+    @android.annotation.SuppressLint("ClickableViewAccessibility")
+    private fun setupSettingsSheetDrag() {
+        val sheet = binding.quickSettingsContainer
+        val closeAfter = 80 * resources.displayMetrics.density
+        var downY = 0f
+        binding.quickSettingsSheet.setOnTouchListener { _, e ->
+            when (e.actionMasked) {
+                MotionEvent.ACTION_DOWN -> { downY = e.rawY; true }
+                MotionEvent.ACTION_MOVE -> { sheet.translationY = (e.rawY - downY).coerceAtLeast(0f); true }
+                MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                    if (sheet.translationY > closeAfter) toggleQuickSettings()
+                    else sheet.animate().translationY(0f).setDuration(150).start()
+                    true
+                }
+                else -> false
+            }
         }
     }
 
@@ -1648,8 +1671,8 @@ class MainActivity : AppCompatActivity() {
         prefs.edit().putInt(SettingsActivity.KEY_GRID_MODE, mode).apply()
         val activeBg = R.drawable.bg_qs_btn_active
         val inactiveBg = R.drawable.bg_qs_btn_inactive
-        val activeTextColor = ContextCompat.getColor(this, R.color.pixel_pill_text_active)
-        val inactiveTextColor = ContextCompat.getColor(this, R.color.pixel_text_white)
+        val activeTextColor = ContextCompat.getColor(this, R.color.gc_toggle_icon_active)
+        val inactiveTextColor = ContextCompat.getColor(this, R.color.gc_icon)
 
         binding.btnQsGridOff.setBackgroundResource(if (mode == 0) activeBg else inactiveBg)
         binding.btnQsGridOff.setTextColor(if (mode == 0) activeTextColor else inactiveTextColor)
@@ -2542,7 +2565,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun setQsTextButtonActive(button: TextView, active: Boolean) {
         button.setBackgroundResource(if (active) R.drawable.bg_qs_btn_active else R.drawable.bg_qs_btn_inactive)
-        button.setTextColor(ContextCompat.getColor(this, if (active) R.color.pixel_pill_text_active else R.color.pixel_text_white))
+        button.setTextColor(ContextCompat.getColor(this, if (active) R.color.gc_toggle_icon_active else R.color.gc_icon))
     }
 
     /** Mirror is remembered separately for the front and the back camera. */

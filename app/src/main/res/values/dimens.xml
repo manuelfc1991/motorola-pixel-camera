@@ -4,4 +4,5 @@
     <dimen name="gc_preview_top">71dp</dimen>
     <dimen name="gc_zoom_top">546dp</dimen>
     <dimen name="gc_deck_top">660dp</dimen>
+    <dimen name="gc_sheet_top">288dp</dimen>
 </resources>
