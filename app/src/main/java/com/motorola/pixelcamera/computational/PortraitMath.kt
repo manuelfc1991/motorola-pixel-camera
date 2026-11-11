@@ -11,10 +11,25 @@ import kotlin.math.min
 internal object PortraitMath {
 
     /** How far (in normalised depth) something may sit from the subject and stay fully sharp. */
-    private const val DEPTH_SHARP_BAND = 0.06f
+    private const val DEPTH_SHARP_BAND = 0.05f
 
     /** Depth distance at which the background reaches full blur. */
-    private const val DEPTH_FULL_BLUR = 0.40f
+    private const val DEPTH_FULL_BLUR = 0.35f
+
+    /** Things in front of the subject get this share of the blur things behind it get. */
+    private const val FRONT_BLUR_SHARE = 0.5f
+
+    /** Least blur for anything well away from the subject, whatever its depth says. */
+    private const val MIN_BLUR_AWAY = 0.4f
+
+    /** Mask pixels this much farther than the focused spot belong to something else. */
+    private const val BEHIND_SUBJECT_CUT = 0.18f
+
+    /** Grids at least this wide and tall get their blur map computed at half size. */
+    private const val HALF_SIZE_FROM = 256
+
+    /** The focused spot's depth is sampled within width / this around the seed pixel. */
+    private const val SEED_REACH_DIVISOR = 6
 
     /** Below this share of the frame the segmenter found nothing worth calling a subject. */
     const val MIN_SUBJECT_SHARE = 0.01f
@@ -84,21 +99,113 @@ internal object PortraitMath {
     }
 
     /**
+     * Narrows a subject mask to the one object at the focus point.
+     *
+     * The segmenter marks everything that stands out, so a monitor or keyboard behind the real
+     * subject would stay sharp too. Starting from the mask pixel nearest the focus point, this
+     * keeps only what is connected to it and, when depth is known, not clearly behind it.
+     */
+    fun isolateSubject(
+        alpha: FloatArray, depth: FloatArray?, w: Int, h: Int, focusX: Float, focusY: Float
+    ): FloatArray {
+        val solid = BooleanArray(alpha.size) { alpha[it] > 0.5f }
+        val fx = (focusX * w).toInt().coerceIn(0, w - 1)
+        val fy = (focusY * h).toInt().coerceIn(0, h - 1)
+        val seed = nearest(solid, w, fx, fy)
+        if (seed < 0) return alpha.copyOf()
+        var keep = flood(solid, w, h, seed)
+
+        if (depth != null) {
+            // Depth of the subject where it was focused: median of its pixels around the seed.
+            val reach = w / SEED_REACH_DIVISOR
+            val sx = seed % w
+            val sy = seed / w
+            val samples = ArrayList<Float>()
+            for (y in max(0, sy - reach)..min(h - 1, sy + reach)) {
+                for (x in max(0, sx - reach)..min(w - 1, sx + reach)) {
+                    if (keep[y * w + x]) samples.add(depth[y * w + x])
+                }
+            }
+            samples.sort()
+            val seedDepth = samples[samples.size / 2]
+            val gated = BooleanArray(alpha.size) { keep[it] && depth[it] > seedDepth - BEHIND_SUBJECT_CUT }
+            val gatedSeed = nearest(gated, w, fx, fy)
+            if (gatedSeed >= 0) keep = flood(gated, w, h, gatedSeed)
+        }
+
+        // Soften the cut so a removed neighbour does not leave a hard step in the mask.
+        val soft = boxBlur(boxBlur(FloatArray(alpha.size) { if (keep[it]) 1f else 0f }, w, h, 3), w, h, 3)
+        return FloatArray(alpha.size) { alpha[it] * soft[it] }
+    }
+
+    /** Index of the set pixel closest to (fx, fy), or -1 when none is set. */
+    private fun nearest(mask: BooleanArray, w: Int, fx: Int, fy: Int): Int {
+        var best = -1
+        var bestDistance = Long.MAX_VALUE
+        for (i in mask.indices) {
+            if (!mask[i]) continue
+            val dx = (i % w - fx).toLong()
+            val dy = (i / w - fy).toLong()
+            val distance = dx * dx + dy * dy
+            if (distance < bestDistance) {
+                bestDistance = distance
+                best = i
+            }
+        }
+        return best
+    }
+
+    /** All set pixels 4-connected to [seed]. */
+    private fun flood(mask: BooleanArray, w: Int, h: Int, seed: Int): BooleanArray {
+        val keep = BooleanArray(mask.size)
+        val stack = IntArray(mask.size)
+        var top = 0
+        stack[top++] = seed
+        keep[seed] = true
+        while (top > 0) {
+            val i = stack[--top]
+            val x = i % w
+            val y = i / w
+            if (x > 0 && mask[i - 1] && !keep[i - 1]) { keep[i - 1] = true; stack[top++] = i - 1 }
+            if (x < w - 1 && mask[i + 1] && !keep[i + 1]) { keep[i + 1] = true; stack[top++] = i + 1 }
+            if (y > 0 && mask[i - w] && !keep[i - w]) { keep[i - w] = true; stack[top++] = i - w }
+            if (y < h - 1 && mask[i + w] && !keep[i + w]) { keep[i + w] = true; stack[top++] = i + w }
+        }
+        return keep
+    }
+
+    /**
      * Blur amount per pixel, 0 (sharp) to 1 (full blur).
-     * The subject mask always stays sharp. Outside it, blur grows with distance in depth from
-     * the subject, so the floor at the subject's feet stays crisp and the far wall melts away.
+     * The subject mask always stays sharp. Outside it:
+     *  - blur grows with how far behind the subject something is, so the surface the subject
+     *    stands on stays crisp and the far wall melts away;
+     *  - things in front of the subject blur only half as much;
+     *  - away from the subject there is always some blur, which covers objects whose depth the
+     *    model misjudged;
+     *  - the map is smoothed so depth noise cannot leave blotches.
      * Without a depth map everything outside the mask gets full blur.
      */
-    fun blurAmount(alpha: FloatArray?, depth: FloatArray?, subjectDepth: Float): FloatArray {
-        val size = alpha?.size ?: depth?.size ?: 0
-        return FloatArray(size) { i ->
-            val outside = 1f - (alpha?.get(i) ?: 0f)
-            val byDepth = if (depth == null) 1f else {
-                val distance = abs(depth[i] - subjectDepth)
-                smoothStep(DEPTH_SHARP_BAND, DEPTH_FULL_BLUR, distance)
-            }
-            outside * byDepth
+    fun blurAmount(alpha: FloatArray?, depth: FloatArray?, subjectDepth: Float, w: Int, h: Int): FloatArray {
+        val size = w * h
+        if (depth == null) return FloatArray(size) { 1f - (alpha?.get(it) ?: 0f) }
+
+        // The map is smooth by construction, so large grids work it out at half size.
+        val step = if (w >= HALF_SIZE_FROM && h >= HALF_SIZE_FROM) 2 else 1
+        val mw = w / step
+        val mh = h / step
+        val smallAlpha = alpha?.let { resizeBilinear(it, w, h, mw, mh) }
+        val smallDepth = resizeBilinear(depth, w, h, mw, mh)
+
+        val nearSubject = smallAlpha?.let { boxBlur(boxBlur(it, mw, mh, mw / 8), mw, mh, mw / 8) }
+        val raw = FloatArray(mw * mh) { i ->
+            val behind = subjectDepth - smallDepth[i]
+            val byDepth = if (behind >= 0f) smoothStep(DEPTH_SHARP_BAND, DEPTH_FULL_BLUR, behind)
+            else FRONT_BLUR_SHARE * smoothStep(DEPTH_SHARP_BAND * 2f, DEPTH_FULL_BLUR * 1.5f, -behind)
+            val floor = if (nearSubject == null) 0f else MIN_BLUR_AWAY * (1f - smoothStep(0f, 0.3f, nearSubject[i]))
+            max(byDepth, floor)
         }
+        val smooth = resizeBilinear(boxBlur(boxBlur(raw, mw, mh, mw / 64), mw, mh, mw / 64), mw, mh, w, h)
+        return FloatArray(size) { (1f - (alpha?.get(it) ?: 0f)) * smooth[it] }
     }
 
     fun smoothStep(edge0: Float, edge1: Float, x: Float): Float {

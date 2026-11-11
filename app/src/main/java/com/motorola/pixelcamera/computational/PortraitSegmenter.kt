@@ -2,13 +2,17 @@ package com.motorola.pixelcamera.computational
 
 import android.content.Context
 import android.graphics.Bitmap
+import android.os.SystemClock
 import android.util.Log
 import org.tensorflow.lite.Interpreter
+import org.tensorflow.lite.gpu.GpuDelegate
+import org.tensorflow.lite.gpu.GpuDelegateFactory
 import java.io.FileInputStream
 import java.io.IOException
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.nio.channels.FileChannel
+import java.util.concurrent.Executors
 
 /**
  * Finds the subject and the scene depth of a photo with on-device neural models.
@@ -36,6 +40,10 @@ object PortraitSegmenter {
     private const val THREADS = 4
 
     private val lock = Any()
+
+    /** A GPU-backed interpreter only works on the thread that created it, so all model work
+     *  happens on this one thread. */
+    private val modelThread = Executors.newSingleThreadExecutor { Thread(it, "portrait-models") }
     private val interpreters = HashMap<String, Interpreter?>()
 
     fun isAvailable(context: Context): Boolean =
@@ -45,7 +53,27 @@ object PortraitSegmenter {
      * Returns the subject mask (1 = subject) and depth (1 = nearest) for [input],
      * or null when no model is installed or inference fails.
      */
-    fun analyse(context: Context, input: Bitmap): SubjectMap? = synchronized(lock) {
+    /**
+     * Loads the models ahead of the first shot. Preparing them for the GPU takes seconds the
+     * first time, so this runs in the background as soon as Portrait mode opens.
+     */
+    fun warmUp(context: Context) {
+        val appContext = context.applicationContext
+        modelThread.execute {
+            synchronized(lock) {
+                try {
+                    for (asset in listOf(SEGMENT_MODEL, MATTING_MODEL, DEPTH_MODEL)) interpreter(appContext, asset)
+                } catch (e: Exception) {
+                    Log.w(TAG, "Portrait model warm-up failed", e)
+                }
+            }
+        }
+    }
+
+    fun analyse(context: Context, input: Bitmap): SubjectMap? =
+        modelThread.submit<SubjectMap?> { analyseOnModelThread(context, input) }.get()
+
+    private fun analyseOnModelThread(context: Context, input: Bitmap): SubjectMap? = synchronized(lock) {
         try {
             val landscape = input.width > input.height
             val w = if (landscape) MATTE_LONG else MATTE_SHORT
@@ -55,9 +83,13 @@ object PortraitSegmenter {
             work.getPixels(pixels, 0, w, 0, 0, w, h)
             if (work !== input) work.recycle()
 
+            val t0 = SystemClock.elapsedRealtime()
             val coarse = segment(context, pixels, w, h)
+            val t1 = SystemClock.elapsedRealtime()
             val alpha = coarse?.let { refine(context, pixels, it, w, h, landscape) ?: it }
+            val t2 = SystemClock.elapsedRealtime()
             val depth = depth(context, pixels, w, h)
+            Log.i(TAG, "segment ${t1 - t0} ms, matting ${t2 - t1} ms, depth ${SystemClock.elapsedRealtime() - t2} ms")
             if (alpha == null && depth == null) null else SubjectMap(w, h, alpha, depth)
         } catch (e: Exception) {
             Log.w(TAG, "Portrait models failed, falling back to radial blur", e)
@@ -128,7 +160,7 @@ object PortraitSegmenter {
             context.assets.openFd(asset).use { fd ->
                 FileInputStream(fd.fileDescriptor).use { stream ->
                     val model = stream.channel.map(FileChannel.MapMode.READ_ONLY, fd.startOffset, fd.declaredLength)
-                    Interpreter(model, Interpreter.Options().setNumThreads(THREADS))
+                    create(context, model, asset)
                 }
             }
         } catch (e: IOException) {
@@ -136,6 +168,28 @@ object PortraitSegmenter {
         }
         interpreters[asset] = created
         return created
+    }
+
+    /** GPU first: several times faster than the CPU here. Any failure falls back to the CPU. */
+    private fun create(context: Context, model: ByteBuffer, asset: String): Interpreter {
+        try {
+            // The GPU programs built for a model are kept on disk, so later launches skip the wait.
+            val options = GpuDelegateFactory.Options().setSerializationParams(
+                context.codeCacheDir.absolutePath, asset.substringAfterLast('/').substringBefore('.')
+            )
+            val gpu = GpuDelegate(options)
+            try {
+                return Interpreter(model, Interpreter.Options().addDelegate(gpu)).also {
+                    Log.i(TAG, "$asset runs on the GPU")
+                }
+            } catch (e: Exception) {
+                gpu.close()
+                Log.i(TAG, "$asset cannot use the GPU: ${e.message?.take(120)}")
+            }
+        } catch (e: Throwable) {
+            Log.i(TAG, "No GPU delegate on this device: ${e.message?.take(120)}")
+        }
+        return Interpreter(model, Interpreter.Options().setNumThreads(THREADS))
     }
 
     private fun hasAsset(context: Context, asset: String): Boolean = try {

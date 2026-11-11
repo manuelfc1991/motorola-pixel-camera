@@ -28,7 +28,7 @@ object PortraitEngine {
 
     private const val TAG = "PortraitEngine"
 
-    /** Slider value (1..40) to blur radius on the 768 px working grid. */
+    /** Slider value (1..40) to blur radius in pixels of the 768 px working grid. */
     private const val RADIUS_PER_STEP = 0.6f
 
     /** Blur amount at which the blurred layer fully replaces the sharp photo. */
@@ -44,7 +44,9 @@ object PortraitEngine {
         if (blurIntensity.toInt() <= 1) return@withContext input
         val started = SystemClock.elapsedRealtime()
         val map = PortraitSegmenter.analyse(context, input)
+        val analysed = SystemClock.elapsedRealtime()
         val result = map?.let { depthBokeh(input, it, focusX, focusY, blurIntensity) }
+        Log.i(TAG, "models ${analysed - started} ms, blur ${SystemClock.elapsedRealtime() - analysed} ms")
         if (result != null) {
             Log.i(TAG, "AI portrait in ${SystemClock.elapsedRealtime() - started} ms")
             return@withContext result
@@ -56,12 +58,15 @@ object PortraitEngine {
     private fun depthBokeh(
         input: Bitmap, map: PortraitSegmenter.SubjectMap, focusX: Float, focusY: Float, blurIntensity: Float
     ): Bitmap? {
+        val began = SystemClock.elapsedRealtime()
         val w = map.width
         val h = map.height
         val size = w * h
         val depth = map.depth
         // A mask that covers almost nothing means no person or object stood out.
-        val alpha = map.alpha?.takeIf { PortraitMath.subjectShare(it) >= PortraitMath.MIN_SUBJECT_SHARE }
+        val alpha = map.alpha
+            ?.takeIf { PortraitMath.subjectShare(it) >= PortraitMath.MIN_SUBJECT_SHARE }
+            ?.let { PortraitMath.isolateSubject(it, depth, w, h, focusX, focusY) }
 
         val subjectDepth = when {
             alpha != null && depth != null -> PortraitMath.subjectDepth(alpha, depth)
@@ -74,43 +79,57 @@ object PortraitEngine {
             alpha != null -> 0f
             else -> return null
         }
-        val amount = PortraitMath.blurAmount(alpha, depth, subjectDepth)
+        val amount = PortraitMath.blurAmount(alpha, depth, subjectDepth, w, h)
 
-        val small = Bitmap.createScaledBitmap(input, w, h, true)
-        val pixels = IntArray(size)
-        small.getPixels(pixels, 0, w, 0, 0, w, h)
+        val mapped = SystemClock.elapsedRealtime()
+
+        // Blurred colours carry no fine detail, so they are worked out on a half-size grid.
+        val bw = w / 2
+        val bh = h / 2
+        val blurSize = bw * bh
+        val small = Bitmap.createScaledBitmap(input, bw, bh, true)
+        val pixels = IntArray(blurSize)
+        small.getPixels(pixels, 0, bw, 0, 0, bw, bh)
         if (small !== input) small.recycle()
 
-        val background = FloatArray(size) { 1f - (alpha?.get(it) ?: 0f) }
-        val radius = (blurIntensity * RADIUS_PER_STEP).toInt().coerceAtLeast(2)
-        // Two strengths per colour channel: near-background gets the mild one, far gets the strong one.
-        val mild = Array(3) { FloatArray(0) }
-        val strong = Array(3) { FloatArray(0) }
-        IntStream.range(0, 6).parallel().forEach { job ->
-            val c = job % 3
+        val background = if (alpha == null) FloatArray(blurSize) { 1f }
+        else PortraitMath.resizeBilinear(alpha, w, h, bw, bh).also { for (i in it.indices) it[i] = 1f - it[i] }
+        val amountSmall = PortraitMath.resizeBilinear(amount, w, h, bw, bh)
+        val radius = (blurIntensity * RADIUS_PER_STEP / 2f).toInt().coerceAtLeast(2)
+
+        // Per colour channel: a mild and a strong blur, mixed by how far behind the pixel is.
+        val colour = Array(3) { FloatArray(0) }
+        IntStream.range(0, 3).parallel().forEach { c ->
             val shift = 16 - 8 * c
-            val channel = FloatArray(size) { ((pixels[it] shr shift) and 0xFF).toFloat() }
-            if (job < 3) mild[c] = PortraitMath.backgroundBlur(channel, background, w, h, (radius / 2).coerceAtLeast(1))
-            else strong[c] = PortraitMath.backgroundBlur(channel, background, w, h, radius)
+            val channel = FloatArray(blurSize) { ((pixels[it] shr shift) and 0xFF).toFloat() }
+            val mild = PortraitMath.backgroundBlur(channel, background, bw, bh, (radius / 2).coerceAtLeast(1))
+            val strong = PortraitMath.backgroundBlur(channel, background, bw, bh, radius)
+            for (i in 0 until blurSize) {
+                val mix = ((amountSmall[i] - FULL_COVER_AT) / (1f - FULL_COVER_AT)).coerceIn(0f, 1f)
+                mild[i] += (strong[i] - mild[i]) * mix
+            }
+            colour[c] = PortraitMath.resizeBilinear(mild, bw, bh, w, h)
         }
 
-        // Blurred layer whose own alpha says how much of the sharp photo it hides.
+        // Blurred layer whose own alpha says how much of the sharp photo it hides. The alpha
+        // stays on the full grid so the subject's outline keeps its precision.
         val layerPixels = IntArray(size)
         for (i in 0 until size) {
-            val a = amount[i]
-            val cover = (a / FULL_COVER_AT).coerceAtMost(1f)
-            val mix = ((a - FULL_COVER_AT) / (1f - FULL_COVER_AT)).coerceIn(0f, 1f)
-            val r = (mild[0][i] + (strong[0][i] - mild[0][i]) * mix).toInt().coerceIn(0, 255)
-            val g = (mild[1][i] + (strong[1][i] - mild[1][i]) * mix).toInt().coerceIn(0, 255)
-            val b = (mild[2][i] + (strong[2][i] - mild[2][i]) * mix).toInt().coerceIn(0, 255)
+            val cover = (amount[i] / FULL_COVER_AT).coerceAtMost(1f)
+            val r = colour[0][i].toInt().coerceIn(0, 255)
+            val g = colour[1][i].toInt().coerceIn(0, 255)
+            val b = colour[2][i].toInt().coerceIn(0, 255)
             layerPixels[i] = ((cover * 255f).toInt() shl 24) or (r shl 16) or (g shl 8) or b
         }
         val layer = Bitmap.createBitmap(layerPixels, w, h, Bitmap.Config.ARGB_8888)
+        val blurred = SystemClock.elapsedRealtime()
 
         val output = input.copy(Bitmap.Config.ARGB_8888, true)
         val paint = Paint(Paint.FILTER_BITMAP_FLAG or Paint.ANTI_ALIAS_FLAG)
         Canvas(output).drawBitmap(layer, null, Rect(0, 0, output.width, output.height), paint)
         layer.recycle()
+        Log.i(TAG, "blur map ${mapped - began} ms, layers ${blurred - mapped} ms, " +
+            "composite ${SystemClock.elapsedRealtime() - blurred} ms")
         return output
     }
 
