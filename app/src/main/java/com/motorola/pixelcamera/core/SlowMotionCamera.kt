@@ -72,9 +72,16 @@ class SlowMotionCamera(private val context: Context) {
     @SuppressLint("MissingPermission")
     fun open(mode: Mode, texture: SurfaceTexture, onReady: (Boolean) -> Unit) {
         val main = Handler(context.mainLooper)
-        fun report(ok: Boolean) { main.post { onReady(ok) } }
+        var reported = false
+        fun report(ok: Boolean) {
+            if (reported) return
+            reported = true
+            pendingReady = null
+            main.post { onReady(ok) }
+        }
         handler.post {
             closeNow()
+            pendingReady = { report(false) }
             this.mode = mode
             val manager = context.getSystemService(Context.CAMERA_SERVICE) as Camera2Manager
             // The preview keeps the recording's shape; the driver scales it down for the screen.
@@ -108,16 +115,32 @@ class SlowMotionCamera(private val context: Context) {
                 override fun onOpened(camera: CameraDevice) { delivered = true; onOpened(camera) }
                 override fun onDisconnected(camera: CameraDevice) {
                     camera.close()
-                    if (delivered) { Log.w(TAG, "Camera taken away"); closeNow() } else retry()
+                    if (delivered) { Log.w(TAG, "Camera taken away"); lost() } else retry()
                 }
                 override fun onError(camera: CameraDevice, error: Int) {
                     camera.close()
-                    if (delivered) { Log.e(TAG, "Camera error $error"); closeNow() } else retry()
+                    if (delivered) { Log.e(TAG, "Camera error $error"); lost() } else retry()
                 }
             }, handler)
         } catch (e: CameraAccessException) {
             retry()
+        } catch (e: Exception) {
+            // Camera switched off by policy, or gone: not worth retrying.
+            Log.e(TAG, "Camera cannot be opened", e)
+            onFailed()
         }
+    }
+
+    /** Called on the main thread when the camera is taken away after it was opened. */
+    var onLost: (() -> Unit)? = null
+    private var pendingReady: (() -> Unit)? = null
+
+    /** The camera went away under us: save what was recorded, free everything, tell the screen. */
+    private fun lost() {
+        stopNow()
+        val waiting = pendingReady
+        closeNow()
+        if (waiting != null) waiting() else Handler(context.mainLooper).post { onLost?.invoke() }
     }
 
     private fun configure(camera: CameraDevice, preview: Surface, input: Surface, mode: Mode, report: (Boolean) -> Unit) {
@@ -263,6 +286,7 @@ class SlowMotionCamera(private val context: Context) {
         runCatching { recorderSurface?.release() }
         recorderSurface = null
         mode = null
+        pendingReady = null
     }
 
     fun release() {

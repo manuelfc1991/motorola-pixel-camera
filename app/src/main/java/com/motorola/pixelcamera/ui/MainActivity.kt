@@ -109,7 +109,18 @@ class MainActivity : AppCompatActivity() {
     private var videoPaused = false
 
     // Slow motion runs outside CameraX, on its own camera session.
-    private val slowMotion by lazy { com.motorola.pixelcamera.core.SlowMotionCamera(applicationContext) }
+    private val slowMotion by lazy {
+        com.motorola.pixelcamera.core.SlowMotionCamera(applicationContext).apply {
+            // Another app or the system took the camera: go back to the normal preview.
+            onLost = {
+                if (slowMode != null && !isDestroyed) {
+                    stopVideoRecordingUi()
+                    leaveSlowMotion(rebind = true)
+                    showHint("Slow motion stopped · camera was taken by another app")
+                }
+            }
+        }
+    }
     private var slowMode: com.motorola.pixelcamera.core.SlowMotionCamera.Mode? = null
     private var slowModeSwitching = false
     private var lastTapFocus: PointF? = null   // where the last tap lands in the saved photo
@@ -912,9 +923,13 @@ class MainActivity : AppCompatActivity() {
             try {
                 val bitmap = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
                     val source = ImageDecoder.createSource(contentResolver, uri)
-                    ImageDecoder.decodeBitmap(source) { decoder, _, _ ->
+                    ImageDecoder.decodeBitmap(source) { decoder, info, _ ->
                         decoder.isMutableRequired = false
                         decoder.allocator = ImageDecoder.ALLOCATOR_SOFTWARE
+                        // A 32 MP photo at full size is past what a view may draw (100 MB).
+                        var sample = 1
+                        while (maxOf(info.size.width, info.size.height) / sample > MAX_PREVIEW_EDGE) sample *= 2
+                        decoder.setTargetSampleSize(sample)
                     }
                 } else {
                     contentResolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it) }
@@ -2194,7 +2209,11 @@ class MainActivity : AppCompatActivity() {
         }
 
         // Slow motion belongs to Video only; hand the camera back before the new mode binds.
-        if (slowMode != null) leaveSlowMotion(rebind = false)
+        if (slowMode != null) {
+            // The new mode may only bind once the slow-motion session has let go of the camera.
+            leaveSlowMotion(rebind = false) { setMode(mode, selectedView) }
+            return
+        }
 
         currentMode = mode
         cameraManager.currentCameraMode = mode
@@ -2456,8 +2475,10 @@ class MainActivity : AppCompatActivity() {
             }
             val blurStrength = 2f + (portraitBlurProgress / 100f) * 24f
             val focus = lastTapFocus ?: PointF(0.5f, 0.45f)
-            val uri: Uri? = cameraManager.capturePhoto(currentMode, blurStrength, focus.x, focus.y) { progress ->
-                runOnUiThread { showCaptureProgress(progress) }
+            val uri: Uri? = guarded("Photo") {
+                cameraManager.capturePhoto(currentMode, blurStrength, focus.x, focus.y) { progress ->
+                    runOnUiThread { showCaptureProgress(progress) }
+                }
             }
 
             if (isFrontFlash) {
@@ -2645,9 +2666,11 @@ class MainActivity : AppCompatActivity() {
         binding.tvShutterCount.text = "0"
         binding.tvShutterCount.visibility = View.VISIBLE
         lifecycleScope.launch {
-            val lastUri = cameraManager.captureBurst({ shutterHeld }, MAX_HOLD_BURST) { taken ->
-                binding.tvShutterCount.text = taken.toString()
-                blinkViewfinder()
+            val lastUri = guarded("Burst") {
+                cameraManager.captureBurst({ shutterHeld }, MAX_HOLD_BURST) { taken ->
+                    binding.tvShutterCount.text = taken.toString()
+                    blinkViewfinder()
+                }
             }
             binding.tvShutterCount.visibility = View.GONE
             isCapturing = false
@@ -2795,7 +2818,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     /** Ends slow motion, saving any video in progress, and gives the camera back to the normal preview. */
-    private fun leaveSlowMotion(rebind: Boolean) {
+    private fun leaveSlowMotion(rebind: Boolean, then: () -> Unit = {}) {
         if (slowMode == null) return
         if (slowMotion.isRecording) stopVideoRecordingUi()
         slowMode = null
@@ -2808,6 +2831,7 @@ class MainActivity : AppCompatActivity() {
             binding.slowMotionPreview.visibility = View.GONE
             loadLatestGalleryThumbnail()
             if (rebind) cameraManager.bindCameraUseCases()
+            then()
         }
     }
 
@@ -2894,11 +2918,17 @@ class MainActivity : AppCompatActivity() {
             binding.tvPanoramaAngle.text = "0° / 180°"
             binding.pbPanoramaProgress.progress = 0
         } else {
+            // The automatic finish at 100% and a tap can arrive together; only one may run.
+            if (panoramaFinishing) return
+            panoramaFinishing = true
             binding.tvPanoramaPrompt.text = "Finalizing panorama..."
             binding.btnShutter.setImageResource(R.drawable.bg_shutter_button)
             lifecycleScope.launch {
                 binding.progressThumbnailSpin.visibility = View.VISIBLE
-                val uri = cameraManager.stopPanoramaCapture()
+                val uri = guarded("Panorama") { cameraManager.stopPanoramaCapture() }
+                // The engine has freed the strip picture; the view must not draw it again.
+                binding.ivPanoramaStrip.setImageDrawable(null)
+                panoramaFinishing = false
                 binding.progressThumbnailSpin.visibility = View.GONE
                 if (uri != null) {
                     latestCapturedUri = uri
@@ -2925,12 +2955,30 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    private var panoramaFinishing = false
+
+    /**
+     * Runs a capture so that a failure inside it (running out of memory in a heavy merge is the
+     * likely one) ends in a message, not in the app closing.
+     */
+    private suspend fun <T> guarded(what: String, block: suspend () -> T?): T? =
+        try {
+            block()
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+        } catch (t: Throwable) {
+            android.util.Log.e("MainActivity", "$what failed", t)
+            if (t is OutOfMemoryError) System.gc()
+            showHint(if (t is OutOfMemoryError) "Not enough memory · try again" else "$what failed")
+            null
+        }
+
     private fun setupPanoramaEngine() {
         cameraManager.panoramaEngine.onPanoramaProgress = { degrees, progressPercent, stripPreview ->
             runOnUiThread {
                 binding.tvPanoramaAngle.text = "${degrees.toInt()}° / 180°"
                 binding.pbPanoramaProgress.progress = progressPercent
-                if (stripPreview != null) {
+                if (stripPreview != null && !stripPreview.isRecycled && !panoramaFinishing) {
                     binding.ivPanoramaStrip.setImageBitmap(stripPreview)
                 }
                 binding.ivPanoramaArrow.translationX = (progressPercent * 1.5f).coerceAtMost(160f)
@@ -2997,6 +3045,7 @@ class MainActivity : AppCompatActivity() {
         reticleAutoHideJob = null
         stopVideoRecordingUi()
         slowMotion.release()
+        if (::cameraManager.isInitialized) cameraManager.release()
     }
 
     companion object {
@@ -3004,6 +3053,7 @@ class MainActivity : AppCompatActivity() {
         private const val LOW_LIGHT_POLL_MS = 700L
         private const val QR_RESULT_MS = 4000L
         private const val MAX_HOLD_BURST = 30
+        private const val MAX_PREVIEW_EDGE = 4096
         private val REQUIRED_PERMISSIONS = arrayOf(
             Manifest.permission.CAMERA,
             Manifest.permission.RECORD_AUDIO

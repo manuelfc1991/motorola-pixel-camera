@@ -1122,7 +1122,9 @@ class CameraManager(private val context: Context) {
         onVideoRecordEvent: (VideoRecordEvent) -> Unit
     ): Boolean {
         val video = videoCapture ?: return false
-        if (activeRecording != null) return false
+        // A stopped recording takes a moment to finish its file; starting another before that
+        // makes the recorder throw.
+        if (activeRecording != null || recordingFinalizing) return false
 
         val timeStamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())
         val name = "VID_${timeStamp}_PXL"
@@ -1159,6 +1161,7 @@ class CameraManager(private val context: Context) {
         activeRecording = pendingRecording.start(ContextCompat.getMainExecutor(context)) { event ->
             if (event is VideoRecordEvent.Finalize) {
                 activeRecording = null
+                recordingFinalizing = false
                 setTorchEnabled(false)
                 audioZoomManager.onRecordingStopped()
             }
@@ -1170,14 +1173,26 @@ class CameraManager(private val context: Context) {
     }
 
     fun stopVideoRecording() {
-        if (activeRecording != null) playSound(android.media.MediaActionSound.STOP_VIDEO_RECORDING)
-        activeRecording?.stop()
+        val recording = activeRecording ?: return
+        playSound(android.media.MediaActionSound.STOP_VIDEO_RECORDING)
+        recordingFinalizing = true
+        recording.stop()
         activeRecording = null
         setTorchEnabled(false)
         audioZoomManager.onRecordingStopped()
     }
 
     fun isRecordingVideo(): Boolean = activeRecording != null
+
+    /** True between stopping a recording and its file being finished. */
+    @Volatile private var recordingFinalizing = false
+
+    /** Frees what outlives a camera session. Call when the screen that owns this object is destroyed. */
+    fun release() {
+        runCatching { panoramaEngine.release() }
+        runCatching { actionSound.release() }
+        cameraExecutor.shutdown()
+    }
 
     fun pauseVideoRecording() { activeRecording?.pause() }
 
