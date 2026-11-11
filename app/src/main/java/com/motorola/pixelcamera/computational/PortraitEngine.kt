@@ -66,7 +66,7 @@ object PortraitEngine {
         // A mask that covers almost nothing means no person or object stood out.
         val alpha = map.alpha
             ?.takeIf { PortraitMath.subjectShare(it) >= PortraitMath.MIN_SUBJECT_SHARE }
-            ?.let { PortraitMath.isolateSubject(it, depth, w, h, focusX, focusY) }
+            ?.let { PortraitMath.isolateSubject(it, depth, w, h, focusX, focusY, map.people) }
 
         val subjectDepth = when {
             alpha != null && depth != null -> PortraitMath.subjectDepth(alpha, depth)

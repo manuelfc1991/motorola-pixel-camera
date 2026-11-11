@@ -25,6 +25,12 @@ internal object PortraitMath {
     /** Mask pixels this much farther than the focused spot belong to something else. */
     private const val BEHIND_SUBJECT_CUT = 0.18f
 
+    /** A detected person only counts when the mask comes within width / this of them. */
+    private const val PERSON_REACH_DIVISOR = 10
+
+    /** People within this depth distance of the focused subject are part of the same group. */
+    private const val GROUP_DEPTH_RANGE = 0.2f
+
     /** Grids at least this wide and tall get their blur map computed at half size. */
     private const val HALF_SIZE_FROM = 256
 
@@ -99,43 +105,73 @@ internal object PortraitMath {
     }
 
     /**
-     * Narrows a subject mask to the one object at the focus point.
+     * Narrows a subject mask to the object at the focus point, plus any [people] standing with it.
      *
      * The segmenter marks everything that stands out, so a monitor or keyboard behind the real
      * subject would stay sharp too. Starting from the mask pixel nearest the focus point, this
      * keeps only what is connected to it and, when depth is known, not clearly behind it.
+     * Each entry of [people] (x, y pairs in 0..1) adds the mask region under that person, as long
+     * as they stand at about the same distance, so a group stays sharp but a passer-by does not.
      */
     fun isolateSubject(
-        alpha: FloatArray, depth: FloatArray?, w: Int, h: Int, focusX: Float, focusY: Float
+        alpha: FloatArray, depth: FloatArray?, w: Int, h: Int, focusX: Float, focusY: Float,
+        people: FloatArray = FloatArray(0)
     ): FloatArray {
         val solid = BooleanArray(alpha.size) { alpha[it] > 0.5f }
-        val fx = (focusX * w).toInt().coerceIn(0, w - 1)
-        val fy = (focusY * h).toInt().coerceIn(0, h - 1)
+        val keep = BooleanArray(alpha.size)
+        val mainDepth = addRegion(keep, solid, depth, w, h, focusX, focusY, Int.MAX_VALUE)
+            ?: return alpha.copyOf()
+
+        for (p in 0 until people.size / 2) {
+            val region = BooleanArray(alpha.size)
+            val personDepth = addRegion(region, solid, depth, w, h, people[p * 2], people[p * 2 + 1], w / PERSON_REACH_DIVISOR)
+                ?: continue
+            if (depth != null && kotlin.math.abs(personDepth - mainDepth) > GROUP_DEPTH_RANGE) continue
+            for (i in keep.indices) if (region[i]) keep[i] = true
+        }
+
+        // Soften the cut so a removed neighbour does not leave a hard step in the mask.
+        val soft = boxBlur(boxBlur(FloatArray(alpha.size) { if (keep[it]) 1f else 0f }, w, h, 3), w, h, 3)
+        return FloatArray(alpha.size) { alpha[it] * soft[it] }
+    }
+
+    /**
+     * Marks in [into] the part of [solid] that belongs with the point (px, py), and returns that
+     * part's depth (0 without a depth map). Null when no mask pixel lies within [maxSeedDistance].
+     */
+    private fun addRegion(
+        into: BooleanArray, solid: BooleanArray, depth: FloatArray?, w: Int, h: Int,
+        px: Float, py: Float, maxSeedDistance: Int
+    ): Float? {
+        val fx = (px * w).toInt().coerceIn(0, w - 1)
+        val fy = (py * h).toInt().coerceIn(0, h - 1)
         val seed = nearest(solid, w, fx, fy)
-        if (seed < 0) return alpha.copyOf()
-        var keep = flood(solid, w, h, seed)
+        if (seed < 0) return null
+        val dx = seed % w - fx
+        val dy = seed / w - fy
+        if (maxSeedDistance != Int.MAX_VALUE && dx * dx + dy * dy > maxSeedDistance * maxSeedDistance) return null
+        var region = flood(solid, w, h, seed)
+        var seedDepth = 0f
 
         if (depth != null) {
-            // Depth of the subject where it was focused: median of its pixels around the seed.
+            // Depth of the object where it was pointed at: median of its pixels around the seed.
             val reach = w / SEED_REACH_DIVISOR
             val sx = seed % w
             val sy = seed / w
             val samples = ArrayList<Float>()
             for (y in max(0, sy - reach)..min(h - 1, sy + reach)) {
                 for (x in max(0, sx - reach)..min(w - 1, sx + reach)) {
-                    if (keep[y * w + x]) samples.add(depth[y * w + x])
+                    if (region[y * w + x]) samples.add(depth[y * w + x])
                 }
             }
             samples.sort()
-            val seedDepth = samples[samples.size / 2]
-            val gated = BooleanArray(alpha.size) { keep[it] && depth[it] > seedDepth - BEHIND_SUBJECT_CUT }
+            seedDepth = samples[samples.size / 2]
+            val gated = BooleanArray(solid.size) { region[it] && depth[it] > seedDepth - BEHIND_SUBJECT_CUT }
             val gatedSeed = nearest(gated, w, fx, fy)
-            if (gatedSeed >= 0) keep = flood(gated, w, h, gatedSeed)
+            if (gatedSeed >= 0) region = flood(gated, w, h, gatedSeed)
         }
-
-        // Soften the cut so a removed neighbour does not leave a hard step in the mask.
-        val soft = boxBlur(boxBlur(FloatArray(alpha.size) { if (keep[it]) 1f else 0f }, w, h, 3), w, h, 3)
-        return FloatArray(alpha.size) { alpha[it] * soft[it] }
+        for (i in into.indices) if (region[i]) into[i] = true
+        return seedDepth
     }
 
     /** Index of the set pixel closest to (fx, fy), or -1 when none is set. */

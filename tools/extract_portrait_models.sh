@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Copies the three portrait models out of a Google Camera APK you already have into
+# Copies the portrait models out of a Google Camera APK you already have into
 # app/src/main/assets/gmodels/, where a local build picks them up.
 #
 # The models belong to Google. They are for your own phone only: the target folder is in
@@ -25,4 +25,5 @@ echo "Extracting portrait models from $(basename "$apk"):"
 extract raid_foreground_mosaic_512_qat subject_segmenter
 extract portrait_matting_mask_1024_768 portrait_matting
 extract midasnet_mobilenetv2_dptmqn_dec256_sep_082421_384_384_fp16_opt depth
+extract movenet_256 pose
 echo "Done. Rebuild the app to include them."
