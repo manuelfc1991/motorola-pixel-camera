@@ -488,6 +488,12 @@ class CameraManager(private val context: Context) {
 
     fun isFrontCamera(): Boolean = currentCameraId == CAMERA_FRONT
 
+    /** Lets go of the camera so another session (slow motion) can open it. [bindCameraUseCases] takes it back. */
+    fun releaseCamera() {
+        cameraProvider?.unbindAll()
+        camera = null
+    }
+
     fun setZoom(ratio: Float) {
         currentZoomRatio = ratio
         val zState = camera?.cameraInfo?.zoomState?.value
