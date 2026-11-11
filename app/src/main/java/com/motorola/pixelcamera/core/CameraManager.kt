@@ -33,6 +33,9 @@ import androidx.lifecycle.LifecycleOwner
 import com.motorola.pixelcamera.computational.AstroStack
 import com.motorola.pixelcamera.computational.FrameStack
 import com.motorola.pixelcamera.computational.LongExposureStack
+import com.motorola.pixelcamera.computational.PortraitMath
+import com.motorola.pixelcamera.computational.PortraitPreview
+import com.motorola.pixelcamera.computational.PortraitSegmenter
 import com.motorola.pixelcamera.computational.ColourCleanup
 import com.motorola.pixelcamera.computational.HdrProcessor
 import com.motorola.pixelcamera.computational.MotionPhotoEngine
@@ -198,6 +201,57 @@ class CameraManager(private val context: Context) {
         }
 
     @OptIn(ExperimentalCamera2Interop::class)
+    /**
+     * Receives the live Portrait layer (background blurred, subject see-through, same framing as
+     * the viewfinder), or null when no subject is found. Called a few times a second.
+     */
+    var onPortraitPreview: ((Bitmap?) -> Unit)? = null
+    /** Blur strength of the live Portrait layer, the same scale the photo uses. */
+    @Volatile var portraitPreviewBlur = 14f
+    private val portraitPreviewBusy = java.util.concurrent.atomic.AtomicBoolean(false)
+    private var lastPortraitPreviewMs = 0L
+    private val portraitPreviewExecutor = java.util.concurrent.Executors.newSingleThreadExecutor()
+    // Reused while [portraitPreviewBusy] is held: the model's square input and the colour grid.
+    private val portraitModelInput = IntArray(PortraitSegmenter.PREVIEW_INPUT * PortraitSegmenter.PREVIEW_INPUT)
+    private var portraitGrid = IntArray(0)
+    private var portraitFrameBytes = ByteArray(0)
+
+    /**
+     * Reads the frame straight into the model input and a half-size colour grid, upright and
+     * cropped like the viewfinder. Returns the grid's width and height.
+     */
+    private fun samplePortraitFrame(image: ImageProxy): Pair<Int, Int>? {
+        val plane = image.planes[0]
+        if (plane.pixelStride != 4) return null
+        val rotation = image.imageInfo.rotationDegrees
+        val uprightW = if (rotation % 180 == 0) image.width else image.height
+        val uprightH = if (rotation % 180 == 0) image.height else image.width
+        // A 16:9 viewfinder shows only the middle of the 4:3 frame.
+        val viewAspect = if (aspectRatio == AspectRatio.RATIO_16_9) 9f / 16f else uprightW.toFloat() / uprightH
+        val cols = PortraitPreview.cropForAspect(uprightW, uprightH, viewAspect)
+        val gw = cols.count() / 2
+        val gh = uprightH / 2
+        if (portraitGrid.size != gw * gh) portraitGrid = IntArray(gw * gh)
+        // One bulk copy: reading the camera buffer a byte at a time cost a fifth of a core.
+        val buffer = plane.buffer
+        buffer.rewind()
+        val length = buffer.remaining()
+        if (portraitFrameBytes.size < length) portraitFrameBytes = ByteArray(length)
+        buffer.get(portraitFrameBytes, 0, length)
+        val bytes = portraitFrameBytes
+        val size = PortraitSegmenter.PREVIEW_INPUT
+        PortraitPreview.sampleUpright(bytes, plane.rowStride, image.width, image.height, rotation, cols, size, size, portraitModelInput)
+        PortraitPreview.sampleUpright(bytes, plane.rowStride, image.width, image.height, rotation, cols, gw, gh, portraitGrid)
+        return gw to gh
+    }
+
+    private fun buildPortraitPreview(gw: Int, gh: Int): Bitmap? {
+        val mask = PortraitSegmenter.previewMask(context, portraitModelInput, gw, gh) ?: return null
+        if (PortraitMath.subjectShare(mask) < PortraitMath.MIN_SUBJECT_SHARE) return null
+        val layer = PortraitPreview.overlay(portraitGrid, mask, gw, gh, portraitPreviewBlur)
+        return Bitmap.createBitmap(layer, gw, gh, Bitmap.Config.ARGB_8888)
+    }
+
     /** Photos and bursts in progress; while any run, a settings rebind waits for them. */
     private val capturesRunning = java.util.concurrent.atomic.AtomicInteger(0)
     @Volatile private var rebindPending = false
@@ -437,6 +491,32 @@ class CameraManager(private val context: Context) {
                 if (qrListener != null && currentCameraMode == CameraMode.CAMERA && nowMs - lastQrScanMs >= QR_SCAN_INTERVAL_MS) {
                     lastQrScanMs = nowMs
                     qrScanner.scan(imageProxy)?.let(qrListener)
+                }
+
+                val portraitListener = onPortraitPreview
+                if (portraitListener != null && currentCameraMode == CameraMode.PORTRAIT && capturesRunning.get() == 0 &&
+                    nowMs - lastPortraitPreviewMs >= PORTRAIT_PREVIEW_INTERVAL_MS && portraitPreviewBusy.compareAndSet(false, true)
+                ) {
+                    lastPortraitPreviewMs = nowMs
+                    val grid = try {
+                        samplePortraitFrame(imageProxy)
+                    } catch (e: Exception) {
+                        Log.w(TAG, "Portrait preview frame unreadable", e)
+                        null
+                    }
+                    if (grid == null) {
+                        portraitPreviewBusy.set(false)
+                    } else {
+                        portraitPreviewExecutor.execute {
+                            try {
+                                portraitListener(buildPortraitPreview(grid.first, grid.second))
+                            } catch (e: Exception) {
+                                Log.w(TAG, "Portrait preview failed", e)
+                            } finally {
+                                portraitPreviewBusy.set(false)
+                            }
+                        }
+                    }
                 }
 
                 if (topShotMode != TopShotMode.OFF && (currentCameraMode == CameraMode.CAMERA || currentCameraMode == CameraMode.PORTRAIT)) {
@@ -1292,6 +1372,8 @@ class CameraManager(private val context: Context) {
 
     /** Frees what outlives a camera session. Call when the screen that owns this object is destroyed. */
     fun release() {
+        onPortraitPreview = null
+        portraitPreviewExecutor.shutdown()
         runCatching { panoramaEngine.release() }
         runCatching { actionSound.release() }
         cameraExecutor.shutdown()
@@ -1498,6 +1580,8 @@ class CameraManager(private val context: Context) {
         const val CAMERA_ULTRAWIDE = "3"
         private const val NIGHT_HANDHELD_CAPTURES = 2
         private const val ASTRO_FRAMES = 8
+        /** Live Portrait blur refreshes at most four times a second. */
+        private const val PORTRAIT_PREVIEW_INTERVAL_MS = 250L
         private const val LONG_EXPOSURE_FRAMES = 12
         private const val DARK_4K_ISO_LIMIT = 2500
         private const val QR_SCAN_INTERVAL_MS = 300L

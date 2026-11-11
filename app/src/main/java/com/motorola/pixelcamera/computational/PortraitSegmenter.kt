@@ -80,6 +80,50 @@ object PortraitSegmenter {
         }
     }
 
+    /** Side of the square picture the live preview hands to [previewMask]. */
+    const val PREVIEW_INPUT = SEGMENT_SIZE
+
+    // Live preview buffers, reused every time: a fresh set each frame kept the collector busy.
+    private var previewIn: ByteBuffer? = null
+    private var previewOut: ByteBuffer? = null
+    private var previewRgb: FloatArray? = null
+    private var previewMaskRaw: FloatArray? = null
+
+    /**
+     * Subject mask only (the quick segmenter, none of the slower models) for the live Portrait
+     * viewfinder. [input] is [PREVIEW_INPUT] square; the mask comes back on an [outW] x [outH] grid.
+     * Null without the model or if it fails.
+     */
+    fun previewMask(context: Context, input: IntArray, outW: Int, outH: Int): FloatArray? =
+        modelThread.submit<FloatArray?> {
+            synchronized(lock) {
+                try {
+                    val model = interpreter(context, SEGMENT_MODEL) ?: return@synchronized null
+                    val n = SEGMENT_SIZE * SEGMENT_SIZE
+                    val inBuf = previewIn ?: floatBuffer(n * 3).also { previewIn = it }
+                    val outBuf = previewOut ?: floatBuffer(n * 2).also { previewOut = it }
+                    val rgb = previewRgb ?: FloatArray(n * 3).also { previewRgb = it }
+                    val raw = previewMaskRaw ?: FloatArray(n).also { previewMaskRaw = it }
+                    for (i in 0 until n) {
+                        val p = input[i]
+                        rgb[i * 3] = ((p shr 16) and 0xFF) / 127.5f - 1f
+                        rgb[i * 3 + 1] = ((p shr 8) and 0xFF) / 127.5f - 1f
+                        rgb[i * 3 + 2] = (p and 0xFF) / 127.5f - 1f
+                    }
+                    inBuf.rewind(); inBuf.asFloatBuffer().put(rgb)
+                    outBuf.rewind()
+                    model.run(inBuf, outBuf)
+                    outBuf.rewind()
+                    val floats = outBuf.asFloatBuffer()
+                    for (i in 0 until n) raw[i] = floats.get(i * 2 + 1)
+                    PortraitMath.resizeBilinear(raw, SEGMENT_SIZE, SEGMENT_SIZE, outW, outH)
+                } catch (e: Exception) {
+                    Log.w(TAG, "Preview mask failed", e)
+                    null
+                }
+            }
+        }.get()
+
     fun analyse(context: Context, input: Bitmap): SubjectMap? =
         modelThread.submit<SubjectMap?> { analyseOnModelThread(context, input) }.get()
 

@@ -401,6 +401,7 @@ class MainActivity : AppCompatActivity() {
         setupListeners()
         setupAudioZoom()
         setupPanoramaEngine()
+        setupPortraitPreview()
         initDefaultUiState()
 
         if (allPermissionsGranted()) {
@@ -1237,6 +1238,7 @@ class MainActivity : AppCompatActivity() {
         binding.sbAperture.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
             override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
                 portraitBlurProgress = progress
+                cameraManager.portraitPreviewBlur = portraitBlurStrength()
                 val fStops = arrayOf("f / 1.4", "f / 1.8", "f / 2.2", "f / 2.8", "f / 4.0", "f / 5.6", "f / 8.0", "f / 11", "f / 16")
                 val index = ((100 - progress) / 100f * (fStops.size - 1)).toInt().coerceIn(0, fStops.size - 1)
                 binding.tvApertureLabel.text = fStops[index]
@@ -1562,6 +1564,7 @@ class MainActivity : AppCompatActivity() {
         }
         if (isCapturing || timerJob?.isActive == true || cameraManager.isRecordingVideo() || cameraManager.isCapturingPanorama()) return
         binding.quickSettingsContainer.visibility = View.GONE
+        hidePortraitPreview()
         binding.btnSwitchCamera.animate().rotationBy(180f).setDuration(300).start()
         cameraManager.switchCamera()
         val isFront = cameraManager.isFrontCamera()
@@ -2027,6 +2030,7 @@ class MainActivity : AppCompatActivity() {
 
         currentMode = mode
         cameraManager.currentCameraMode = mode
+        if (mode != CameraMode.PORTRAIT) hidePortraitPreview()
 
         // Update Tier 3 Toggle Pill
         updatePhotoVideoToggle(isVideo = (mode == CameraMode.VIDEO))
@@ -2283,7 +2287,7 @@ class MainActivity : AppCompatActivity() {
             if (isFrontFlash) {
                 delay(120)
             }
-            val blurStrength = 2f + (portraitBlurProgress / 100f) * 24f
+            val blurStrength = portraitBlurStrength()
             val focus = lastTapFocus ?: PointF(0.5f, 0.45f)
             val uri: Uri? = guarded("Photo") {
                 cameraManager.capturePhoto(currentMode, blurStrength, focus.x, focus.y) { progress ->
@@ -2782,6 +2786,39 @@ class MainActivity : AppCompatActivity() {
             showHint(if (t is OutOfMemoryError) "Not enough memory · try again" else "$what failed")
             null
         }
+
+    /** Slider position to the blur scale the Portrait photo and its live preview use. */
+    private fun portraitBlurStrength(): Float = 2f + (portraitBlurProgress / 100f) * 24f
+
+    /** The live Portrait blur, laid over the viewfinder with the same framing and mirroring. */
+    private fun setupPortraitPreview() {
+        cameraManager.portraitPreviewBlur = portraitBlurStrength()
+        cameraManager.onPortraitPreview = { layer ->
+            runOnUiThread { showPortraitPreview(layer) }
+        }
+    }
+
+    private fun showPortraitPreview(layer: android.graphics.Bitmap?) {
+        val view = binding.ivPortraitPreview
+        if (layer == null || currentMode != CameraMode.PORTRAIT || isFinishing) {
+            hidePortraitPreview()
+            return
+        }
+        view.scaleType = if (binding.viewFinder.scaleType == androidx.camera.view.PreviewView.ScaleType.FIT_CENTER) {
+            ImageView.ScaleType.FIT_CENTER
+        } else {
+            ImageView.ScaleType.CENTER_CROP
+        }
+        // The viewfinder shows the front camera (and the back one with its mirror on) mirrored.
+        view.scaleX = if (cameraManager.isFrontCamera() || cameraManager.mirrorBack) -1f else 1f
+        view.setImageBitmap(layer)
+        view.visibility = View.VISIBLE
+    }
+
+    private fun hidePortraitPreview() {
+        binding.ivPortraitPreview.visibility = View.GONE
+        binding.ivPortraitPreview.setImageDrawable(null)
+    }
 
     private fun setupPanoramaEngine() {
         cameraManager.panoramaEngine.onPanoramaProgress = { degrees, progressPercent, stripPreview ->
