@@ -36,6 +36,35 @@ class FrameStacksTest {
         assertEquals(20f, g(out[10 * w + 10]).toFloat(), 1f)
     }
 
+    /** Random blotches 8 px across, so no part of the scene looks like another. */
+    private val blotches = java.util.Random(7).let { rnd -> Array(h / 8 + 4) { IntArray(w / 8 + 4) { 30 + rnd.nextInt(200) } } }
+
+    private fun scene(x: Int, y: Int): Int {
+        val gx = (x + 16) / 8f; val gy = (y + 16) / 8f
+        val x0 = gx.toInt().coerceIn(0, blotches[0].size - 2); val y0 = gy.toInt().coerceIn(0, blotches.size - 2)
+        val fx = gx - x0; val fy = gy - y0
+        val top = blotches[y0][x0] * (1 - fx) + blotches[y0][x0 + 1] * fx
+        val bottom = blotches[y0 + 1][x0] * (1 - fx) + blotches[y0 + 1][x0 + 1] * fx
+        return (top * (1 - fy) + bottom * fy).toInt()
+    }
+
+    /** The still scene seen with the hand moved by ([sx], [sy]). */
+    private fun handHeld(sx: Int, sy: Int) = IntArray(w * h) { i -> grey(scene(i % w - sx, i / w - sy)) }
+
+    @Test
+    fun longExposureLinesUpAShakyHand() {
+        val stack = LongExposureStack()
+        val shake = listOf(0 to 0, 3 to -2, -4 to 1, 2 to 4, -1 to -3, 5 to 2)
+        for ((sx, sy) in shake) stack.add(handHeld(sx, sy), w, h)
+        val out = stack.resultPixels()!!
+        val still = handHeld(0, 0)
+        var worst = 0
+        for (y in 10 until h - 10) for (x in 10 until w - 10) {
+            worst = maxOf(worst, kotlin.math.abs(g(out[y * w + x]) - g(still[y * w + x])))
+        }
+        assertTrue("the still scene came out blurred (off by up to $worst)", worst <= 3)
+    }
+
     @Test
     fun framesOfAnotherSizeAreSkipped() {
         val stack = LongExposureStack()
