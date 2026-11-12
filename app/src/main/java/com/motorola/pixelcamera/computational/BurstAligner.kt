@@ -46,7 +46,7 @@ object BurstAligner {
     /** Luma 0..255 from ARGB, stored as unsigned bytes. */
     private fun luma(px: IntArray): ByteArray = ByteArray(px.size) { i -> lumaOf(px[i]).toByte() }
 
-    private class Plane(val data: ByteArray, val w: Int, val h: Int) {
+    internal class Plane(val data: ByteArray, val w: Int, val h: Int) {
         operator fun get(i: Int): Int = data[i].toInt() and 0xFF
     }
 
@@ -141,6 +141,19 @@ object BurstAligner {
         val levels = pyramidLevels(w, h)
         return estimateOffset(pyramid(luma(ref), w, h, levels), pyramid(luma(frame), w, h, levels))
     }
+
+    /** A frame to line others up against, its pyramid built once. */
+    class Reference internal constructor(internal val w: Int, internal val h: Int, private val pyr: List<Any>) {
+        @Suppress("UNCHECKED_CAST")
+        internal val planes: List<Plane> get() = pyr as List<Plane>
+    }
+
+    fun reference(px: IntArray, w: Int, h: Int): Reference =
+        Reference(w, h, pyramid(luma(px), w, h, pyramidLevels(w, h)))
+
+    /** Offset (dx, dy) such that frame(x + dx, y + dy) lines up with the reference at (x, y). */
+    fun offsetTo(ref: Reference, frame: IntArray): Pair<Int, Int> =
+        estimateOffset(ref.planes, pyramid(luma(frame), ref.w, ref.h, ref.planes.size - 1))
 
     /** Laplacian energy: higher means sharper (less hand shake inside the exposure). */
     fun sharpness(px: IntArray, w: Int, h: Int): Double {

@@ -76,26 +76,59 @@ abstract class FrameStack {
     }
 }
 
-/** Long exposure: the average of the frames, with moving lights pulled up into bright trails. */
+/**
+ * Long exposure: the average of the frames, with moving lights pulled up into bright trails.
+ * Each frame is first lined up with the first one, so a hand-held shot keeps the still parts
+ * sharp and only what really moves (water, traffic, people) blurs.
+ */
 class LongExposureStack : FrameStack() {
     private lateinit var maxLum: ByteArray
+    /** Frames that covered each pixel: lined-up frames leave a strip at the edge uncovered. */
+    private lateinit var hits: ByteArray
+    private var reference: BurstAligner.Reference? = null
+    /** Time spent lining frames up, in ms. */
+    var alignMs = 0L
+        private set
 
     override fun start(px: IntArray) {
         maxLum = ByteArray(px.size)
+        hits = ByteArray(px.size)
+        val t0 = System.nanoTime()
+        reference = BurstAligner.reference(px, width, height)
+        alignMs += (System.nanoTime() - t0) / 1_000_000
     }
 
     override fun accumulate(px: IntArray) {
-        for (i in px.indices) {
-            val p = px[i]
-            addPixel(i, p)
-            val l = luma(p)
-            if (l > (maxLum[i].toInt() and 0xFF)) maxLum[i] = l.toByte()
+        val ref = reference
+        val t0 = System.nanoTime()
+        var (dx, dy) = if (count == 0 || ref == null) 0 to 0 else BurstAligner.offsetTo(ref, px)
+        alignMs += (System.nanoTime() - t0) / 1_000_000
+        // A hand moves the picture a little during one shot. A bigger jump means the match
+        // followed something moving (a car's lights at night), so that frame stays where it is.
+        val maxShake = (width * MAX_SHAKE).toInt().coerceAtLeast(6)
+        if (abs(dx) > maxShake || abs(dy) > maxShake) { dx = 0; dy = 0 }
+        for (y in 0 until height) {
+            val sy = y + dy
+            if (sy < 0 || sy >= height) continue
+            val row = y * width
+            val srcRow = sy * width
+            for (x in 0 until width) {
+                val sx = x + dx
+                if (sx < 0 || sx >= width) continue
+                val i = row + x
+                val p = px[srcRow + sx]
+                addPixel(i, p)
+                hits[i]++
+                val l = luma(p)
+                if (l > (maxLum[i].toInt() and 0xFF)) maxLum[i] = l.toByte()
+            }
         }
     }
 
     override fun finish(out: IntArray) {
-        val n = count.toFloat()
+        reference = null
         for (i in out.indices) {
+            val n = (hits[i].toInt() and 0xFF).coerceAtLeast(1).toFloat()
             var r = sumR[i] / n
             var g = sumG[i] / n
             var b = sumB[i] / n
@@ -112,6 +145,8 @@ class LongExposureStack : FrameStack() {
 
     private companion object {
         const val STREAK = 0.40f
+        /** Largest hand movement lined up, as a share of the frame width. */
+        const val MAX_SHAKE = 0.03f
     }
 }
 

@@ -1087,7 +1087,9 @@ class CameraManager(private val context: Context) {
             }
             CameraMode.LONG_EXPOSURE -> {
                 val stack = LongExposureStack()
+                val t0 = android.os.SystemClock.elapsedRealtime()
                 burstInto(LONG_EXPOSURE_FRAMES, stack)
+                Log.i(TAG, "Long exposure: ${stack.count} frames taken and lined up in ${android.os.SystemClock.elapsedRealtime() - t0} ms (lining up: ${stack.alignMs} ms)")
                 saveStack(stack)
             }
             CameraMode.PANORAMA -> {
