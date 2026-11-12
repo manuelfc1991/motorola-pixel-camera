@@ -85,4 +85,65 @@ class PortraitPreviewTest {
         PortraitPreview.sampleUpright(frame(), 20, 4, 3, 0, 0 until 4, 4, 3, flat)
         assertEquals(listOf(0, 10, 20, 30, 1, 11, 21, 31, 2, 12, 22, 32), flat.map { r(it) })
     }
+
+    /** A 480 x 640 upright RGBA frame of a textured scene, shifted right by [shift] pixels. */
+    private fun scene(shift: Int, brightness: Int = 0, seed: Int = 0): java.nio.ByteBuffer {
+        val fw = 480; val fh = 640
+        val bytes = ByteArray(fw * fh * 4)
+        val noise = java.util.Random(seed.toLong())
+        for (y in 0 until fh) for (x in 0 until fw) {
+            val sx = x - shift
+            val v = (128 + 60 * kotlin.math.sin(sx * 0.05) * kotlin.math.cos(y * 0.04) + brightness + noise.nextGaussian() * 3)
+                .toInt().coerceIn(0, 255)
+            val i = (y * fw + x) * 4
+            bytes[i] = v.toByte(); bytes[i + 1] = v.toByte(); bytes[i + 2] = v.toByte(); bytes[i + 3] = -1
+        }
+        return java.nio.ByteBuffer.wrap(bytes)
+    }
+
+    private fun thumb(buf: java.nio.ByteBuffer) = PortraitPreview.motionThumb(buf, 480 * 4, 480, 640, 0, 0 until 480)
+
+    @Test
+    fun aStillPictureIsNotMotion() {
+        // Same scene, different sensor noise.
+        val change = PortraitPreview.changeBetween(thumb(scene(0, seed = 1)), thumb(scene(0, seed = 2)))
+        assertTrue("noise read as $change", change < PortraitPreview.MOVED / 2)
+    }
+
+    @Test
+    fun exposureSettlingIsNotMotion() {
+        val change = PortraitPreview.changeBetween(thumb(scene(0)), thumb(scene(0, brightness = 25)))
+        assertTrue("brightening read as $change", change < PortraitPreview.MOVED / 2)
+    }
+
+    @Test
+    fun aSmallTurnIsMotion() {
+        // 20 px of 480: a slow turn of the phone over a fraction of a second.
+        val change = PortraitPreview.changeBetween(thumb(scene(0)), thumb(scene(20)))
+        assertTrue("shift read as $change", change > PortraitPreview.MOVED)
+    }
+
+    @Test
+    fun grainyScenesNeedMoreChange() {
+        assertEquals(PortraitPreview.MOVED, PortraitPreview.movedThreshold(0.5f), 0f)
+        assertEquals(7.5f, PortraitPreview.movedThreshold(3f), 1e-4f)
+        assertEquals(12f, PortraitPreview.movedThreshold(50f), 0f)
+    }
+
+    @Test
+    fun dimGrainIsNotMotion() {
+        // Heavy grain (sd 20 per pixel) between two frames of the same scene.
+        fun grainy(seed: Long): java.nio.ByteBuffer {
+            val bytes = ByteArray(480 * 640 * 4)
+            val n = java.util.Random(seed)
+            for (i in 0 until 480 * 640) {
+                val v = (40 + n.nextGaussian() * 20).toInt().coerceIn(0, 255).toByte()
+                bytes[i * 4] = v; bytes[i * 4 + 1] = v; bytes[i * 4 + 2] = v; bytes[i * 4 + 3] = -1
+            }
+            return java.nio.ByteBuffer.wrap(bytes)
+        }
+        val a = thumb(grainy(1)); val b = thumb(grainy(2)); val c = thumb(grainy(3))
+        val threshold = PortraitPreview.movedThreshold(PortraitPreview.changeBetween(a, b))
+        assertTrue(PortraitPreview.changeBetween(a, c) < threshold)
+    }
 }

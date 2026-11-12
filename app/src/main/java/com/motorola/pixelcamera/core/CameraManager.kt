@@ -220,6 +220,62 @@ class CameraManager(private val context: Context) {
     private var portraitGrid = IntArray(0)
     private var portraitFrameBytes = ByteArray(0)
 
+    // The live layer is a few frames old. These small grey pictures tell when the scene has moved
+    // since: of the newest frame, and of the frame the layer on screen was made from.
+    @Volatile private var portraitLatestThumb: FloatArray? = null
+    @Volatile private var portraitShownThumb: FloatArray? = null
+    private var portraitMotionPeak = 0f
+    private var portraitMotionFrames = 0
+    private var portraitPrevThumb: FloatArray? = null
+    // Frame-to-frame changes of the last second; the smallest is the grain of the scene.
+    private val portraitRecentChanges = FloatArray(30) { Float.MAX_VALUE }
+    private var portraitChangeSlot = 0
+    @Volatile private var portraitMoved = PortraitPreview.MOVED
+
+    /** Upright columns of the frame that the viewfinder shows. */
+    private fun portraitColumns(image: ImageProxy): IntRange {
+        val rotation = image.imageInfo.rotationDegrees
+        val uprightW = if (rotation % 180 == 0) image.width else image.height
+        val uprightH = if (rotation % 180 == 0) image.height else image.width
+        // A 16:9 viewfinder shows only the middle of the 4:3 frame.
+        val viewAspect = if (aspectRatio == AspectRatio.RATIO_16_9) 9f / 16f else uprightW.toFloat() / uprightH
+        return PortraitPreview.cropForAspect(uprightW, uprightH, viewAspect)
+    }
+
+    /**
+     * Takes the newest frame's small grey picture and hides the live layer when the picture has
+     * moved away from the one it was made from: the phone turning or the person moving would
+     * otherwise leave a ghost of the old blur over the live view.
+     */
+    private fun trackPortraitMotion(image: ImageProxy, listener: (Bitmap?) -> Unit): FloatArray? {
+        val plane = image.planes[0]
+        if (plane.pixelStride != 4) return null
+        val thumb = PortraitPreview.motionThumb(
+            plane.buffer, plane.rowStride, image.width, image.height, image.imageInfo.rotationDegrees, portraitColumns(image)
+        )
+        portraitLatestThumb = thumb
+        portraitPrevThumb?.let { prev ->
+            portraitRecentChanges[portraitChangeSlot] = PortraitPreview.changeBetween(prev, thumb)
+            portraitChangeSlot = (portraitChangeSlot + 1) % portraitRecentChanges.size
+            portraitMoved = PortraitPreview.movedThreshold(portraitRecentChanges.min())
+        }
+        portraitPrevThumb = thumb
+        val shown = portraitShownThumb ?: return thumb
+        val change = PortraitPreview.changeBetween(shown, thumb)
+        portraitMotionPeak = maxOf(portraitMotionPeak, change)
+        if (++portraitMotionFrames >= 30) {
+            Log.d(TAG, "Portrait motion: peak change ${"%.1f".format(portraitMotionPeak)} over 30 frames, " +
+                "counts as moved above ${"%.1f".format(portraitMoved)}")
+            portraitMotionFrames = 0
+            portraitMotionPeak = 0f
+        }
+        if (change > portraitMoved) {
+            portraitShownThumb = null
+            listener(null)
+        }
+        return thumb
+    }
+
     /**
      * Reads the frame straight into the model input and a half-size colour grid, upright and
      * cropped like the viewfinder. Returns the grid's width and height.
@@ -228,11 +284,8 @@ class CameraManager(private val context: Context) {
         val plane = image.planes[0]
         if (plane.pixelStride != 4) return null
         val rotation = image.imageInfo.rotationDegrees
-        val uprightW = if (rotation % 180 == 0) image.width else image.height
         val uprightH = if (rotation % 180 == 0) image.height else image.width
-        // A 16:9 viewfinder shows only the middle of the 4:3 frame.
-        val viewAspect = if (aspectRatio == AspectRatio.RATIO_16_9) 9f / 16f else uprightW.toFloat() / uprightH
-        val cols = PortraitPreview.cropForAspect(uprightW, uprightH, viewAspect)
+        val cols = portraitColumns(image)
         val gw = cols.count() / 2
         val gh = uprightH / 2
         if (portraitGrid.size != gw * gh) portraitGrid = IntArray(gw * gh)
@@ -498,7 +551,11 @@ class CameraManager(private val context: Context) {
                 }
 
                 val portraitListener = onPortraitPreview
-                if (portraitListener != null && currentCameraMode == CameraMode.PORTRAIT && capturesRunning.get() == 0 &&
+                val portraitLive = portraitListener != null && currentCameraMode == CameraMode.PORTRAIT && capturesRunning.get() == 0
+                val sourceThumb = if (portraitLive) {
+                    try { trackPortraitMotion(imageProxy, portraitListener!!) } catch (e: Exception) { null }
+                } else null
+                if (portraitLive && portraitListener != null &&
                     nowMs - lastPortraitPreviewMs >= PORTRAIT_PREVIEW_INTERVAL_MS && portraitPreviewBusy.compareAndSet(false, true)
                 ) {
                     lastPortraitPreviewMs = nowMs
@@ -513,7 +570,17 @@ class CameraManager(private val context: Context) {
                     } else {
                         portraitPreviewExecutor.execute {
                             try {
-                                portraitListener(buildPortraitPreview(grid.first, grid.second))
+                                val layer = buildPortraitPreview(grid.first, grid.second)
+                                // Moved while the layer was being made: it would already be a ghost.
+                                val latest = portraitLatestThumb
+                                val still = sourceThumb == null || latest == null ||
+                                    PortraitPreview.changeBetween(sourceThumb, latest) <= portraitMoved
+                                if (layer != null && still) {
+                                    portraitShownThumb = sourceThumb
+                                    portraitListener(layer)
+                                } else {
+                                    portraitListener(null)
+                                }
                             } catch (e: Exception) {
                                 Log.w(TAG, "Portrait preview failed", e)
                             } finally {
