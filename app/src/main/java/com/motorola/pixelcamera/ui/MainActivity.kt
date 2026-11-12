@@ -3015,10 +3015,16 @@ class MainActivity : AppCompatActivity() {
         // The viewfinder shows the front camera (and the back one with its mirror on) mirrored.
         view.scaleX = if (cameraManager.isFrontCamera() || cameraManager.mirrorBack) -1f else 1f
         view.setImageBitmap(layer)
-        view.visibility = View.VISIBLE
+        if (view.visibility != View.VISIBLE) {
+            // Coming back after the phone moved: fade in rather than pop.
+            view.alpha = 0f
+            view.visibility = View.VISIBLE
+            view.animate().alpha(1f).setDuration(150).start()
+        }
     }
 
     private fun hidePortraitPreview() {
+        binding.ivPortraitPreview.animate().cancel()
         binding.ivPortraitPreview.visibility = View.GONE
         binding.ivPortraitPreview.setImageDrawable(null)
     }

@@ -99,6 +99,65 @@ object PortraitPreview {
         }
     }
 
+    /**
+     * A small grey picture of an RGBA camera buffer (upright, [cols] only), [MOTION_W] x
+     * [MOTION_H], each cell the average of 16 samples so sensor noise hardly moves it.
+     * Comparing two of them tells whether the picture has moved ([changeBetween]).
+     */
+    fun motionThumb(
+        rgba: java.nio.ByteBuffer, rowStride: Int, srcW: Int, srcH: Int, rotation: Int, cols: IntRange
+    ): FloatArray {
+        val uprightH = if (rotation % 180 == 0) srcH else srcW
+        val cropW = cols.last - cols.first + 1
+        val out = FloatArray(MOTION_W * MOTION_H)
+        for (oy in 0 until MOTION_H * SUB) {
+            val uy = ((oy + 0.5f) * uprightH / (MOTION_H * SUB)).toInt()
+            for (ox in 0 until MOTION_W * SUB) {
+                val ux = cols.first + ((ox + 0.5f) * cropW / (MOTION_W * SUB)).toInt()
+                val sx: Int
+                val sy: Int
+                when (rotation) {
+                    90 -> { sx = uy; sy = srcH - 1 - ux }
+                    180 -> { sx = srcW - 1 - ux; sy = srcH - 1 - uy }
+                    270 -> { sx = srcW - 1 - uy; sy = ux }
+                    else -> { sx = ux; sy = uy }
+                }
+                val i = sy * rowStride + sx * 4
+                val luma = ((rgba.get(i).toInt() and 0xFF) * 77 + (rgba.get(i + 1).toInt() and 0xFF) * 150 +
+                    (rgba.get(i + 2).toInt() and 0xFF) * 29) / 256f
+                out[(oy / SUB) * MOTION_W + ox / SUB] += luma / (SUB * SUB)
+            }
+        }
+        return out
+    }
+
+    /**
+     * How much the picture changed between two [motionThumb]s: the average difference per cell,
+     * after taking out an overall brightening or darkening (the exposure settling is not motion).
+     */
+    fun changeBetween(a: FloatArray, b: FloatArray): Float {
+        var shift = 0f
+        for (i in a.indices) shift += b[i] - a[i]
+        shift /= a.size
+        var sum = 0f
+        for (i in a.indices) sum += kotlin.math.abs(b[i] - a[i] - shift)
+        return sum / a.size
+    }
+
+    const val MOTION_W = 24
+    const val MOTION_H = 32
+    private const val SUB = 4
+    /** Above this [changeBetween], the blur layer no longer matches the live picture... */
+    const val MOVED = 4f
+    /** ...unless grain in dim light already changes it this much from frame to frame. */
+    private const val MAX_MOVED = 12f
+
+    /**
+     * The change that counts as movement, given [noise]: the smallest change between consecutive
+     * frames lately (with the phone still, that is grain alone).
+     */
+    fun movedThreshold(noise: Float): Float = (noise * 2.5f).coerceIn(MOVED, MAX_MOVED)
+
     /** Columns to keep when the preview shows a narrower picture than the [w] x [h] frame. */
     fun cropForAspect(w: Int, h: Int, viewAspect: Float): IntRange {
         val keep = (h * viewAspect).toInt().coerceAtMost(w)
